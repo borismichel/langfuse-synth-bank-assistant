@@ -62,6 +62,30 @@ TRACE_NAME = "handle-concierge-chat-message"
 CONVERSATION_END_TAG = "conversation_end"
 SNAPSHOT_NAME = "conversation-snapshot"
 
+# A purpose-built selector for a conversation-level rule to match on, so that the
+# rule need not match SNAPSHOT_NAME. Matching by name couples a display name to a
+# live evaluation rule in the worst way: rename the observation and the judge stops
+# firing, edit the rule and it stops matching the code, with no error either way.
+#
+# ⚠️ EMITTED BUT NOT YET CONSUMED — the coupling is still there. The live
+# conversation rule continues to filter on `name any of [conversation-snapshot]`,
+# so **renaming SNAPSHOT_NAME still silently stops the judge**. Do not treat the
+# name as cosmetic until a rule actually filters on this metadata.
+#
+# The filter that would consume it is
+# `metadata.langfuse_eval_target = conversation-transcript` — a `stringObject`
+# filter ({type, column, key, operator, value}) on the observation `metadata`
+# column, valid on Cloud and on self-hosted 3.221.1. It is NOT in
+# scripts/seed_managed_evaluators.sh: that script's Cloud branch talks to
+# /api/public/unstable/evaluation-rules, which now returns 404, so the filter
+# belongs with the v2-API Cloud seeder instead.
+#
+# A short scalar is exactly what metadata is for; the "coerced and capped" caveat
+# above applies only to putting the TRANSCRIPT there. The transcript stays on the
+# observation input, which is not capped.
+EVAL_TARGET_KEY = "langfuse_eval_target"
+EVAL_TARGET_CONVERSATION = "conversation-transcript"
+
 # --- lightweight language detection (Spanish vs English) for language-match ---
 # Only Spanish FUNCTION/verb words — strong language signals. Deliberately NOT
 # real-estate nouns or place names (piso, terraza, barrio, familia, Malasaña…):
@@ -394,16 +418,21 @@ def run_turn(
             # re-judges an ever-longer transcript N times and the cost scales
             # quadratically. This fires once.
             #
-            # A rule on this observation MUST filter by `name` (unlike the seeded
-            # per-turn rules, which filter on `isRootObservation` precisely so a
-            # rename cannot silently break them). That drift risk is real here:
-            # renaming SNAPSHOT_NAME without updating the rule stops the judge
-            # firing with no error anywhere. Keep the constant and the rule in
-            # sync — scripts/seed_managed_evaluators.sh reads it.
+            # A rule on this observation currently MUST filter by `name` (unlike
+            # the seeded per-turn rules, which filter on `isRootObservation`
+            # precisely so a rename cannot silently break them). That drift risk
+            # is real here: renaming SNAPSHOT_NAME without updating the rule stops
+            # the judge firing with no error anywhere. The EVAL_TARGET_* metadata
+            # below is emitted so a rule CAN stop depending on the name — see the
+            # constants; nothing filters on it yet.
             if is_final_turn:
                 transcript = history + [{"role": "user", "content": query},
                                         {"role": "assistant", "content": final_text}]
-                with lf.start_as_current_observation(as_type="span", name=SNAPSHOT_NAME) as snap:
+                with lf.start_as_current_observation(
+                    as_type="span",
+                    name=SNAPSHOT_NAME,
+                    metadata={EVAL_TARGET_KEY: EVAL_TARGET_CONVERSATION},
+                ) as snap:
                     snap.update(input={"transcript": transcript,
                                        "turns": len(transcript) // 2},
                                 output=final_text)
