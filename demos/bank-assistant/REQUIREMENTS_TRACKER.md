@@ -20,12 +20,12 @@ Legend: ✅ validated live (evidence linked) · 🟡 built, needs a final check 
 
 | ID | Requirement | Status | Evidence / how |
 |---|---|---|---|
-| OBS-01 | E2E traceability, ProCode | ✅ | LangGraph agent with the Langfuse callback; 34-observation trace (guardrail → 3 LLM iterations → 3 MCP tools): [trace](https://us.cloud.langfuse.com/project/cmuz1kt5z04uead0eyjm92c7f/traces/f381fe5b43bf983b9d3b2ff27c099f49). Sessions, users, tags, environment and release are set on every turn. 40 traffic turns. |
+| OBS-01 | E2E traceability, ProCode | ✅ | Banking agent with the Langfuse callback; 34-observation trace (guardrail → 3 LLM iterations → 3 MCP tools): [trace](https://us.cloud.langfuse.com/project/cmuz1kt5z04uead0eyjm92c7f/traces/f381fe5b43bf983b9d3b2ff27c099f49). Sessions, users, tags, environment and release are set on every turn. 40 traffic turns. |
 | OBS-02 | E2E traceability, LowCode n8n | ✅ | n8n built-in OpenTelemetry (workflow + node spans) joined by `traceparent` with the workflow's own generation spans (model, tokens, cost, linked prompt via the official Langfuse n8n node). 6 traces, e.g. [card-fraud complaint](https://us.cloud.langfuse.com/project/cmuz1kt5z04uead0eyjm92c7f/traces/9695b0fc761c635fdfd7ad601c13e6d1), [PII-masked sample](https://us.cloud.langfuse.com/project/cmuz1kt5z04uead0eyjm92c7f/traces/5fbc710446cfcae911d847f5c5497571). Candour: no *native* Langfuse n8n tracing; this is the documented pattern (`n8n/README.md`). |
 | OBS-03 | RAG, context and sources | ✅ | `kb-retrieval` retriever observation: doc ids, source URLs, effective dates, scores; full context in root `metadata.context`. [trace](https://us.cloud.langfuse.com/project/cmuz1kt5z04uead0eyjm92c7f/traces/3b8a8390e4449234d57c653df3b197bc) |
 | OBS-04 | Tools, MCP and iterations | ✅ | MCP server runs in a separate process. Its spans join the same trace through W3C traceparent + baggage in MCP `_meta` (`mcp-client` → `mcp-server` → `core-banking.*`); the baggage gives them the turn's session, user, trace name and environment, so they stay children of the one root (Langfuse v4). Agent iterations are visible. Same trace as OBS-01. |
 | OBS-05 | Tokens, latency and costs | ✅ | Per generation, trace, user and session; hero trace: 4 generations, 6,472 tokens, 13.9 s. Dashboard: cost by model, p95 latency. Claude vs GPT cost on the model-comparison runs. |
-| OBS-06 | Dynatrace correlation | ✅ (stand-in) / 📄 Dynatrace | Same trace id in Jaeger: 34 spans, 2 services (`northwind-assistant`, `core-banking-mcp`). Payloads are stripped from the APM copy. Dynatrace needs only the endpoint and token (`docs/DYNATRACE.md`). |
+| OBS-06 | Infrastructure observability correlation | ✅ Jaeger / 📄 vendor integration | Same trace id in Jaeger: 34 spans, 2 services (`northwind-assistant`, `core-banking-mcp`). Payloads are stripped from the APM copy. Integration example: `docs/DYNATRACE.md`. |
 | EVA-01 | Faithfulness / Groundedness | ✅ | Managed judge `faithfulness` on assistant turns (chat + voice): mean 0.96, n=115. Follow-up turns now carry earlier-conversation context so the judge doesn't mark them unsupported. |
 | EVA-02 | Correctness / Factuality | ✅ | `correctness` judge vs expected output + deterministic `must-include`: production EN 0.91 / 1.00, ES 0.85 / 1.00 ([EN run](https://us.cloud.langfuse.com/project/cmuz1kt5z04uead0eyjm92c7f/datasets/cmuz1xuy1050yad0es71jynk1/runs/d0a9afed-6401-4e71-9b76-aaf354962bbe)) |
 | EVA-03 | Custom bank evaluator | ✅ | `banking-compliance` (conduct policy P1–P5): mean 0.92, n=115 (inspect the 0.0s — at least one is a judge false positive, a calibration talking point). `manipulation-resistance` 1.0, n=24 (100% of guardrail-flagged + 20% sample of the rest). Deterministic guardrail scores on every turn (EN + ES). |
@@ -45,7 +45,7 @@ Legend: ✅ validated live (evidence linked) · 🟡 built, needs a final check 
 | ENT-04 | Export and portability | 🟡 | REST API used throughout (v2 observations, v3 scores). Blob-export integration API responds (no bucket configured). UI CSV/JSON export: show live. |
 | GATE-01 | Governance, identity and access | 📄 + evidence | `docs/PATH_TO_PRODUCTION.md`; uses ENT-01/02 and protected label |
 | GATE-02 | Security and data protection | ✅ evidence | masking, guardrails, red-team (10 items, EN + ES) refused-safely 1.0 ([run](https://us.cloud.langfuse.com/project/cmuz1kt5z04uead0eyjm92c7f/datasets/cmuz1xwvb04yead0eozy5z3q1/runs/86456e2a-5078-480e-a96e-588a0237fb19)), retention |
-| GATE-03 | Architectural integration | ✅ evidence | LangGraph + MCP + n8n + APM live; AWS reference architecture in `docs/ARCHITECTURE.md` (ALB, no NLB) |
+| GATE-03 | Architectural integration | ✅ evidence | Agent orchestration + MCP + n8n + APM live; AWS reference architecture in `docs/ARCHITECTURE.md` (ALB, no NLB) |
 | GATE-04 | Operation and resilience | 📄 | `docs/OPERATIONS.md` (HA, scaling, backups, upgrades, monitoring) |
 | GATE-05 | Value, Enterprise support and TCO | ✅ value + cost regression caught (Issue 6) + 📄 TCO model | `docs/PATH_TO_PRODUCTION.md` TCO worksheet + support model (no invented prices) |
 
@@ -60,7 +60,7 @@ Legend: ✅ validated live (evidence linked) · 🟡 built, needs a final check 
 | M1 | RAG traces (context and sources) | ✅ | Act 1.1 |
 | M1 | Tools/MCP and agent iterations | ✅ | Act 1.1 |
 | M1 | Tokens, latency, costs | ✅ | Act 1.1 |
-| M1 | Dynatrace correlation via trace ID | ✅ stand-in | Act 1.4 |
+| M1 | Infrastructure observability correlation via trace ID | ✅ live | Act 1.4 |
 | M1 | Multi-modal observability for audio | ✅ (voice module + 5 sample calls built; subagent verifying) | Act 1.6 |
 | M1 | Sessions, users, tags, environments | ✅ | Act 1.2 |
 | M1 | PII masking at ingestion | ✅ | Act 1.3 |
@@ -91,7 +91,7 @@ Legend: ✅ validated live (evidence linked) · 🟡 built, needs a final check 
 |---|---|---|
 | Industry view: other companies using Langfuse | 📄 | `docs/INDUSTRY.md` (public stories: Trade Republic, Ramp, SumUp, Merck; adoption stats). |
 | Voice agents, multi-modal observability | ✅ | voice channel (Act 1.6) |
-| Agent instrumentation, with examples | ✅ | LangGraph callback + manual observation types (agent, retriever, tool, guardrail) + MCP cross-process |
+| Agent instrumentation, with examples | ✅ | Langfuse callback + manual observation types (agent, retriever, tool, guardrail) + MCP cross-process |
 | Build your own evaluator and apply it to different datasets | ✅ / Lab | `banking-compliance` judge; Lab 2 builds `complaint-escalation` and runs it on live traffic and on the golden dataset |
 | Security guardrails (evaluator review) | ✅ | input/output guardrails, red-team dataset, `manipulation-resistance` judge |
 | Order: path to production as module 3, experimentation as module 5 | ✅ | run-of-show order M0 → M1 → M2 → M3 → M4 → M5 |

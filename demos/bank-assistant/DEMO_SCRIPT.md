@@ -20,20 +20,55 @@ the Spanish chips — the Spanish beats are marked 🇪🇸.
 
 ---
 
+## Presenter Preparation
+
+Complete the [quick start](README.md#quick-start),
+[evaluation setup](README.md#prepare-evaluations), and optional voice, n8n,
+calibration, and experiment workflows before the workshop. Run commands from
+`demos/bank-assistant`.
+
+1. Start local services with `./scripts/up.sh` (add `--selfhosted` for local
+   Langfuse). [Restart MCP banking state](portal/README.md#restart-banking-state)
+   and start the portal.
+2. Generate recent English/Spanish traffic, voice calls, and n8n samples from
+   **Presenter console**. Wait for managed judge scores to arrive.
+3. Run `.venv/bin/python scripts/prompt_label.py --show`. Confirm the contents
+   behind `production`, `staging`, and `development`. For rollback,
+   `previous-production` must resolve to a different version from `production`;
+   use `--set-previous N` to select the intended existing version.
+4. Label and complete 8-10 SME queue items with `sme-faithfulness` and
+   `sme-compliance`. Leave at least one pending item for live annotation.
+   After rehearsals, run `.venv/bin/python scripts/fill_annotation_queue.py 20`
+   to refill the pending backlog before verification.
+   Run `.venv/bin/python scripts/judge_calibration.py`. Add `--bakeoff` to
+   compare judge models; select models available to your account with `--models`.
+5. Run `.venv/bin/python scripts/verify_demo.py`. Resolve mandatory failures
+   until it ends with `READY`; review warnings for the acts you will show.
+6. For governance acts, protect the `production` label and confirm audit-log
+   access. If those features are unavailable, use
+   [Enterprise security](docs/ENTERPRISE_SECURITY.md) as the reference.
+7. Restart MCP again if warm-up changed cards or disputes needed by a live act.
+   Choose **New conversation**, select EN or ES, and open the tabs below.
+
+Version numbers, measured scores, and evidence links in the talk track describe
+the recorded demo project. On a new project, inspect the current labels and runs;
+seeders do not guarantee the same version numbers. Bookmark your own evidence
+before presenting.
+
 ## Screens and tabs (open before you start)
 
 | Tab | URL | Used in |
 |---|---|---|
 | Northwind portal (the bank's app) | http://localhost:8090 | every act |
-| Langfuse Cloud project `northwind-bank-assistant` | portal header → "Langfuse" | every act |
-| APM stand-in for Dynatrace (Jaeger) | http://localhost:16686 | M1 |
+| Selected Langfuse project | portal header → "Langfuse" | every act |
+| Infrastructure observability (Jaeger) | http://localhost:16686 | M1 |
 | n8n | http://localhost:5678 | M1 |
 | Docs | `docs/ARCHITECTURE.md`, `docs/INDUSTRY.md`, `docs/ENTERPRISE_SECURITY.md`, `docs/OPERATIONS.md`, `docs/PATH_TO_PRODUCTION.md`, `docs/DYNATRACE.md`, `docs/SPRING_AI.md` | M0, M1, M3, M4 |
 | Lab handout | `LABS.md` | M1, M2, M5 |
 | Requirements + evidence | `REQUIREMENTS_TRACKER.md` (live links per requirement) | close |
 
-The portal's **Presenter console** tab runs every scripted step with one click
-and prints the Langfuse links. Use it instead of a terminal on screen.
+Use **Presenter console** for its listed actions and evidence links. Commands
+outside its allowlist run in a terminal.
 
 ## Run-of-show (120 min)
 
@@ -45,7 +80,7 @@ and prints the Langfuse links. Use it instead of a terminal on screen.
 | 1:05–1:12 | M3 Path to production | GATE-01..05 | talk over evidence |
 | 1:12–1:27 | M4 Enterprise: security, governance, operations | ENT-01..04 | Cloud org settings + self-hosted docs |
 | 1:27–1:40 | M5 Experimentation and prompts | EXP-01..06 | demo + **Lab 3** |
-| 1:40–1:55 | **Story arc: four business issues, found and fixed** | GATE-05, EVA-07, EXP-02/06 | business dashboard → traces → fix → canary |
+| 1:40–1:55 | **Story arc: selected business issues, found and fixed** | GATE-05, EVA-07, EXP-02/06 | business dashboard → traces → fix → canary |
 | 1:55–2:00 | Close: POC plan and next steps | — | talk |
 
 If you run short: cut Lab 3 (show it instead), shorten M3 to the gate table, and run the story arc on two of the four issues (mis-selling + Spanish). Tease the business dashboard early (end of M1) so the arc pays it off.
@@ -169,8 +204,8 @@ the most production traffic today, and which is hardest to debug?"
    (`NORTHWIND_SAMPLE_RATE` / `LANGFUSE_SAMPLE_RATE`): whole traces, decided once
    per trace and followed downstream (the MCP server honours the caller's
    decision); when the app brings its own OpenTelemetry provider — as here, for
-   the Dynatrace export — the sampler is set on that provider, so the APM copy is
-   sampled too (sample in a Collector if Dynatrace must keep 100%). (b) **Judge
+   the infrastructure export — the sampler is set on that provider, so the APM copy is
+   sampled too (sample in a Collector if the infrastructure backend must keep 100%). (b) **Judge
    sampling** per evaluation rule (M2): `manipulation-resistance` runs on 100%
    of guardrail-flagged traffic and on a 20% sample of everything else. The
    pattern for a bank: trace 100% where volume allows, judge 5–20%, judge 100%
@@ -217,23 +252,22 @@ only grade what it can see.
 security, privacy, or each product team?" Be candid that regex does not catch
 names or street addresses; that needs an NER step in the same hook.
 
-### Act 1.4 — correlation with the APM (Dynatrace) · OBS-06
+### Act 1.4 — infrastructure observability correlation · OBS-06
 
-**Frame.** "When an incident fires in Dynatrace at 2 a.m., the SRE needs to jump
+**Frame.** "When an infrastructure alert fires at 2 a.m., the SRE needs to jump
 to what the model did; when the AI team sees a slow trace, they need the
 infrastructure view."
 
 **Show.**
 1. From any portal answer that called a tool — for the dispute, the second turn
-   (*"Yes, open it"*) — click **Open in APM** → the same trace id in the APM
-   stand-in, showing two services (`northwind-assistant`, `core-banking-mcp`)
+   (*"Yes, open it"*) — click **Open in APM** → the same trace id in Jaeger,
+   showing two services (`northwind-assistant`, `core-banking-mcp`)
    with timings, **without prompts or completions** (stripped before export).
 2. Back in Langfuse: root metadata `apm_trace_url`; in the APM, span attribute
    `langfuse.trace_url`.
-3. `docs/DYNATRACE.md`: one OpenTelemetry pipeline, two exporters. For
-   Dynatrace set `APM_OTLP_ENDPOINT=https://<env>.live.dynatrace.com/api/v2/otlp/v1/traces`
-   (or the ActiveGate URL inside the VPC) and an `Api-Token` with
-   `openTelemetryTrace.ingest`.
+3. One OpenTelemetry pipeline, two exporters. Configure `APM_OTLP_ENDPOINT`,
+   `APM_OTLP_HEADERS`, and `APM_UI_TRACE_URL` for the infrastructure backend.
+   See [the integration reference](docs/DYNATRACE.md) for a vendor-specific example.
 
 **Land.** The trace id is the join key. Operational telemetry goes to the APM,
 AI payloads go to Langfuse, and customer text never reaches the APM.
@@ -299,7 +333,7 @@ room) answer three questions:
 
 ---
 
-## M2 · Evaluation (25 min)
+## M2 · Evaluation (20 min)
 
 ### Act 2.1 — online evaluation on live traffic · EVA-01, EVA-03, EVA-04
 
@@ -463,7 +497,7 @@ UI experiment. Compare where it fires.
 
 ---
 
-## M3 · Path to production (10 min) · GATE-01..05
+## M3 · Path to production (7 min) · GATE-01..05
 
 Talk over `docs/PATH_TO_PRODUCTION.md`, pointing back at what the room has
 already seen:
@@ -486,7 +520,7 @@ names with a registered score config) and the onboarding checklist for a new tea
 
 ---
 
-## M4 · Enterprise: security, governance, operations (20 min) · ENT-01..04
+## M4 · Enterprise: security, governance, operations (15 min) · ENT-01..04
 
 Everything below is live in the Cloud project and organization, except the
 self-hosted operations, which are walked through in the docs. The bank will
@@ -527,7 +561,7 @@ maps to on their own deployment (`docs/ENTERPRISE_SECURITY.md`).
    (`/api/public/health`, `/api/public/ready`, worker `:3030/api/health`),
    HA (3 ClickHouse replicas + 3 Keeper, managed Postgres/Redis), scaling
    workers on queue depth, backups, semver upgrades, and sending Langfuse's own
-   telemetry to Dynatrace.
+   telemetry to the infrastructure observability backend.
 
 **Raise proactively (trust builders):**
 - With an Enterprise license key a self-hosted instance sends usage telemetry
@@ -540,7 +574,7 @@ maps to on their own deployment (`docs/ENTERPRISE_SECURITY.md`).
 
 ---
 
-## M5 · Experimentation and prompts (15 min) · EXP-01..06
+## M5 · Experimentation and prompts (13 min) · EXP-01..06
 
 ### Act 5.1 — prompt management with dynamic consumption · EXP-04
 
@@ -851,40 +885,3 @@ of the POC — containment, cost per contact, complaints, or conduct risk?"
   science, analytics, architecture?"
 
 ---
-
-## Presenter prep (morning of, ~20 min)
-
-1. `./scripts/up.sh` (n8n + APM stand-in), then restart the MCP server for a
-   clean banking state and start the portal:
-   `kill $(lsof -tiTCP:8765 -sTCP:LISTEN); ./scripts/run_portal.sh`.
-   **Do not skip the restart.** The banking state lives in the MCP server's
-   memory; on 2026-10-08 it was skipped and the running server was already
-   dirty (Ana's card •••4417 blocked), so any block-card step would not behave
-   as scripted.
-2. `.venv/bin/python scripts/verify_demo.py` → must end with **READY** (prompts,
-   datasets, runs, judge rules + fresh judge scores, queue, dashboard, traces per
-   channel, local services).
-3. Warm-up traffic so the last-hour views are populated: Presenter console →
-   *Generate production traffic*, *Spanish traffic*, *Run voice calls*, *Run n8n
-   complaint workflow* (~5 min in total; they can run back to back).
-4. In the Cloud UI: protect the `production` prompt label (Project settings →
-   protected prompt labels) and open Settings → Audit logs to confirm it shows
-   the prompt label moves (a promote + rollback ran overnight). If Audit logs are
-   not visible on this org, present ENT-02 from `docs/ENTERPRISE_SECURITY.md`.
-5. `scripts/prompt_label.py --show`: production = the version you will present
-   (currently **v4**), staging = **v5**, development = **v3**, baseline = **v1**.
-   `previous-production` must show on **v1**, not next to `production` on v4
-   (otherwise a standalone Roll back is a no-op; fix it with
-   `scripts/prompt_label.py --set-previous 1`, or in the UI),
-   and there must be **no untitled v6** (a truncated version with only the
-   `latest` label: delete it in the UI, Prompts → `northwind-assistant-system`;
-   there is no API for a per-version delete).
-   Click **New conversation**; pick EN or ES for the room.
-6. **Required (10 min):** label 8–10 items in the SME queue (`sme-faithfulness`,
-   `sme-compliance`). Without human labels, Scores → Analytics (judge vs human)
-   is empty. Leave at least one item **pending** to annotate live. After rehearsals,
-   run `.venv/bin/python scripts/fill_annotation_queue.py 20` to top up the pending
-   backlog, then `scripts/verify_demo.py` to confirm it. Run
-   `.venv/bin/python scripts/judge_calibration.py --bakeoff` once to have the
-   human-label agreement numbers ready.
-7. Open the tabs in the table at the top.
