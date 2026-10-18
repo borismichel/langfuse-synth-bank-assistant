@@ -42,6 +42,8 @@ calibration, and experiment workflows before the workshop. Run commands from
    to refill the pending backlog before verification.
    Run `.venv/bin/python scripts/judge_calibration.py`. Add `--bakeoff` to
    compare judge models; select models available to your account with `--models`.
+   Then run `.venv/bin/python scripts/judge_calibration_experiment.py --models
+   claude-sonnet-4-6` so the calibration dataset includes the new labels (Act 2.4).
 5. Run `.venv/bin/python scripts/verify_demo.py`. Resolve mandatory failures
    until it ends with `READY`; review warnings for the acts you will show.
 6. For governance acts, protect the `production` label and confirm audit-log
@@ -150,7 +152,9 @@ what the assistant actually did?"
    - `input-guardrail` (type *guardrail*) — what the security rules decided
    - the workflow nodes (`assistant`, `tools`), auto-captured by the
      Langfuse callback handler — **no manual code per step**
-   - each `ChatAnthropic` **generation**: model, input/output tokens, cost, latency
+   - each `generate-response` **generation**: model, input/output tokens, cost,
+     latency. It is named after the step, not the provider: the gpt-4.1 run in
+     the model comparison has the same name, and the model is its own attribute
    - `mcp-client: open_dispute` → `mcp-server: open_dispute` →
      `core-banking.open_dispute`: **the MCP server is a different process**,
      and its spans land in the same trace because the agent passes W3C trace
@@ -206,10 +210,13 @@ the most production traffic today, and which is hardest to debug?"
    decision); when the app brings its own OpenTelemetry provider — as here, for
    the infrastructure export — the sampler is set on that provider, so the APM copy is
    sampled too (sample in a Collector if the infrastructure backend must keep 100%). (b) **Judge
-   sampling** per evaluation rule (M2): `manipulation-resistance` runs on 100%
-   of guardrail-flagged traffic and on a 20% sample of everything else. The
-   pattern for a bank: trace 100% where volume allows, judge 5–20%, judge 100%
-   of flagged traffic.
+   sampling** per evaluation rule (M2): `manipulation-resistance-sampled` judges a
+   20% sample of the turns the guardrail let through. Turns the guardrail blocked
+   get no judge at all: their answer is the fixed refusal, so the deterministic
+   `guardrail-blocked` score already is the verdict (on this project about 1 turn
+   in 11, each of which used to cost three judge calls). The pattern for a bank:
+   trace 100% where volume allows, judge 5–20%, and never pay a judge to grade
+   an outcome code has already decided.
 
 **Land.** Conversations, customers, channels and environments are filters,
 not separate tools. Sampling is a cost decision you can make per evaluator.
@@ -223,7 +230,9 @@ privacy audits."
 **Show.**
 1. Portal chip *"My card number is 4111 1111 1111 1111, is it blocked?"*.
    The assistant warns the customer never to share it.
-2. Open the trace: input shows `[REDACTED_CARD]`; metadata `pii_redacted: card`;
+2. Open the trace: input shows `[REDACTED_CARD ****1111]` (only the last four
+   digits, the way customers and agents name a card; PCI DSS permits showing
+   them); metadata `pii_redacted: card`;
    score `pii-in-input = true`. Search the whole trace — the raw number appears
    nowhere (not in the generations, not in the tool calls). 🇪🇸 Same in Spanish:
    *"mi cédula es …"* → `[REDACTED_NATIONAL_ID]`, *"número de cuenta …"* →
@@ -237,16 +246,18 @@ privacy audits."
 who can read the project.
 
 **Candour.** Judges score the *redacted* trace, not what the agent saw. The
-earlier known-good English PII trace
+earlier English PII trace
 ([`752a3cfc336f9b8e45321742fbb2c47e`](https://us.cloud.langfuse.com/project/cmuz1kt5z04uead0eyjm92c7f/traces/752a3cfc336f9b8e45321742fbb2c47e))
-carries `faithfulness` 0.0: the judge sees `[REDACTED_CARD]` and calls the
-agent's "ending 1111" unsupported. The agent saw the real digits; masking
-happens at export. Use
+carries `faithfulness` 0.0: it predates the last-four rule, so the judge saw
+`[REDACTED_CARD]` and called the agent's "ending 1111" unsupported. The fix was
+in the masking, not the judge: the mask now keeps exactly the digits the answer
+is allowed to repeat. Keep 752a3cfc… as the talking point (a judge can only
+grade what it can see) and
 [`b9ff0aae6166729d9e698df9381c2c6f`](https://us.cloud.langfuse.com/project/cmuz1kt5z04uead0eyjm92c7f/traces/b9ff0aae6166729d9e698df9381c2c6f) as
-the clean example (input masked `[REDACTED_CARD]`, warning shown, `pii-education`
-1, `faithfulness` 1.0, `banking-compliance` 1.0, 0 raw digits in 18
-observations) and keep 752a3cfc… as a calibration talking point: a judge can
-only grade what it can see.
+a clean example from before the change (input masked `[REDACTED_CARD]`, warning
+shown, `pii-education` 1, `faithfulness` 1.0, `banking-compliance` 1.0, 0 raw
+digits in 18 observations). Traces recorded after the change show
+`[REDACTED_CARD ****1111]`.
 
 **Ask.** "Who owns the definition of 'sensitive data' for AI logs at the bank —
 security, privacy, or each product team?" Be candid that regex does not catch
@@ -342,18 +353,20 @@ internal libraries. What if every production answer were graded the minute it
 happened, with the score next to the trace?"
 
 **Show.**
-1. **Evaluators** (LLM-as-a-Judge) → three judges, all on the root observation
-   of production traffic:
+1. **Evaluators** (LLM-as-a-Judge) → three judges, all on the assistant's own
+   observation of production traffic, and none on a turn the input guardrail
+   blocked (that answer is the fixed refusal; `guardrail-blocked` is the verdict):
    - `faithfulness` (EVA-01) — every claim supported by the retrieved articles
      and tool results (mapped from `metadata.context`)
    - `banking-compliance` (EVA-03, the bank's own evaluator) — conduct policy
      P1–P5: no personalised investment advice, never ask for credentials, no
      pressure selling, no promises, investments ≠ insured deposits
-   - `manipulation-resistance` — two rules on one evaluator: 100% of traffic the
-     guardrail tagged `risk:prompt_injection` / `risk:cross_customer_access` /
-     `risk:social_engineering`,
-     plus a **20% sample** of all other turns (so an attack the rules missed is
-     still judged; no observation is scored twice)
+   - `manipulation-resistance` — rule `manipulation-resistance-sampled`: a
+     **20% sample** of the turns the guardrail let through, so an attack the
+     rules missed is still judged. Turns tagged `risk:prompt_injection` /
+     `risk:cross_customer_access` / `risk:social_engineering` were blocked and
+     are not judged. A disabled rule `manipulation-resistance` is still listed:
+     it used to judge every blocked turn and always scored the refusal 1.0
    Open a rule: filter, **sampling**, variable mapping, judge model.
 2. Open a trace → Scores tab: judge scores **with reasoning**, next to the
    deterministic scores the app writes on every turn (`security-risk`,
@@ -436,14 +449,18 @@ is approved."
 
 **Show.**
 1. **Annotation queues** → *SME review — assistant answers*: production answers,
-   including the lowest judge scores. Open a **pending** item and label it live with
+   worst first — customer thumbs-down and the lowest judge scores, however old,
+   then a random sample. Open a **pending** item and label it live with
    `sme-faithfulness`, `sme-compliance` and `sme-failure-mode`, then complete it.
 2. **Scores → Analytics**: `faithfulness` (judge) vs `sme-faithfulness`
    (human) on the same observations — agreement, Cohen's kappa, confusion matrix.
 3. **Calibrate the judge and choose the judge model.** Datasets →
-   `judge-calibration/faithfulness`: 16 answers whose correct verdict is
-   **known by construction** — faithful (1.0), a minor imprecision (0.5), or a
-   seeded material error such as a wrong fee or deadline (0.0). The judge prompt
+   `judge-calibration/faithfulness`, two kinds of item (`metadata.source`):
+   16 **synthetic** answers whose correct verdict is **known by construction** —
+   faithful (1.0), a minor imprecision (0.5), or a seeded material error such as
+   a wrong fee or deadline (0.0) — and every **production** answer with an
+   `sme-faithfulness` label, copied with exactly what the live judge saw and
+   linked to its source trace (27 when last run). The judge prompt
    is versioned in Prompt Management (`judge-calibration/faithfulness`, identical
    to the live evaluator). One experiment run per candidate judge model, with a
    Boolean `faithfulness-judge-output-correct` evaluator. Compare the runs
@@ -461,13 +478,34 @@ is approved."
    measured on **rubric v1 with 15 items**. Re-running them (command below) is
    what makes the table comparable.
 
+   Then the slide that matters: the same live judge with the production items
+   added (run `judge · claude-sonnet-4-6 · prompt v2 · 43 items`, 2026-10-18).
+   Overall **0.88**; synthetic **1.00**; production **0.81** (22 of 27). The five
+   misses are all production answers, and the judge reasoning in the run
+   explains each:
+
+   | miss | what happened |
+   |---|---|
+   | 2 × judge 0.0, SME 1.0 | follow-up turns ("And what's the cut-off time…?", "What's the maximum loan-to-value?"): the facts came from an earlier turn, and the context mapped to the judge held only this turn's evidence. An evaluator-input defect, not a judge-prompt one: the agent now appends the last turns to `metadata.context`, and these traces predate that |
+   | 1 × judge 0.5, SME 1.0 | the answer ties credit card 4417 to a charge on the checking account; the judge calls that unsupported, the label let it pass |
+   | 1 × judge 0.5, SME 1.0 | the judge applies the "procedures are claims" rule to "directly within the app", which KB-702 does not say |
+   | 1 × judge 1.0, SME 0.5 | a mortgage answer whose facts all appear in KB-402: the label looks debatable, revisit it before blaming the judge |
+
+   The lesson: synthetic items prove the judge catches planted errors; only
+   production labels show where judge and reviewer disagree, and some
+   disagreements are label problems. Most production labels in this project are
+   scripted stand-ins (`metadata.label_source` = `API`) until an SME reviews
+   them; items labelled in the queue show `ANNOTATION`.
+
    Every candidate catches material errors; they differ on nuance. ~85% overall
    is about human-level agreement — but only if every category is acceptable
    (Haiku's 0.87 hides 60% on minor slips). The newest model is not
    automatically the best judge for *this* prompt: recalibrate whenever the
    judge model or prompt changes. A handful of items per category is a demo — a real
    calibration set needs 50–100 SME-labelled items.
-   Re-run: `.venv/bin/python scripts/judge_calibration_experiment.py`.
+   Re-run: `.venv/bin/python scripts/judge_calibration_experiment.py` (it
+   re-imports the current SME labels; `--synthetic-only` skips them). Each run
+   gets a unique name, so a re-run never appends to an older run.
    With SME labels in the queue, `scripts/judge_calibration.py --bakeoff`
    compares the same candidates against **human** labels.
 4. Selection criteria for the bank-approved judge (in order): agreement with the

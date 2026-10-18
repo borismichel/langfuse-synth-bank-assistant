@@ -121,20 +121,37 @@ After the quick start:
 ```
 
 Check **Evaluators**, **Datasets**, and both Northwind dashboards in Langfuse.
-Managed judge scores arrive asynchronously. Once scores are visible, run:
+Managed judge scores arrive asynchronously.
+
+The three judge rules skip turns the input guardrail blocked. Those answers are
+the fixed refusal text, so the deterministic `guardrail-blocked` score is the
+verdict and a judge call would grade a constant. `faithfulness` and
+`banking-compliance` run on every other production turn;
+`manipulation-resistance-sampled` judges 20% of them, to catch attacks the rules
+missed. Re-running `seed_evals.py` disables the retired `manipulation-resistance`
+rule, which judged every blocked turn; its past scores stay.
+
+Once scores are visible, run:
 
 ```bash
 .venv/bin/python scripts/fill_annotation_queue.py 20
 ```
 
 The count sets the desired pending backlog. Re-running preserves completed
-reviews and human scores. If there are too few unqueued answers, the command
-exits non-zero; generate fresh traffic and rerun.
+reviews and human scores. Thumbs-down answers and the lowest judge scores are
+queued first, however old they are. If there are too few unqueued answers, the
+command exits non-zero; generate fresh traffic and rerun.
 
 Label and complete 8-10 answers in **SME review**, then run
 `.venv/bin/python scripts/judge_calibration.py` to compare judge and human scores.
 Leave at least one item pending for live annotation. Refill after rehearsals;
 `scripts/verify_demo.py` fails readiness when there are no pending items.
+
+`scripts/judge_calibration_experiment.py` then copies every SME-labelled answer
+into `judge-calibration/faithfulness`, with the judge's exact inputs and a link
+to the source trace, next to the 16 synthetic items. It reports accuracy per
+source. The synthetic items have obvious planted errors, so a judge can score
+100% on them and still miss what SMEs flag in production.
 
 ## Optional Workflows
 
@@ -197,7 +214,9 @@ Stop this demo's containers with `docker compose --profile selfhosted stop`.
 ## Limits
 
 - Regex masking misses names, addresses, and identifiers without a nearby keyword.
-  The n8n workflow has separate [masking limits](n8n/README.md#pii-masking).
+  Card numbers keep their last four digits (`[REDACTED_CARD ****1111]`), so the
+  judges can check "your card ending 1111". The n8n workflow has separate
+  [masking limits](n8n/README.md#pii-masking).
 - Runtime guardrails and judges do not cover every attack. Review the red-team results.
 - Golden datasets are small (16 English-set items, 10 Spanish-set items); small score
   differences do not establish a reliable improvement.

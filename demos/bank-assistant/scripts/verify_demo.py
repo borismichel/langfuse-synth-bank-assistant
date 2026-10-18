@@ -263,10 +263,17 @@ def main():
     # ── evaluators + rules ──
     rules = cursor_all("/api/public/v2/evaluation-rules")
     by = {r["name"]: r for r in rules}
-    for name in ["faithfulness", "banking-compliance", "manipulation-resistance"]:
+    for name in ["faithfulness", "banking-compliance", "manipulation-resistance-sampled"]:
         r = by.get(name)
         check(bool(r) and r.get("enabled") is True, f"rule {name} enabled",
               f"sampling={r.get('sampling') if r else None}")
+        blocked_skipped = any(f.get("column") == "tags" and f.get("operator") == "none of"
+                              for f in (r or {}).get("filter") or [])
+        check(blocked_skipped, f"  rule {name} skips blocked turns",
+              "" if blocked_skipped else "re-run scripts/seed_evals.py", required=False)
+    retired = by.get("manipulation-resistance")
+    check(not (retired and retired.get("enabled")), "retired rule manipulation-resistance disabled",
+          "" if not (retired and retired.get("enabled")) else "re-run scripts/seed_evals.py", required=False)
     check(len(get("/api/public/score-configs", limit=50)["data"]) >= 4, "score configs registered")
 
     # ── recent scores: are judges executing? ──
