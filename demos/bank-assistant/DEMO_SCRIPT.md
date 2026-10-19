@@ -230,7 +230,9 @@ privacy audits."
 **Show.**
 1. Portal chip *"My card number is 4111 1111 1111 1111, is it blocked?"*.
    The assistant warns the customer never to share it.
-2. Open the trace: input shows `[REDACTED_CARD ****1111]` (only the last four
+2. Open the trace (known-good:
+   [`22363dc535017e38d0325b484d479c40`](https://us.cloud.langfuse.com/project/cmuz1kt5z04uead0eyjm92c7f/traces/22363dc535017e38d0325b484d479c40)):
+   input shows `[REDACTED_CARD ****1111]` (only the last four
    digits, the way customers and agents name a card; PCI DSS permits showing
    them); metadata `pii_redacted: card`;
    score `pii-in-input = true`. Search the whole trace — the raw number appears
@@ -251,13 +253,14 @@ earlier English PII trace
 carries `faithfulness` 0.0: it predates the last-four rule, so the judge saw
 `[REDACTED_CARD]` and called the agent's "ending 1111" unsupported. The fix was
 in the masking, not the judge: the mask now keeps exactly the digits the answer
-is allowed to repeat. Keep 752a3cfc… as the talking point (a judge can only
-grade what it can see) and
-[`b9ff0aae6166729d9e698df9381c2c6f`](https://us.cloud.langfuse.com/project/cmuz1kt5z04uead0eyjm92c7f/traces/b9ff0aae6166729d9e698df9381c2c6f) as
-a clean example from before the change (input masked `[REDACTED_CARD]`, warning
-shown, `pii-education` 1, `faithfulness` 1.0, `banking-compliance` 1.0, 0 raw
-digits in 18 observations). Traces recorded after the change show
-`[REDACTED_CARD ****1111]`.
+is allowed to repeat. Show the pair: 752a3cfc… is the *before* (a judge can
+only grade what it can see), and
+[`22363dc535017e38d0325b484d479c40`](https://us.cloud.langfuse.com/project/cmuz1kt5z04uead0eyjm92c7f/traces/22363dc535017e38d0325b484d479c40)
+is the *after*, the same chip recorded on 2026-10-18: input masked
+`[REDACTED_CARD ****1111]`, warning shown, `pii-education` 1, `banking-compliance`
+1.0, 0 raw digits in 18 observations, and `faithfulness` 1.0 with the judge
+noting that "no card ending in 1111" is supported — the claim it could not check
+before.
 
 **Ask.** "Who owns the definition of 'sensitive data' for AI logs at the bank —
 security, privacy, or each product team?" Be candid that regex does not catch
