@@ -42,7 +42,8 @@ class QueueApi:
                 self.items.append(created)
                 return deepcopy(created)
         if method == "GET" and path in ("/api/public/v2/observations", "/api/public/v3/scores"):
-            rows = self.observations if "observations" in path else self.scores
+            rows = self.observations if "observations" in path else [
+                s for s in self.scores if "name" not in params or s.get("name") == params["name"]]
             start = int(params.get("cursor", 0))
             end = start + params["limit"]
             return {"data": rows[start:end], "meta": {"cursor": str(end) if end < len(rows) else None}}
@@ -93,6 +94,33 @@ class PendingBacklog(unittest.TestCase):
                                      {"id": "child", "parentObservationId": "bad"}], scores=scores)
         self.assertEqual(self.run_fill(api, ["1"])[0], 0)
         self.assertEqual(api.items, [item("bad", "PENDING")])
+
+    def test_thumbs_down_answer_is_queued_first(self):
+        # user-feedback is a TRACE score; the queue item is that trace's assistant observation.
+        scores = [{"name": "user-feedback", "value": 1, "subject": {"kind": "trace", "id": "t-up"}},
+                  {"name": "user-feedback", "value": 0, "subject": {"kind": "trace", "id": "t-down"}},
+                  {"name": "faithfulness", "value": 1.0, "subject": {"kind": "observation", "id": "down"}}]
+        api = QueueApi(observations=[{"id": "up", "traceId": "t-up"}, {"id": "plain", "traceId": "t-plain"},
+                                     {"id": "down", "traceId": "t-down"}], scores=scores)
+        self.assertEqual(self.run_fill(api, ["1"])[0], 0)
+        self.assertEqual(api.items, [item("down", "PENDING")])
+
+    def test_flagged_answer_older_than_the_newest_page_is_found(self):
+        observations = [{"id": f"fresh-{i}", "traceId": f"t{i}"} for i in range(150)]
+        observations.insert(140, {"id": "old-bad", "traceId": "t-old"})
+        scores = [{"name": "faithfulness", "value": 0.0, "subject": {"kind": "observation", "id": "old-bad"}}]
+        api = QueueApi(observations=observations, scores=scores)
+        self.assertEqual(self.run_fill(api, ["1"])[0], 0)
+        self.assertEqual(api.items, [item("old-bad", "PENDING")])
+        self.assertTrue(any(params.get("cursor") == "100" for _, path, _, params in api.calls
+                            if params and "observations" in path))
+
+    def test_reads_only_the_scores_that_rank(self):
+        api = QueueApi(observations=[{"id": "a", "traceId": "t"}],
+                       scores=[{"name": "turn-cost-usd", "value": 0.01} for _ in range(300)])
+        self.assertEqual(self.run_fill(api, ["1"])[0], 0)
+        names = [params.get("name") for _, path, _, params in api.calls if "scores" in path]
+        self.assertEqual(set(names), {"faithfulness", "banking-compliance", "user-feedback"})
 
     def test_exhaustion_fails_with_fresh_traffic_instructions_without_reopening(self):
         completed = [item("reviewed")]

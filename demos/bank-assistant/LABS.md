@@ -33,7 +33,7 @@ Viewer mode works for this lab. Use **last 1 hour** after generating fresh traff
    conversation about an overdraft fee. Which help-center article did the
    assistant use? *(Open a turn → `kb-retrieval` → output documents → `KB-302`.)*
 2. **Traces**, sort by cost. What drove the most expensive turn — the number of
-   tool iterations, or the context size? *(Count `ChatAnthropic` generations;
+   tool iterations, or the context size? *(Count `generate-response` generations;
    compare input tokens.)*
 3. Filter tags `risk:prompt_injection`. Open a blocked turn: what did the
    `input-guardrail` decide, and did the model ever see the message?
