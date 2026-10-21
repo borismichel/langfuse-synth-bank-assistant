@@ -14,6 +14,7 @@ This demo has its own environment and services; use the setup below.
 |---|---|
 | Run the assistant | [Quick start](#quick-start) |
 | Present the 2-hour workshop | [Demo script](DEMO_SCRIPT.md), [attendee labs](LABS.md), [presenter kit](PRESENTER_KIT.html) (open locally in a browser) |
+| Present a 30-minute evals-first demo | [Evals-first script](DEMO_SCRIPT_EVALS_FIRST.md), [walkthrough video storyboard](docs/EVALS_FIRST_VIDEO.md) |
 | Check coverage and evidence | [Capability matrix](CAPABILITY_MATRIX.md), [requirements tracker](REQUIREMENTS_TRACKER.md) |
 
 ## Prerequisites
