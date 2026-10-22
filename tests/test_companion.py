@@ -3,6 +3,18 @@ import pytest
 from fastapi.testclient import TestClient
 
 
+def test_delivered_banking_uses_private_mcp_and_real_sdk():
+    import os
+    import subprocess
+    import sys
+    env = {k: v for k, v in os.environ.items() if k in ('PATH', 'HOME', 'TMPDIR', 'LANG')}
+    env['PYTHONPATH'] = os.pathsep.join(['src', 'demos/bank-assistant'])
+    result = subprocess.run([sys.executable, 'tests/sdk_mcp_case.py'], env=env,
+                            capture_output=True, text=True, timeout=90)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert '"mcp_read": true' in result.stdout
+
+
 def test_preview_preserves_bilingual_interface_without_live_connections(monkeypatch):
     monkeypatch.setenv('LIVE_BASE_PATH', '/live/bank-test')
     from synth.companion.app import create_app
