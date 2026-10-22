@@ -1,0 +1,31 @@
+# Banking candidate provenance
+
+- Fork: https://github.com/borismichel/langfuse-synth-bank-assistant
+- Upstream parent: https://github.com/doneyli/clickhouse-llm-observability
+- Inspected upstream commit: `513efb14fda3efeb61179285354fb9a63ebc36d1`.
+- Fork identity and unused destination checked by the integration coordinator before GitHub fork creation; upstream history is retained. No existing remote was repointed.
+- Upstream Apache-2.0 licence remains in `LICENSE`; banking source and notices are preserved.
+- Root package slug: `northwind-bank-assistant`; GHCR release identity: `ghcr.io/borismichel/langfuse-synth-bank-assistant`.
+- Core baseline and reusable publishing workflow: v5.0.0, commit `5f56e75f9a8b5d160ddf54a8fcde380d0d15a205`.
+- Runtime and authoring pin: tested integration candidate `bb2cf441acce20b19482d69d2f7173cb46845772`, which adds the documented split-generation Manifest contract to the validator. This is an immutable integration candidate, not a stable core release. Coordinate a stable release and consumer repins before final qualification. The publishing workflow remains pinned independently to the unchanged v5.0.0 release implementation.
+- Python 3.12.15 and Langfuse SDK 5.0.4; full dependency resolution in `uv.lock`.
+
+## Workflow audit
+
+All four inherited workflows are archived in `.github/upstream-workflows`, outside the executable workflows directory. Claims and Langfuse prompt gates refer to unrelated demos or runtime Langfuse/provider secrets; the Northwind gate also requires runtime secrets and targets a workstation-style workflow. The inherited integrity job assumes the upstream monorepo deployment. None is enabled for this fork.
+
+Only package CI and the pinned core release workflow are active. CI runs offline package checks and an isolated image build on GitHub-hosted runners. Semver tag publication builds native AMD64/ARM64 images, pushes GHCR digests and signs the resulting immutable index using GitHub OIDC/cosign. No runtime Langfuse or model-provider secret is supplied to GitHub.
+
+## Product sources
+
+Documentation inspected 22 October 2026:
+
+- https://langfuse.com/docs/observability/sdk/upgrade-path/python-v4-to-v5
+- https://langfuse.com/docs/observability/sdk/advanced-features
+- https://langfuse.com/llms.txt
+
+Maintained Langfuse skill entrypoint SHA256: `e8908ea1c924374ba7bc5e82b220709d107db6a3450a0c4d72228a91a2a7534a`.
+
+## Qualification status
+
+The immutable source revision is the release commit, emitted into image labels by CI. Record the actual release tag, signed digest, exact target, admission ID and delivered rehearsal evidence when those operations execute. They are pending at foundation authoring time. No full-spec or catalogue-ready status is claimed by this document.

@@ -48,3 +48,9 @@ backups/
 #   ./.venv/bin/python data/photo_scenes.py
 # The scene definitions in data/photo_scenes.py are the source of truth, not the PNGs.
 demos/real-estate/data/photos_preview/
+
+# Depot package build state
+.venv/
+.synth_spool/
+out/
+*.egg-info/

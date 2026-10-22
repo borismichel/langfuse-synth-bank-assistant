@@ -1,0 +1,66 @@
+schema_version: 1
+slug: northwind-bank-assistant
+name: Northwind Bank Assistant
+tagline: Investigate a banking policy regression using synthetic evidence.
+story: 'Compare a synthetic card-dispute baseline, outdated-policy failure and corrected
+  answer in Langfuse. This initial package supplies frozen history; interactive capabilities
+  are tracked by Depot spec #365.'
+target:
+  project_hint: demo
+  supports:
+  - cloud_eu
+  - cloud_us
+  - self_hosted
+base_config:
+  default: config/demo.yaml
+config_schema:
+  type: object
+  properties:
+    generation.seed:
+      type: integer
+      default: 42
+      minimum: 0
+      title: Generation seed
+      description: Deterministic RNG seed for the whole dataset. Vary it to mint a
+        distinct trace/id set per deployment; the same seed always materializes the
+        same Spool, but re-seeding a project that already holds it appends a second
+        copy (the v4 write path has no upsert).
+    generation.target_traces:
+      type: integer
+      minimum: 3
+      maximum: 24
+      default: 3
+      title: Target traces
+      description: Total number of traces to generate. The single, uniform volume
+        knob for this demo; the kit deterministically derives its internal generation
+        params from it.
+  required: []
+pipeline:
+- id: probe
+  run: synth probe --config {config}
+  fatal: true
+- id: plan
+  run: synth plan --config {config}
+  gate: confirm
+  parse:
+    plan_counts: regex:PLAN_COUNTS=(\{[^\n]+\})
+- id: seed
+  run: synth seed --config {config}
+  generate: synth generate-spool --config {config}
+  resumable: synth import-spool --config {config}
+  timeout_minutes: 10
+- id: verify
+  run: synth verify --config {config}
+  fatal: true
+artifacts:
+- path: DEMO_SCRIPT.md
+  render: markdown
+  title: Presenter Runbook
+assets:
+  docs:
+  - path: docs/DEPOT_KIT.md
+    title: Overview
+teardown:
+  note: Depot removes local containers and state. Seeded Langfuse observations remain.
+    Use a fresh disposable project or an explicitly authorised project reset before
+    importing again.
