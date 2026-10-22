@@ -400,7 +400,7 @@
 
   async function newConversation() {
     S.messages = [];
-    try { S.session = (await postJSON("/api/session")).session_id; }
+    try { S.session = (await postJSON("/api/session", { customer_id: S.customer })).session_id; }
     catch (e) { S.session = null; toast(e.message, true); }
     renderSessionId();
     persist(); renderTranscript();
