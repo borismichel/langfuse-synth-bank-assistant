@@ -103,6 +103,7 @@ def create_app(adapter, *, preview=False):
         content = (STATIC / 'index.html').read_text()
         prefix = paths.base_path()
         content = content.replace('"/static/', f'"{escape(prefix)}/static/').replace('href="/"', f'href="{escape(prefix)}/"')
+        content = content.replace('<nav class="tabs" role="tablist">', '<nav class="tabs" role="tablist"><a class="tab" href="' + escape(prefix) + '/history">Historical evidence</a>')
         setting = json.dumps(prefix).replace('<', '\\u003c')
         content = content.replace('<head>', '<head><script>window.NORTHWIND_BASE_PATH=' + setting + ';</script>')
         notice = ('Development preview — fixture responses only; no target or provider connection.' if preview
@@ -114,6 +115,16 @@ def create_app(adapter, *, preview=False):
             content = re.sub(r'\s*<link[^>]+(?:fonts.googleapis.com|fonts.gstatic.com)[^>]*>', '', content)
             content = content.replace('Traced · PII-masked', 'Fixture preview').replace('data-i18n="chat.traced"', '').replace('title="Every turn is traced in Langfuse"', 'title="Fixture preview"').replace('data-i18n-title="chat.tracedTitle"', '')
         return content
+
+    @app.get('/api/history')
+    async def historical_evidence():
+        from .history import history_view
+        return history_view(adapter, preview=preview)
+
+    @app.get('/history', response_class=HTMLResponse)
+    async def historical_page():
+        from .history import history_page
+        return history_page(adapter, preview=preview)
 
     @app.get('/api/health')
     async def health():

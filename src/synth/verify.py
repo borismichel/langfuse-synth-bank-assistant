@@ -50,6 +50,8 @@ def run_verify(
         raise ValueError("timeout_seconds must be finite and nonnegative; poll_interval positive")
     log("Reading exact current-run receipt", flush=True)
     report = VerifyReport()
+    from .assets import state_path
+    state_path('history-evidence.json').unlink(missing_ok=True)
     try:
         receipt = RunReceipt.load()
         validate_anchors(receipt.history_anchors, receipt.history_run_id)
@@ -74,6 +76,17 @@ def run_verify(
             except (ReadError, requests.RequestException) as exc:
                 report = VerifyReport()
                 report.add("target_read", False, f"Cannot read expected records: {exc}")
+            if report.ok:
+                from .cohorts import verify_assets
+                try:
+                    assets = verify_assets(cfg, receipt)
+                    from .cohorts import identities
+                    from .evidence import save_history_evidence
+                    save_history_evidence(receipt, identities(cfg), assets, reader)
+                except Exception as exc:
+                    report.add('current_run_assets', False, f'Required assets not verified: {exc}')
+                else:
+                    report.add('current_run_assets', True, 'Prepared prompt versions, score definitions, fixed snapshots and current source relationships visible')
             if report.ok:
                 break
             remaining = deadline - clock()

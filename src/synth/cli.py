@@ -18,6 +18,8 @@ from .seed import run_seed
 from .verify import run_verify
 from .pipeline import run_plan, run_probe, run_import
 from .setup import run_setup_prompts
+from .assets import run_setup_assets
+from .cohorts import run_prepare_cohorts
 
 
 def _add_config_args(parser: argparse.ArgumentParser) -> None:
@@ -55,10 +57,15 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument("--timeout-seconds", type=float, default=60)
     verify.set_defaults(func=_cmd_verify)
 
-    for verb, function in (("setup-prompts", run_setup_prompts), ("probe", run_probe), ("plan", run_plan), ("import-spool", run_import)):
+    for verb, function in (("setup-assets", run_setup_assets), ("setup-prompts", run_setup_prompts), ("probe", run_probe), ("plan", run_plan), ("import-spool", run_import)):
         command = sub.add_parser(verb)
         _add_config_args(command)
         command.set_defaults(func=lambda args, f=function: f(load_config(args.config, overrides=args.set)))
+    cohorts = sub.add_parser("prepare-cohorts")
+    _add_config_args(cohorts)
+    cohorts.add_argument("--timeout-seconds", type=float, default=60)
+    cohorts.set_defaults(func=lambda args: run_prepare_cohorts(
+        load_config(args.config, overrides=args.set), timeout_seconds=args.timeout_seconds))
     generate = sub.add_parser("generate-spool")
     _add_config_args(generate)
     generate.set_defaults(func=lambda args: (run_seed(load_config(args.config, overrides=args.set), dry_run=True), 0)[1])
