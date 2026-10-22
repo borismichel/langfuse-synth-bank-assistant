@@ -27,6 +27,10 @@ Documentation inspected 22 October 2026:
 
 Maintained Langfuse skill entrypoint SHA256: `e8908ea1c924374ba7bc5e82b220709d107db6a3450a0c4d72228a91a2a7534a`.
 
+## Candidate version
+
+Package version `0.2.0` adds the bilingual Companion to the immutable `v0.1.0` foundation. Its scope is exact-image, live-target and deployed-URL qualification of #367; it does not represent full-spec catalogue completion. Record the signed image receipt after publication rather than reusing the foundation digest.
+
 ## Qualification status
 
 The immutable source revision is the release commit, emitted into image labels by CI. Record the actual release tag, signed digest, exact target, admission ID and delivered rehearsal evidence when those operations execute. They are pending at foundation authoring time. No full-spec or catalogue-ready status is claimed by this document.
