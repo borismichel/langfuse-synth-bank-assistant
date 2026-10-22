@@ -44,6 +44,7 @@ mcp = FastMCP("northwind-core-banking", host="127.0.0.1", port=PORT)
 _binding = ContextVar('banking_binding')
 _scenarios = {}
 _actions = {}
+_revisions = {}
 _state_lock = threading.RLock()
 
 _today = date.today()
@@ -138,6 +139,9 @@ def _run(ctx, name, payload, fn):
             raise ValueError('Invalid binding')
     except Exception:
         return {'error': 'ACCESS_DENIED'}
+    if name == 'reset_scenario':
+        with _state_lock:
+            return _action(auth, name, payload, fn)
     binding_token = _binding.set(auth)
     token, cm = _traced(ctx, name, payload)
     try:
@@ -156,6 +160,17 @@ def _run(ctx, name, payload, fn):
 
 
 def _action(auth, name, payload, fn):
+    scope = auth['scenario_id']
+    revision = _revisions.get(scope, 0)
+    if auth.get('revision', 0) != revision:
+        return {'error': 'STALE_SCENARIO'}
+    if name == 'reset_scenario':
+        if auth.get('operation') != 'reset':
+            return {'error': 'ACCESS_DENIED'}
+        _scenarios.pop((scope, auth['customer_id']), None)
+        _actions.pop(scope, None)
+        _revisions[scope] = revision + 1
+        return {'status': 'reset', 'revision': revision + 1}
     if name not in ('block_card', 'open_dispute', 'schedule_callback'):
         return fn()
     customer = _customer(payload['customer_id'])
@@ -202,10 +217,16 @@ def _customer(customer_id: str) -> dict:
     auth = _binding.get()
     key = (auth['scenario_id'], customer_id)
     if key not in _scenarios:
-        if len(_scenarios) >= 128:
+        if len(_scenarios) >= 512:
             raise ValueError('Banking scenario capacity reached')
         _scenarios[key] = copy.deepcopy(CUSTOMERS[customer_id])
     return _scenarios[key]
+
+
+@mcp.tool()
+def reset_scenario(customer_id: str, ctx: Context = None) -> dict:
+    """Private lifecycle operation; requires a server-issued reset capability."""
+    return _run(ctx, 'reset_scenario', {'customer_id': customer_id}, lambda: None)
 
 
 @mcp.tool()

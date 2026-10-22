@@ -5,6 +5,8 @@ import asyncio
 import json
 import secrets
 import time
+from datetime import datetime, timezone
+from typing import Literal
 from contextlib import asynccontextmanager
 from html import escape
 from pathlib import Path
@@ -44,6 +46,7 @@ class ChatIn(BaseModel):
 
 
 class SessionIn(BaseModel):
+    model_config = {'extra': 'forbid'}
     customer_id: str = 'C-1001'
 
 
@@ -52,6 +55,21 @@ class ConfirmIn(BaseModel):
     action_id: str
     request_id: str = Field(min_length=1, max_length=128)
     lang: str = 'en'
+
+
+class FeedbackIn(BaseModel):
+    model_config = {'extra': 'forbid'}
+    session_id: str
+    trace_id: str
+    observation_id: str
+    value: Literal[0, 1]
+    comment: str = Field(default='', max_length=2000)
+
+
+class SessionAction(BaseModel):
+    model_config = {'extra': 'forbid'}
+    session_id: str
+    request_id: str = Field(min_length=1, max_length=128)
 
 
 def create_app(adapter, *, preview=False):
@@ -76,7 +94,8 @@ def create_app(adapter, *, preview=False):
                 config.MCP_URL = banking.url
             yield
         finally:
-            tasks = [r['task'] for s in sessions.values() for r in s.get('requests', {}).values() if not r['task'].done()]
+            tasks = [r['task'] for s in sessions.values() for group in ('requests', 'resets')
+                     for r in s.get(group, {}).values() if not r['task'].done()]
             for task in tasks:
                 task.cancel()
             if tasks:
@@ -93,8 +112,11 @@ def create_app(adapter, *, preview=False):
     async def same_origin(request, call_next):
         origin = request.headers.get('origin')
         if request.method not in ('GET', 'HEAD') and origin:
-            expected = request.headers.get('x-forwarded-host', request.headers.get('host'))
-            if urlparse(origin).netloc != expected:
+            expected_host = request.headers.get('x-forwarded-host', request.headers.get('host'))
+            expected_scheme = request.headers.get('x-forwarded-proto', request.url.scheme)
+            supplied = urlparse(origin)
+            if (supplied.netloc.lower() != expected_host.lower()
+                    or supplied.scheme.lower() != expected_scheme.lower()):
                 return Response('Request origin does not match this deployment', status_code=403)
         return await call_next(request)
 
@@ -148,16 +170,31 @@ def create_app(adapter, *, preview=False):
                 'prompt_label': 'production', 'production_prompt': prompt, 'model': model, 'release': config.RELEASE,
                 'links': [{'label': 'Langfuse project', 'url': project_url}] if project_url else [],
                 'customers': CUSTOMERS, 'channels': ['web'], 'preview': preview,
-                'capabilities': {'feedback': False, 'banking_actions': bool(banking and banking.ready)}}
+                'capabilities': {'feedback': not preview, 'banking_actions': bool(banking and banking.ready)}}
 
     def owned(request, session_id, customer_id=None):
         token = request.cookies.get('northwind_session')
         state = sessions.get(token)
         if not state or state['session_id'] != session_id:
-            raise HTTPException(409, 'Start a new conversation for this deployment')
+            raise HTTPException(409, 'Conversation expired or was reset. Start a new conversation; previous banking state may be unavailable.')
+        if state.get('resetting'):
+            raise HTTPException(409, 'Scenario reset is in progress')
         if customer_id is not None and customer_id != state['customer_id']:
             raise HTTPException(403, 'Customer does not match this conversation')
         return state
+
+    def session_view(state):
+        return {'session_id': state['session_id'], 'customer_id': state['customer_id'],
+                'run_id': state['scenario']['run_id'], 'ephemeral': True}
+
+    def replace_conversation(state):
+        state.update(session_id='nw-' + secrets.token_hex(16), history=[], pending={}, requests={},
+                     lock=asyncio.Lock(), resetting=False)
+        return session_view(state)
+
+    @app.get('/api/session')
+    async def session_status(request: Request, session_id: str):
+        return session_view(owned(request, session_id))
 
     @app.post('/api/session')
     async def new_session(response: Response, request: Request, body: SessionIn | None = None):
@@ -166,7 +203,7 @@ def create_app(adapter, *, preview=False):
             raise HTTPException(400, 'Customer is not available')
         token = request.cookies.get('northwind_session')
         previous = sessions.get(token)
-        if previous and (previous['lock'].locked()
+        if previous and (previous.get('resetting') or previous['lock'].locked()
                          or any(not r['task'].done() for r in previous['requests'].values())):
             raise HTTPException(409, 'A reply is already running')
         if previous is None:
@@ -174,14 +211,69 @@ def create_app(adapter, *, preview=False):
                 raise HTTPException(429, 'Participant capacity reached')
             token = secrets.token_urlsafe(32)
         scenarios = previous['scenarios'] if previous else {}
-        scenario_id = scenarios.setdefault(customer_id, secrets.token_hex(16))
+        scenario = scenarios.setdefault(customer_id, {'id': secrets.token_hex(16), 'revision': 0,
+                                                       'run_id': secrets.token_hex(16)})
         session_id = 'nw-' + secrets.token_hex(16)
-        sessions[token] = {'session_id': session_id, 'scenario_id': scenario_id,
+        sessions[token] = {'session_id': session_id, 'scenario_id': scenario['id'], 'scenario': scenario,
                            'scenarios': scenarios, 'customer_id': customer_id,
-                           'history': [], 'lock': asyncio.Lock(), 'pending': {}, 'requests': {}}
+                           'history': [], 'lock': asyncio.Lock(), 'pending': {}, 'requests': {},
+                           'answers': previous['answers'] if previous else {},
+                           'resets': previous['resets'] if previous else {}}
         response.set_cookie('northwind_session', token, httponly=True, samesite='strict',
                             path=paths.local('/'), secure=request.headers.get('x-forwarded-proto', request.url.scheme) == 'https')
-        return {'session_id': session_id, 'customer_id': customer_id}
+        return session_view(sessions[token])
+
+    async def cancel_work(state):
+        tasks = [entry['task'] for entry in state['requests'].values() if not entry['task'].done()]
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        return len(tasks)
+
+    @app.post('/api/cancel')
+    async def cancel(body: SessionAction, request: Request):
+        state = owned(request, body.session_id)
+        entry = state['requests'].get(body.request_id)
+        if not entry:
+            raise HTTPException(404, 'Request is not part of this conversation')
+        task = entry['task']
+        if not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        return {'status': 'cancelled' if task.cancelled() else 'completed',
+                'request_id': body.request_id,
+                'detail': 'Cancellation stops pending work; it does not undo completed banking actions or provider charges.'}
+
+    @app.post('/api/reset')
+    async def reset(body: SessionAction, request: Request):
+        state = sessions.get(request.cookies.get('northwind_session'))
+        if state is None:
+            raise HTTPException(409, 'Start a new conversation for this deployment')
+        existing = state['resets'].get(body.request_id)
+        if existing:
+            if existing['session_id'] != body.session_id:
+                raise HTTPException(409, 'Reset identity was used for another conversation')
+            return await asyncio.shield(existing['task'])
+        owned(request, body.session_id)
+        if len(state['resets']) >= 128:
+            raise HTTPException(429, 'Reset capacity reached for this participant')
+        state['resetting'] = True
+
+        async def restore():
+            await cancel_work(state)
+            try:
+                revision = (state['scenario']['revision'] + 1 if preview else
+                            await asyncio.wait_for(banking.reset(state), 15))
+            except Exception as exc:
+                # Keep the scenario closed after an uncertain reset; redeployment is explicit recovery.
+                raise HTTPException(503, 'Reset could not be confirmed; redeploy: ' + type(exc).__name__) from None
+            state['scenario'].update(revision=revision, run_id=secrets.token_hex(16))
+            return {**replace_conversation(state), 'status': 'reset', 'history_retained': True}
+
+        task = asyncio.create_task(restore())
+        state['resets'][body.request_id] = {'session_id': body.session_id, 'task': task}
+        return await asyncio.shield(task)
 
     async def execute(state, body, confirmation=None):
         async with state['lock']:
@@ -202,18 +294,21 @@ def create_app(adapter, *, preview=False):
                 raise HTTPException(503, 'Banking service unavailable; start a new deployment')
             binding = {'instance': banking.instance, 'epoch': banking.epoch,
                        'scenario_id': state['scenario_id'], 'customer_id': customer_id,
-                       'session_id': session_id, 'request_id': body.request_id}
+                       'session_id': session_id, 'request_id': body.request_id,
+                       'revision': state['scenario']['revision']}
             if confirmation:
                 binding['confirmation_id'] = confirmation['action_id']
             from northwind.binding import sign
             try:
                 result = await agent.run_turn(body.message, customer_id=customer_id, session_id=session_id,
                     history=state['history'], channel='web', prompt_label='production', tags=['source:depot'],
-                    extra_metadata={'live_instance_id': banking.instance, 'live_run_id': banking.epoch},
+                    extra_metadata={'live_instance_id': banking.instance, 'live_run_id': state['scenario']['run_id']},
                     banking_binding=sign(binding, banking.secret), confirmation=confirmation)
                 await asyncio.to_thread(config.flush)
             except Exception as exc:
                 raise HTTPException(502, 'Banking response unavailable: ' + type(exc).__name__) from None
+            if state['session_id'] != session_id or state.get('resetting'):
+                raise HTTPException(409, 'The conversation was reset while this request was running')
             if result.get('error') and not any(a.get('status') in ('blocked', 'opened', 'scheduled')
                                               for a in result.get('banking_actions', [])):
                 raise HTTPException(502, 'The banking response did not complete; retry with the same request identity')
@@ -222,6 +317,13 @@ def create_app(adapter, *, preview=False):
                     state['pending'][action['action_id']] = action
             state['history'] = (state['history'] + [{'role': 'user', 'content': body.message},
                                                   {'role': 'assistant', 'content': result['answer']}])[-20:]
+            subject = (result['trace_id'], result['observation_id'])
+            timestamp = datetime.now(timezone.utc)
+            timestamp = timestamp.replace(microsecond=timestamp.microsecond // 1000 * 1000)
+            state['answers'][subject] = {'id': secrets.token_hex(16), 'timestamp': timestamp,
+                'trace_id': result['trace_id'], 'observation_id': result['observation_id'],
+                'session_id': session_id, 'run_id': state['scenario']['run_id'], 'environment': config.ENVIRONMENT,
+                'lock': asyncio.Lock()}
             return {**result, 'session_id': session_id, 'request_id': body.request_id,
                     'turn': len(state['history']) // 2, 'prompt_label': 'production',
                     'latency_ms': round((time.monotonic() - started) * 1000)}
@@ -236,6 +338,8 @@ def create_app(adapter, *, preview=False):
         else:
             if state['lock'].locked() or any(not r['task'].done() for r in state['requests'].values()):
                 raise HTTPException(409, 'A reply is already running')
+            if len(state['answers']) >= 512:
+                raise HTTPException(429, 'Participant answer capacity reached; start a new deployment')
             if len(state['requests']) >= 128:
                 raise HTTPException(429, 'Start a new conversation to continue')
             task = asyncio.create_task(execute(state, body, confirmation))
@@ -245,6 +349,10 @@ def create_app(adapter, *, preview=False):
             return await asyncio.wait_for(asyncio.shield(task), 120)
         except TimeoutError:
             raise HTTPException(503, 'Reply still running; retry with the same request identity') from None
+        except asyncio.CancelledError:
+            if task.cancelled():
+                raise HTTPException(409, 'Request was cancelled. Start a new request to continue.') from None
+            raise
 
     @app.post('/api/chat')
     async def chat(body: ChatIn, request: Request):
@@ -272,9 +380,42 @@ def create_app(adapter, *, preview=False):
                          'show': 'Use the delivered runbook for available evidence.', 'command': '', 'button': 'Run'}],
                 'groups': {}, 'job': None}
 
+    def owned_answer(request, session_id, trace_id, observation_id):
+        state = sessions.get(request.cookies.get('northwind_session'))
+        answer = state['answers'].get((trace_id, observation_id)) if state else None
+        if not answer or answer['session_id'] != session_id or preview:
+            raise HTTPException(403, 'This answer does not belong to this participant')
+        return answer
+
+    def feedback_result(answer, status):
+        return {'id': answer['id'], 'timestamp': answer['timestamp'].isoformat(),
+                'status': status, 'value': answer['value'], 'comment': answer['comment'],
+                'trace_id': answer['trace_id'], 'observation_id': answer['observation_id']}
+
     @app.post('/api/feedback')
-    async def feedback():
-        raise HTTPException(409, 'Feedback requires observation ownership support, which is pending')
+    async def feedback(body: FeedbackIn, request: Request):
+        from .feedback import write
+        answer = owned_answer(request, body.session_id, body.trace_id, body.observation_id)
+        async with answer['lock']:
+            answer.update(value=body.value, comment=body.comment)
+            try:
+                status = await asyncio.to_thread(write, adapter.langfuse(), answer)
+            except Exception as exc:
+                raise HTTPException(502, 'Feedback unavailable: ' + type(exc).__name__) from None
+            return JSONResponse(feedback_result(answer, status), status_code=200 if status == 'saved' else 202)
+
+    @app.get('/api/feedback')
+    async def feedback_status(request: Request, session_id: str, trace_id: str, observation_id: str):
+        from .feedback import read
+        answer = owned_answer(request, session_id, trace_id, observation_id)
+        if 'value' not in answer:
+            raise HTTPException(404, 'No feedback has been submitted for this answer')
+        async with answer['lock']:
+            try:
+                status = await asyncio.to_thread(read, adapter.langfuse(), answer)
+            except Exception as exc:
+                raise HTTPException(502, 'Feedback verification unavailable: ' + type(exc).__name__) from None
+            return feedback_result(answer, status)
 
     return app
 

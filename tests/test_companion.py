@@ -3,6 +3,19 @@ import pytest
 from fastapi.testclient import TestClient
 
 
+
+def test_owned_sessions_reset_and_answer_feedback():
+    import os
+    import subprocess
+    import sys
+    env = {k: v for k, v in os.environ.items() if k in ('PATH', 'HOME', 'TMPDIR', 'LANG')}
+    env['PYTHONPATH'] = os.pathsep.join(['src', 'demos/bank-assistant'])
+    result = subprocess.run([sys.executable, 'tests/sdk_sessions_case.py'], env=env,
+                            capture_output=True, text=True, timeout=90)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert '"feedback": true' in result.stdout
+
+
 def test_delivered_banking_uses_private_mcp_and_real_sdk():
     import os
     import subprocess
@@ -75,4 +88,5 @@ def test_customer_cannot_select_someone_elses_conversation_or_execute_a_job():
         assert response.status_code == 409
         assert browser.post('/api/run/anything').status_code == 404
         assert browser.post('/api/voice/process').status_code == 404
-        assert browser.post('/api/feedback', json={'trace_id': 'someone-else', 'value': 1}).status_code == 409
+        assert browser.post('/api/feedback', json={'session_id': first, 'trace_id': 'someone-else',
+                                                 'observation_id': 'foreign', 'value': 1}).status_code == 403

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/app.css?v=12">
+  <link rel="stylesheet" href="/static/app.css?v=13">
 </head>
 <body>
   <!-- inline icon sprite -->
@@ -111,7 +111,14 @@
             <div class="spacer"></div>
             <span class="badge badge-ok" title="Every turn is traced in Langfuse" data-i18n-title="chat.tracedTitle"><svg><use href="#i-lock"/></svg><span data-i18n="chat.traced">Traced · PII-masked</span></span>
             <button class="btn btn-sm" id="newConv"><svg><use href="#i-plus"/></svg><span data-i18n="chat.new">New conversation</span></button>
+            <button class="btn btn-sm" id="cancelReply" hidden data-i18n="chat.cancel">Cancel reply</button>
           </div>
+          <p id="sessionNotice" role="status" hidden></p>
+          <details class="session-controls">
+            <summary data-i18n="chat.state">Demo state</summary>
+            <p data-i18n="chat.resetHelp">Reset restores this participant's selected customer and cancels pending replies. Langfuse history remains. New conversation keeps banking changes.</p>
+            <button class="btn btn-sm" id="resetState" data-i18n="chat.reset">Reset demo state</button>
+          </details>
           <div class="transcript" id="transcript"></div>
           <div class="chips" id="chips"></div>
           <form class="composer" id="composer" autocomplete="off">
@@ -182,6 +189,6 @@
   </main>
 
   <div class="toast" id="toast"></div>
-  <script src="/static/app.js?v=11"></script>
+  <script src="/static/app.js?v=12"></script>
 </body>
 </html>
