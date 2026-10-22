@@ -148,9 +148,8 @@ def tracer_provider(service_name: str = "northwind-assistant"):
     return _provider
 
 
-def langfuse_factory(*, host, public_key, secret_key):
+def langfuse_factory(*, host, public_key, secret_key, service_name="northwind-assistant"):
     """Langfuse client bound to the shared provider, with masking + sampling."""
-    service_name = "northwind-assistant"
     global _langfuse
     if _langfuse is not None:
         return _langfuse

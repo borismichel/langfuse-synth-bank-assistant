@@ -14,14 +14,23 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+import hashlib
 from langfuse_synth_core.companion import CompanionAdapter, parse_invocation
 from langfuse_synth_core.live import paths
 
 STATIC = Path('demos/bank-assistant/portal/static').resolve()
 HEALTH_PATH = '/api/health'
 REQUIRES_SECRETS = ('LANGFUSE_PUBLIC_KEY', 'LANGFUSE_SECRET_KEY', 'LLM_API_KEY')
-CUSTOMERS = [{'id': 'C-1001', 'name': 'Ana Torres', 'segment': 'Everyday', 'since': '2017',
-              'products': 'Synthetic banking customer'}]
+CUSTOMERS = [
+    {'id': cid, 'name': name, 'segment': segment, 'since': since,
+     'products': 'Synthetic banking customer'}
+    for cid, name, segment, since in (
+        ('C-1001', 'Ana Torres', 'Everyday', '2017'),
+        ('C-1002', 'Ben Okafor', 'Premier', '2012'),
+        ('C-1003', 'Carla Mendes', 'Everyday', '2022'),
+        ('C-1004', 'David Kim', 'Premier', '2015'),
+    )
+]
 
 
 class ChatIn(BaseModel):
@@ -31,19 +40,51 @@ class ChatIn(BaseModel):
     channel: str = 'web'
     lang: str = 'en'
     prompt_label: str | None = None
+    request_id: str = Field(default_factory=lambda: secrets.token_hex(16), min_length=1, max_length=128)
+
+
+class SessionIn(BaseModel):
+    customer_id: str = 'C-1001'
+
+
+class ConfirmIn(BaseModel):
+    session_id: str
+    action_id: str
+    request_id: str = Field(min_length=1, max_length=128)
+    lang: str = 'en'
 
 
 def create_app(adapter, *, preview=False):
     from northwind import agent, config, knowledge, lang, prompts
     sessions = {}
+    from .supervisor import BankingService
+    banking = None if preview else BankingService(adapter)
     if not preview:
         config.bind_adapter(adapter)
 
     @asynccontextmanager
     async def lifespan(app):
-        yield
-        if not preview:
-            await asyncio.to_thread(config.shutdown)
+        try:
+            if banking:
+                try:
+                    await banking.start()
+                except Exception as exc:
+                    banking.error = type(exc).__name__
+                    print('Banking startup failed: ' + banking.error, flush=True)
+                    await banking.stop()
+                config.MCP_ENABLED = True
+                config.MCP_URL = banking.url
+            yield
+        finally:
+            tasks = [r['task'] for s in sessions.values() for r in s.get('requests', {}).values() if not r['task'].done()]
+            for task in tasks:
+                task.cancel()
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
+            if banking:
+                await banking.stop()
+            if not preview:
+                await asyncio.to_thread(config.shutdown)
 
     app = FastAPI(title='Northwind Bank', lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.mount('/static', StaticFiles(directory=STATIC), name='static')
@@ -65,7 +106,7 @@ def create_app(adapter, *, preview=False):
         setting = json.dumps(prefix).replace('<', '\\u003c')
         content = content.replace('<head>', '<head><script>window.NORTHWIND_BASE_PATH=' + setting + ';</script>')
         notice = ('Development preview — fixture responses only; no target or provider connection.' if preview
-                  else 'Banking actions, feedback, voice and presenter experiments are unavailable in this candidate.')
+                  else 'Synthetic banking state is private to this participant. Confirm each banking action before it runs.')
         content = content.replace('id="labelSel"', 'id="labelSel" disabled title="Only the production prompt is enabled"').replace('data-ch="app"', 'data-ch="app" disabled').replace('data-ch="whatsapp"', 'data-ch="whatsapp" disabled')
         content = content.replace('<body>', '<body><aside role="status" style="padding:12px;text-align:center">' + escape(notice) + '</aside>')
         if preview:
@@ -78,7 +119,13 @@ def create_app(adapter, *, preview=False):
     async def health():
         if preview:
             return JSONResponse({'ready': False, 'langfuse_write_ok': False, 'llm_bound': False, 'preview': True}, status_code=503)
-        return (await asyncio.to_thread(adapter.readiness)).as_dict()
+        report = (await asyncio.to_thread(adapter.readiness)).as_dict()
+        report['banking_ready'] = banking.ready
+        report['ready'] = report['ready'] and banking.ready
+        report['detail']['banking'] = {'ok': banking.ready}
+        if not banking.ready:
+            report['detail']['banking']['error'] = banking.error or 'BankingProcessExited'
+        return report
 
     @app.get('/api/info')
     async def info():
@@ -100,33 +147,48 @@ def create_app(adapter, *, preview=False):
                 'project_id': pid, 'project_url': project_url, 'prompt_name': prompts.PROMPT_NAME,
                 'prompt_label': 'production', 'production_prompt': prompt, 'model': model, 'release': config.RELEASE,
                 'links': [{'label': 'Langfuse project', 'url': project_url}] if project_url else [],
-                'customers': CUSTOMERS, 'channels': ['web'], 'preview': preview, 'capabilities': {'feedback': False, 'banking_actions': False}}
+                'customers': CUSTOMERS, 'channels': ['web'], 'preview': preview,
+                'capabilities': {'feedback': False, 'banking_actions': bool(banking and banking.ready)}}
+
+    def owned(request, session_id, customer_id=None):
+        token = request.cookies.get('northwind_session')
+        state = sessions.get(token)
+        if not state or state['session_id'] != session_id:
+            raise HTTPException(409, 'Start a new conversation for this deployment')
+        if customer_id is not None and customer_id != state['customer_id']:
+            raise HTTPException(403, 'Customer does not match this conversation')
+        return state
 
     @app.post('/api/session')
-    async def new_session(response: Response, request: Request):
-        if len(sessions) >= 128:
-            sessions.pop(next(iter(sessions)))
-        token = secrets.token_urlsafe(32)
-        session_id = 'nw-' + secrets.token_hex(16)
-        sessions[token] = {'session_id': session_id, 'history': [], 'lock': asyncio.Lock()}
-        response.set_cookie('northwind_session', token, httponly=True, samesite='strict', path=paths.local('/'), secure=request.headers.get('x-forwarded-proto', request.url.scheme) == 'https')
-        return {'session_id': session_id}
-
-    @app.post('/api/chat')
-    async def chat(body: ChatIn, request: Request):
-        token = request.cookies.get('northwind_session')
-        if not token or token not in sessions or sessions[token]['session_id'] != body.session_id:
-            raise HTTPException(409, 'Start a new conversation for this deployment')
-        if body.customer_id != 'C-1001':
+    async def new_session(response: Response, request: Request, body: SessionIn | None = None):
+        customer_id = body.customer_id if body else 'C-1001'
+        if customer_id not in {c['id'] for c in CUSTOMERS}:
             raise HTTPException(400, 'Customer is not available')
-        state = sessions[token]
-        session_id = state['session_id']
-        if state['lock'].locked():
+        token = request.cookies.get('northwind_session')
+        previous = sessions.get(token)
+        if previous and (previous['lock'].locked()
+                         or any(not r['task'].done() for r in previous['requests'].values())):
             raise HTTPException(409, 'A reply is already running')
+        if previous is None:
+            if len(sessions) >= 128:
+                raise HTTPException(429, 'Participant capacity reached')
+            token = secrets.token_urlsafe(32)
+        scenarios = previous['scenarios'] if previous else {}
+        scenario_id = scenarios.setdefault(customer_id, secrets.token_hex(16))
+        session_id = 'nw-' + secrets.token_hex(16)
+        sessions[token] = {'session_id': session_id, 'scenario_id': scenario_id,
+                           'scenarios': scenarios, 'customer_id': customer_id,
+                           'history': [], 'lock': asyncio.Lock(), 'pending': {}, 'requests': {}}
+        response.set_cookie('northwind_session', token, httponly=True, samesite='strict',
+                            path=paths.local('/'), secure=request.headers.get('x-forwarded-proto', request.url.scheme) == 'https')
+        return {'session_id': session_id, 'customer_id': customer_id}
+
+    async def execute(state, body, confirmation=None):
         async with state['lock']:
             started = time.monotonic()
+            session_id, customer_id = state['session_id'], state['customer_id']
             if preview:
-                check = agent.assess_input(body.message, 'C-1001')
+                check = agent.assess_input(body.message, customer_id)
                 language = lang.detect(body.message)
                 docs = knowledge.search(body.message, k=1, min_score=0.08)
                 answer = (agent.REFUSAL[language] if check['blocked'] else
@@ -136,17 +198,68 @@ def create_app(adapter, *, preview=False):
                         'session_id': session_id, 'blocked': check['blocked'], 'risks': check['risks'],
                         'sources': ['KB-202'], 'retrieved': [d['id'] for d in docs], 'tools_used': [],
                         'model': 'Fixture response', 'latency_ms': 0, 'turn': 1}
+            if not banking.ready:
+                raise HTTPException(503, 'Banking service unavailable; start a new deployment')
+            binding = {'instance': banking.instance, 'epoch': banking.epoch,
+                       'scenario_id': state['scenario_id'], 'customer_id': customer_id,
+                       'session_id': session_id, 'request_id': body.request_id}
+            if confirmation:
+                binding['confirmation_id'] = confirmation['action_id']
+            from northwind.binding import sign
             try:
-                result = await asyncio.wait_for(agent.run_turn(body.message, customer_id='C-1001', session_id=session_id,
-                    history=state['history'], channel='web', prompt_label='production', tags=['source:depot']), timeout=120)
+                result = await agent.run_turn(body.message, customer_id=customer_id, session_id=session_id,
+                    history=state['history'], channel='web', prompt_label='production', tags=['source:depot'],
+                    extra_metadata={'live_instance_id': banking.instance, 'live_run_id': banking.epoch},
+                    banking_binding=sign(binding, banking.secret), confirmation=confirmation)
                 await asyncio.to_thread(config.flush)
             except Exception as exc:
                 raise HTTPException(502, 'Banking response unavailable: ' + type(exc).__name__) from None
-            if result.get('error'):
-                raise HTTPException(502, 'The banking response did not complete')
+            if result.get('error') and not any(a.get('status') in ('blocked', 'opened', 'scheduled')
+                                              for a in result.get('banking_actions', [])):
+                raise HTTPException(502, 'The banking response did not complete; retry with the same request identity')
+            for action in result.get('banking_actions', []):
+                if action.get('status') == 'confirmation_required':
+                    state['pending'][action['action_id']] = action
             state['history'] = (state['history'] + [{'role': 'user', 'content': body.message},
                                                   {'role': 'assistant', 'content': result['answer']}])[-20:]
-            return {**result, 'session_id': session_id, 'turn': len(state['history']) // 2, 'prompt_label': 'production', 'latency_ms': round((time.monotonic() - started) * 1000)}
+            return {**result, 'session_id': session_id, 'request_id': body.request_id,
+                    'turn': len(state['history']) // 2, 'prompt_label': 'production',
+                    'latency_ms': round((time.monotonic() - started) * 1000)}
+
+    async def dispatch(state, body, confirmation=None):
+        fingerprint = hashlib.sha256(json.dumps([body.model_dump(), confirmation], sort_keys=True).encode()).hexdigest()
+        existing = state['requests'].get(body.request_id)
+        if existing:
+            if existing['fingerprint'] != fingerprint:
+                raise HTTPException(409, 'Request identity was already used with different input')
+            task = existing['task']
+        else:
+            if state['lock'].locked() or any(not r['task'].done() for r in state['requests'].values()):
+                raise HTTPException(409, 'A reply is already running')
+            if len(state['requests']) >= 128:
+                raise HTTPException(429, 'Start a new conversation to continue')
+            task = asyncio.create_task(execute(state, body, confirmation))
+            state['requests'][body.request_id] = {'fingerprint': fingerprint, 'task': task}
+        try:
+            # A transport timeout/disconnect must not cancel an already committed action.
+            return await asyncio.wait_for(asyncio.shield(task), 120)
+        except TimeoutError:
+            raise HTTPException(503, 'Reply still running; retry with the same request identity') from None
+
+    @app.post('/api/chat')
+    async def chat(body: ChatIn, request: Request):
+        return await dispatch(owned(request, body.session_id, body.customer_id), body)
+
+    @app.post('/api/confirm')
+    async def confirm(body: ConfirmIn, request: Request):
+        state = owned(request, body.session_id)
+        action = state['pending'].get(body.action_id)
+        if not action or preview:
+            raise HTTPException(409, 'This action is not pending in this conversation')
+        message = ('Confirmo la acción indicada.' if body.lang == 'es' else 'I confirm the displayed action.')
+        turn = ChatIn(session_id=body.session_id, customer_id=state['customer_id'],
+                      request_id=body.request_id, message=message, lang=body.lang)
+        return await dispatch(state, turn, action)
 
     @app.get('/api/voice')
     async def voice():

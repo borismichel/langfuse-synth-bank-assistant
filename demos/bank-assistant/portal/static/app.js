@@ -400,7 +400,7 @@
 
   async function newConversation() {
     S.messages = [];
-    try { S.session = (await postJSON("/api/session")).session_id; }
+    try { S.session = (await postJSON("/api/session", { customer_id: S.customer })).session_id; }
     catch (e) { S.session = null; toast(e.message, true); }
     renderSessionId();
     persist(); renderTranscript();
@@ -485,6 +485,62 @@
         <div class="msg-foot">${foot.join("")}</div>
       </div>`;
 
+    const stack = $(".stack", wrap);
+    (r.banking_actions || []).forEach((action) => {
+      const box = document.createElement("div");
+      box.className = "bubble";
+      const labels = LANG === "es"
+        ? { block_card: "Bloquear tarjeta", open_dispute: "Abrir disputa", schedule_callback: "Programar llamada" }
+        : { block_card: "Block card", open_dispute: "Open dispute", schedule_callback: "Schedule callback" };
+      const title = labels[action.tool] || (LANG === "es" ? "Resultado bancario" : "Banking result");
+      const details = document.createElement("p");
+      const args = action.arguments || {};
+      const target = args.card_last4 ? (LANG === "es" ? "Tarjeta terminada en " : "Card ending ") + args.card_last4
+        : args.transaction_id ? (LANG === "es" ? "Transacción " : "Transaction ") + args.transaction_id : args.topic || "";
+      details.textContent = title + (target ? " · " + target : "");
+      box.appendChild(details);
+      if (args.reason || args.preferred_time) {
+        const explanation = document.createElement("p");
+        explanation.textContent = args.reason || args.preferred_time;
+        box.appendChild(explanation);
+      }
+      if (action.status === "confirmation_required") {
+        const button = document.createElement("button");
+        button.className = "btn btn-sm btn-navy";
+        button.textContent = LANG === "es" ? "Confirmar acción" : "Confirm action";
+        button.addEventListener("click", async () => {
+          if (S.busy) return;
+          button.disabled = true; setBusy(true);
+          action.confirmation_lang = action.confirmation_lang || LANG;
+          persist();
+          try {
+            const confirmed = await postJSON("/api/confirm", {session_id: S.session,
+              action_id: action.action_id, request_id: "confirm-" + action.action_id, lang: action.confirmation_lang});
+            S.messages.push({role: "user", content: LANG === "es" ? "Confirmo la acción indicada." : "I confirm the displayed action."});
+            S.messages.push({role: "assistant", content: confirmed.answer, meta: confirmed});
+            action.confirmed = true;
+            persist(); renderTranscript();
+          } catch (e) { toast(e.message); button.disabled = false; }
+          finally { setBusy(false); }
+        });
+        button.disabled = !!action.confirmed;
+        box.appendChild(button);
+      } else {
+        const receipt = document.createElement("p");
+        receipt.textContent = (LANG === "es" ? "Estado: " : "Status: ") + (action.status || action.error || "unknown") +
+          " · " + (action.confirmation || action.case_id || action.callback_id || "");
+        box.appendChild(receipt);
+      }
+      stack.appendChild(box);
+    });
+    if (r.retry_request) {
+      const retry = document.createElement("button");
+      retry.className = "btn btn-sm";
+      retry.textContent = LANG === "es" ? "Reintentar solicitud" : "Retry request";
+      retry.addEventListener("click", () => send(r.retry_request.text, r.retry_request.id, r.retry_request.lang));
+      stack.appendChild(retry);
+    }
+
     const copyEl = $(".trace-id", wrap);
     if (copyEl) copyEl.addEventListener("click", () => {
       navigator.clipboard?.writeText(copyEl.dataset.copy).then(() => toast(t("toast.copied")), () => toast(copyEl.dataset.copy));
@@ -535,7 +591,7 @@
     $$("#chips .chip").forEach((c) => (c.disabled = b));
   }
 
-  async function send(text) {
+  async function send(text, retryId = null, retryLang = null) {
     text = (text ?? $("#input").value).trim();
     if (!text || S.busy) return;
     if (!S.session) await newConversation();
@@ -554,10 +610,11 @@
     const tick = setInterval(() => { $(".tt", typing).textContent = t("chat.thinking", { s: ((performance.now() - t0) / 1000).toFixed(1) }); }, 100);
     setBusy(true);
     let res;
+    const requestId = retryId || crypto.randomUUID();
     try {
-      res = await postJSON("/api/chat", { message: text, customer_id: S.customer, channel: S.channel, session_id: S.session, prompt_label: S.label || null, lang: LANG });
+      res = await postJSON("/api/chat", { message: text, customer_id: S.customer, channel: S.channel, session_id: S.session, prompt_label: S.label || null, lang: retryLang || LANG, request_id: requestId });
     } catch (e) {
-      res = { answer: t("chat.unreachable"), error: e.message };
+      res = { answer: t("chat.unreachable"), error: e.message, retry_request: { text, id: requestId, lang: retryLang || LANG } };
     } finally { clearInterval(tick); typing.remove(); S.typing = null; setBusy(false); }
     if (res.session_id) S.session = res.session_id;
     const meta = { ...res }; delete meta.answer;

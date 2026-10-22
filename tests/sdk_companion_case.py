@@ -47,8 +47,7 @@ class ScriptedProvider(BaseChatModel):
     def _llm_type(self):
         return 'fixture-native-model'
     def bind_tools(self, tools, **kwargs):
-        # The real graph exposes only retrieval in this candidate.
-        assert [tool.name for tool in tools] == ['search_knowledge_base']
+        assert 'search_knowledge_base' in [tool.name for tool in tools]
         return self
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
         model_calls.append(1)

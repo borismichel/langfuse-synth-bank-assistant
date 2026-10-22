@@ -247,7 +247,7 @@ class State(TypedDict):
 
 
 def _build_tools(langfuse, session: Optional[ClientSession], customer_id: str, evidence: list, used: list,
-                 trace_attrs: dict):
+                 trace_attrs: dict, banking_binding: str | None = None, actions: list | None = None):
     """Tools bound to the AUTHENTICATED customer. The model never sees or chooses the id.
 
     `trace_attrs` go to the MCP server as W3C baggage, so its spans carry this
@@ -276,7 +276,7 @@ def _build_tools(langfuse, session: Optional[ClientSession], customer_id: str, e
 
     async def _mcp(name: str, args: dict, config_: Optional[RunnableConfig] = None) -> dict:
         used.append(name)
-        args = {"customer_id": customer_id, **args}
+        args = {**args, "customer_id": customer_id}
         with _nest(config_), propagate_attributes(**trace_attrs, as_baggage=True), \
                 langfuse.start_as_current_observation(as_type="span", name=f"mcp-client: {name}",
                                                       input=args, metadata={"mcp.server": config.MCP_URL}) as s:
@@ -284,7 +284,8 @@ def _build_tools(langfuse, session: Optional[ClientSession], customer_id: str, e
                 data = {"error": "BANKING_SYSTEM_UNAVAILABLE"}
             else:
                 # W3C traceparent + baggage → MCP _meta (see config.inject_trace_context)
-                res = await session.call_tool(name, args, meta=config.inject_trace_context())
+                res = await session.call_tool(name, args, meta={**config.inject_trace_context(),
+                                              'northwind_binding': banking_binding})
                 data = res.structuredContent or {}
                 if "result" in data and len(data) == 1:
                     data = data["result"]
@@ -296,6 +297,8 @@ def _build_tools(langfuse, session: Optional[ClientSession], customer_id: str, e
                 if res.isError:
                     s.update(level="ERROR", status_message=str(data)[:200])
             s.update(output=data)
+        if actions is not None and name in ("block_card", "open_dispute", "schedule_callback"):
+            actions.append(data)
         evidence.append(f"[tool:{name}] {json.dumps(data, default=str)}")
         return data
 
@@ -396,7 +399,8 @@ def _history(history: Optional[list]) -> list[BaseMessage]:
 async def run_turn(message: str, *, customer_id: str = "C-1001", session_id: Optional[str] = None,
                    history: Optional[list] = None, channel: str = "web", model: Optional[str] = None,
                    prompt_label: Optional[str] = None, tags: Optional[list] = None,
-                   extra_metadata: Optional[dict] = None, trace_name: str = TRACE_NAME) -> dict:
+                   extra_metadata: Optional[dict] = None, trace_name: str = TRACE_NAME,
+                   banking_binding: str | None = None, confirmation: dict | None = None) -> dict:
     """One customer turn = one trace. Returns the answer plus links into Langfuse and the APM."""
     langfuse = config.get_langfuse()
     selected_llm = make_llm(model)
@@ -411,6 +415,7 @@ async def run_turn(message: str, *, customer_id: str = "C-1001", session_id: Opt
     language = lang.detect(message)
     evidence: list[str] = []
     used: list[str] = []
+    actions: list[dict] = []
     outcome: dict = {}
     label = prompt_label or "production"
 
@@ -439,15 +444,25 @@ async def run_turn(message: str, *, customer_id: str = "C-1001", session_id: Opt
             # No tags: a list does not survive W3C baggage (it arrives as one
             # "['a', 'b']" string, i.e. a single garbage tag on the server's spans).
             trace_attrs = {"session_id": session_id, "user_id": customer_id, "trace_name": trace_name,
-                           "version": version, "environment": environment}
+                           "version": version, "environment": environment,
+                           "metadata": {k: str(v) for k, v in (extra_metadata or {}).items()
+                                        if k in ('live_instance_id', 'live_run_id')}}
             handler = CallbackHandler()
             run_cfg = {"callbacks": [handler], "recursion_limit": 14,
                        "run_name": "northwind-orchestration", "metadata": {"langfuse_session_id": session_id}}
             llm = selected_llm
 
             async def _invoke(session):
-                tools = _build_tools(langfuse, session, customer_id, evidence, used, trace_attrs)
-                graph = _graph(langfuse, llm, tools, system_text, customer_id, check, outcome, language)
+                tools = _build_tools(langfuse, session, customer_id, evidence, used, trace_attrs,
+                                     banking_binding, actions)
+                turn_system = system_text
+                if confirmation and not check['blocked']:
+                    selected_tool = next(t for t in tools if t.name == confirmation['tool'])
+                    receipt = await selected_tool.ainvoke(confirmation['arguments'], run_cfg)
+                    turn_system += "\nThe customer explicitly confirmed the exact pending action. " + \
+                        "The banking service returned this authoritative result; report it accurately, " + \
+                        "without executing any further action: " + json.dumps(receipt)
+                graph = _graph(langfuse, llm, tools, turn_system, customer_id, check, outcome, language)
                 return await graph.ainvoke({"messages": _history(history) + [HumanMessage(content=message)],
                                             "blocked": False}, run_cfg)
 
@@ -470,6 +485,19 @@ async def run_turn(message: str, *, customer_id: str = "C-1001", session_id: Opt
                 root.update(level="ERROR", status_message=type(exc).__name__)
 
             answer = _text(state["messages"][-1].content)
+            committed = [a for a in actions if a.get('status') in ('blocked', 'opened', 'scheduled')]
+            if any(a.get('status') == 'confirmation_required' for a in actions) and not committed:
+                answer = ('Se requiere confirmación. No se ha realizado ninguna acción bancaria. '
+                          'Revise la acción indicada y seleccione Confirmar acción.' if language == 'es' else
+                          'Confirmation required. No banking action has run. '
+                          'Review the displayed action and select Confirm action.')
+            if error is not None and committed:
+                # The tool receipt is authoritative even if the later model answer fails.
+                # Record exactly the same fallback the participant will see on this root.
+                notice = ('La acción bancaria se completó. La respuesta del asistente no está disponible. Recibo: '
+                          if language == 'es' else
+                          'The banking action completed. The assistant response is unavailable. Receipt: ')
+                answer = notice + json.dumps(committed[-1], ensure_ascii=False)
             cited = sorted(set(re.findall(r"\bKB-\d{3}\b", answer)))
             retrieved = sorted(set(re.findall(r"\[(KB-\d{3})\]", "\n".join(evidence))))
             # Follow-up turns often answer from facts retrieved in an EARLIER turn.
@@ -518,7 +546,7 @@ async def run_turn(message: str, *, customer_id: str = "C-1001", session_id: Opt
             "apm_url": config.apm_url(trace_id), "sources": cited, "retrieved": retrieved,
             "tools_used": used, "blocked": check["blocked"], "risks": check["risks"],
             "prompt_version": getattr(lf_prompt, "version", None), "model": model, "business": biz,
-            "error": type(error).__name__ if error else None}
+            "banking_actions": actions, "error": type(error).__name__ if error else None}
 
 
 def _segment(customer_id: str) -> str:
