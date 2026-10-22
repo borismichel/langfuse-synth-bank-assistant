@@ -349,7 +349,9 @@ def _graph(langfuse, llm, tools, system_text: str, customer_id: str, check: dict
 
     async def assistant(state: State, config: RunnableConfig) -> dict:  # noqa: F811 — LangGraph injects by name
         msgs = [SystemMessage(content=system_text)] + state["messages"]
-        ai = await llm_with_tools.ainvoke(msgs, config)
+        # LangChain owns generation, prompt and usage accounting for this call.
+        with propagate_attributes(metadata={"generation_owner": "langchain"}):
+            ai = await llm_with_tools.ainvoke(msgs, config)
         return {"messages": [ai]}
 
     async def output_guardrail(state: State, config: RunnableConfig) -> dict:

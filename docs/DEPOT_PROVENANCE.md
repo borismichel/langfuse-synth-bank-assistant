@@ -29,7 +29,7 @@ Maintained Langfuse skill entrypoint SHA256: `e8908ea1c924374ba7bc5e82b220709d10
 
 ## Candidate version
 
-Package version `0.2.0` adds the bilingual Companion to the immutable `v0.1.0` foundation. Its scope is exact-image, live-target and deployed-URL qualification of #367; it does not represent full-spec catalogue completion. Record the signed image receipt after publication rather than reusing the foundation digest.
+Package version `0.3.0` adds participant session/reset/feedback and complete deterministic history to the bilingual banking Companion. It also fixes duplicate native-provider generation accounting. Its scope is exact-image, live-target and deployed-URL qualification of #367–#370; it does not represent full-spec catalogue completion. Record the signed image receipt after publication rather than reusing the foundation digest.
 
 ## Qualification status
 
