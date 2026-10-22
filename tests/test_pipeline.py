@@ -15,23 +15,24 @@ def invoke(tmp_path, *args, extra_env=None):
     return subprocess.run([sys.executable, '-m', 'synth.cli', *args, '--config', str(ROOT / 'config/demo.yaml')], cwd=ROOT, env=env, capture_output=True, text=True)
 
 
-def test_plan_and_generate_deliver_three_banking_examples_without_credentials(tmp_path):
+def test_plan_and_generate_deliver_complete_banking_history_without_credentials(tmp_path):
+    from langfuse_synth_core.seed.count import count_spool
     plan = invoke(tmp_path, 'plan')
     assert plan.returncode == 0, plan.stderr
     counts = json.loads(next(line.removeprefix('PLAN_COUNTS=') for line in plan.stdout.splitlines() if line.startswith('PLAN_COUNTS=')))
-    assert counts == {'version': 1, 'traces': 3, 'observations': 9, 'scores': 3}
     generated = invoke(tmp_path, 'generate-spool', '--set', 'generation.as_of_date=2026-10-20')
     assert generated.returncode == 0, generated.stderr
-    events = [json.loads(line) for line in (tmp_path / 'state/events.ndjson').read_text().splitlines()]
-    roots = [e for e in events if e.get('name', '').startswith('bank-dispute-')]
-    assert [e['name'] for e in roots] == ['bank-dispute-baseline', 'bank-dispute-failure', 'bank-dispute-recovery']
-    assert [e['body']['value'] for e in events if e.get('type') == 'score-create'] == [1, 0, 1]
+    measured = count_spool(tmp_path / 'state/events.ndjson')
+    assert counts == {'version': 1, **{k: measured[k] for k in ('traces', 'observations', 'scores')}}
+    assert counts['traces'] == 64 and counts['observations'] > 400 and counts['scores'] > 400
     assert not (tmp_path / 'state/.synth_verify.json').exists()
+    pending = json.loads((tmp_path / 'state/pending-run.json').read_text())
+    assert len(pending['receipt']['history_anchors']['cases']) == 58
     assert 'Synthetic' in (tmp_path / 'out/DEMO_SCRIPT.md').read_text()
 
 
 def test_generation_rejects_volume_outside_declared_range(tmp_path):
-    result = invoke(tmp_path, 'generate-spool', '--set', 'generation.target_traces=25')
+    result = invoke(tmp_path, 'generate-spool', '--set', 'generation.target_traces=57')
     assert result.returncode != 0
     assert not (tmp_path / 'state/events.ndjson').exists()
 
@@ -68,7 +69,7 @@ from threading import Thread
 
 
 @contextmanager
-def target_server(version='4.59.0', reject_import=False):
+def target_server(version='4.59.0', reject_import=False, evidence=None):
     """The external API seam: no kit implementation collaborators are replaced."""
     posts = []
     class TargetHandler(BaseHTTPRequestHandler):
@@ -80,6 +81,24 @@ def target_server(version='4.59.0', reject_import=False):
                 body = {'version': version}
             elif self.path.startswith('/api/public/projects'):
                 body = {'data': [{'id': 'test-demo-project', 'name': 'bank-demo'}]}
+            elif evidence is not None and self.path.startswith(('/api/public/v2/observations', '/api/public/v3/scores')):
+                from urllib.parse import urlparse, parse_qs
+                url = urlparse(self.path)
+                params = parse_qs(url.query)
+                rows = evidence['scores' if url.path.endswith('/scores') else 'observations']
+                trace_id = params.get('traceId', [None])[0]
+                body = {'data': [row for row in rows if trace_id is None or
+                    (row.get('traceId') or row.get('subject', {}).get('traceId')) == trace_id], 'meta': {}}
+            elif self.path.startswith('/api/public/v2/prompts/'):
+                from urllib.parse import unquote, urlparse
+                from synth.materialize import fixture
+                from northwind.prompts import PROMPT_NAME, V5_RELEASE
+                name = unquote(urlparse(self.path).path.rsplit('/', 1)[-1])
+                text = V5_RELEASE if name == PROMPT_NAME else next(
+                    text for key, text in fixture()['prompts'].items()
+                    if name.startswith('northwind-history-' + key + '-'))
+                body = dict(name=name, prompt=text, version=7, type='text',
+                            labels=['latest', 'production'], tags=['northwind-bank', 'depot-managed'], config={})
             else:
                 body = {'data': [], 'meta': {}}
             self.send_response(200)
@@ -117,6 +136,7 @@ def test_probe_rejects_unsupported_self_hosted_before_any_write(tmp_path):
 
 def test_partial_import_refuses_retry_and_does_not_publish_success_receipt(tmp_path):
     with target_server(reject_import=True) as (env, posts):
+        assert invoke(tmp_path, 'setup-prompts', extra_env=env).returncode == 0
         assert invoke(tmp_path, 'generate-spool', extra_env=env).returncode == 0
         result = invoke(tmp_path, 'import-spool', extra_env=env)
         assert result.returncode == 1
@@ -128,6 +148,7 @@ def test_partial_import_refuses_retry_and_does_not_publish_success_receipt(tmp_p
 
 def test_successful_import_delivers_links_but_empty_target_does_not_verify(tmp_path):
     with target_server() as (env, posts):
+        assert invoke(tmp_path, 'setup-prompts', extra_env=env).returncode == 0
         assert invoke(tmp_path, 'generate-spool', '--set', 'generation.seed=17', extra_env=env).returncode == 0
         # Depot's synthesized import deliberately receives no --set overrides.
         imported = invoke(tmp_path, 'import-spool', extra_env=env)

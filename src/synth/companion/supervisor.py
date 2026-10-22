@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import secrets
 import socket
@@ -84,6 +85,24 @@ class BankingService:
         if self.monitor:
             await self.monitor
         print('Banking service stopped', flush=True)
+
+    async def reset(self, state):
+        from northwind.binding import sign
+        binding = {'instance': self.instance, 'epoch': self.epoch, 'operation': 'reset',
+                   'scenario_id': state['scenario_id'], 'revision': state['scenario']['revision'],
+                   'session_id': state['session_id'], 'customer_id': state['customer_id']}
+        async with (streamablehttp_client(self.url) as (read, write, _),
+                    ClientSession(read, write) as session):
+            await session.initialize()
+            result = await session.call_tool('reset_scenario', {'customer_id': state['customer_id']},
+                                            meta={'northwind_binding': sign(binding, self.secret)})
+            data = result.structuredContent or {}
+            if not data:
+                data = json.loads(next(c.text for c in result.content if c.type == 'text'))
+            data = data.get('result', data)
+            if data.get('status') != 'reset':
+                raise RuntimeError('Banking reset did not complete')
+            return data['revision']
 
     async def watch(self):
         code = await self.process.wait()

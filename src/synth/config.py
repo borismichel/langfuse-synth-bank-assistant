@@ -41,7 +41,7 @@ class Target:
 @dataclass
 class Generation:
     seed: int = 42
-    target_traces: int = 3
+    target_traces: int = 64
     # The operator's as-of date: the portal sends `--set generation.as_of_date=YYYY-MM-DD`
     # on every forward generate (portal #72), and the seeded window ends on that day. None
     # means "no tether set" — the CLI path and the no-tether portal path both omit the key —
@@ -67,8 +67,8 @@ def _model_factory(raw: dict) -> Config:
     raw = raw or {}
     target = raw.get("target") or {}
     generation = raw.get("generation") or {}
-    if not 3 <= int(generation.get("target_traces", 3)) <= 24:
-        raise ValueError("The foundation candidate supports 3–24 traces")
+    if not 58 <= int(generation.get("target_traces", 64)) <= 256:
+        raise ValueError("Banking history requires 58–256 traces")
     enabled = (raw.get('runtime') or {}).get('apm_enabled', False)
     if type(enabled) is not bool:
         raise ValueError('runtime.apm_enabled must be a boolean')
@@ -80,7 +80,7 @@ def _model_factory(raw: dict) -> Config:
         ),
         generation=Generation(
             seed=int(generation.get("seed", 42)),
-            target_traces=int(generation.get("target_traces", 3)),
+            target_traces=int(generation.get("target_traces", 64)),
             as_of_date=parse_as_of_date(generation.get("as_of_date")),
         ),
     )

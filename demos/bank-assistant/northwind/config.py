@@ -35,7 +35,7 @@ _adapter = None
 LANGFUSE_BASE_URL = ""
 PROJECT_ID = ""
 ENVIRONMENT = os.environ.get("LANGFUSE_TRACING_ENVIRONMENT", "production")
-RELEASE = "bank-depot-0.2.0"
+RELEASE = "bank-depot-0.3.0"
 SAMPLE_RATE = 1.0
 AGENT_MODEL = "claude-sonnet-4-6"
 JUDGE_MODEL = AGENT_MODEL
@@ -127,6 +127,18 @@ def tracer_provider(service_name: str = "northwind-assistant"):
     return _provider
 
 
+def _export_ai_span(span):
+    """Keep one generation per callback-owned call, preserving SDK defaults elsewhere."""
+    from langfuse import is_default_export_span
+
+    scope = span.instrumentation_scope
+    callback_owned = (span.attributes or {}).get(
+        "langfuse.trace.metadata.generation_owner") == '"langchain"'
+    if callback_owned and scope and scope.name == "com.anthropic.sdk.python":
+        return False
+    return is_default_export_span(span)
+
+
 def langfuse_factory(*, host, public_key, secret_key, service_name="northwind-assistant"):
     """Langfuse client bound to the shared provider, with masking + sampling."""
     global _langfuse
@@ -146,6 +158,7 @@ def langfuse_factory(*, host, public_key, secret_key, service_name="northwind-as
         sample_rate=SAMPLE_RATE,
         tracer_provider=provider,
         mask_otel_spans=masking.mask_otel_spans,
+        should_export_span=_export_ai_span,
     )
     return _langfuse
 

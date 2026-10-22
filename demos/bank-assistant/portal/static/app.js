@@ -7,8 +7,8 @@
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const icon = (id) => `<svg><use href="#i-${id}"/></svg>`;
   const store = {
-    get(k, d) { try { const v = localStorage.getItem("nw." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
-    set(k, v) { try { localStorage.setItem("nw." + k, JSON.stringify(v)); } catch { /* private mode */ } },
+    get(k, d) { try { const v = localStorage.getItem("nw." + (window.NORTHWIND_BASE_PATH || "/") + "." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem("nw." + (window.NORTHWIND_BASE_PATH || "/") + "." + k, JSON.stringify(v)); } catch { /* private mode */ } },
   };
 
   /* ── i18n: ONE dictionary (en / es). Brand, metric, score, tool and file names stay as-is. ── */
@@ -26,6 +26,8 @@
       "ch.web": "Web", "ch.app": "Mobile app", "ch.whatsapp": "WhatsApp",
       "chat.title": "Northwind Assistant", "chat.signedIn": "Signed in as {name} · {ch}",
       "chat.traced": "Traced · PII-masked", "chat.tracedTitle": "Every turn is traced in Langfuse",
+      "chat.cancel": "Cancel reply", "chat.state": "Demo state", "chat.reset": "Reset demo state",
+      "chat.resetHelp": "Reset restores this participant’s selected customer and cancels pending replies. Langfuse history remains. New conversation keeps banking changes.",
       "chat.new": "New conversation", "chat.placeholder": "Message Northwind Assistant…", "chat.inputAria": "Message",
       "chat.send": "Send", "chat.morning": "Good morning", "chat.afternoon": "Good afternoon", "chat.evening": "Good evening",
       "chat.welcome": "Ask about fees, cards, transfers or your accounts. Try one of the prompts below.",
@@ -40,7 +42,7 @@
       "fb.up": "Helpful", "fb.upAria": "Thumbs up", "fb.down": "Not helpful", "fb.downAria": "Thumbs down",
       "fb.sent": "Feedback sent", "fb.placeholder": "What went wrong? (optional)", "fb.aria": "Feedback comment",
       "fb.send": "Send", "fb.cancel": "Cancel",
-      "toast.fbOk": "Thanks — recorded as user-feedback = {v} on the trace", "toast.fbFail": "Feedback failed: {e}",
+      "toast.fbOk": "Feedback verified on this answer", "toast.fbFail": "Feedback failed: {e}",
       "toast.copied": "Trace id copied",
       "voice.caller": "Caller", "voice.auto": "Auto (caller on the recording)", "voice.reload": "Reload sample calls",
       "voice.upload": "Upload a call", "voice.formats": ".wav or .mp3", "voice.choose": "Choose file",
@@ -87,6 +89,8 @@
       "ch.web": "Web", "ch.app": "App móvil", "ch.whatsapp": "WhatsApp",
       "chat.title": "Asistente Northwind", "chat.signedIn": "Sesión iniciada como {name} · {ch}",
       "chat.traced": "Trazado · PII enmascarada", "chat.tracedTitle": "Cada turno queda trazado en Langfuse",
+      "chat.cancel": "Cancelar respuesta", "chat.state": "Estado de la demo", "chat.reset": "Restablecer estado de la demo",
+      "chat.resetHelp": "Restablece el cliente seleccionado de este participante y cancela las respuestas pendientes. El historial de Langfuse se conserva. Una nueva conversación mantiene los cambios bancarios.",
       "chat.new": "Nueva conversación", "chat.placeholder": "Escriba su mensaje al Asistente Northwind…", "chat.inputAria": "Mensaje",
       "chat.send": "Enviar", "chat.morning": "Buenos días", "chat.afternoon": "Buenas tardes", "chat.evening": "Buenas noches",
       "chat.welcome": "Consulte sobre comisiones, tarjetas, transferencias o sus cuentas. Pruebe una de las sugerencias de abajo.",
@@ -102,7 +106,7 @@
       "fb.up": "Útil", "fb.upAria": "Pulgar arriba", "fb.down": "No fue útil", "fb.downAria": "Pulgar abajo",
       "fb.sent": "Valoración enviada", "fb.placeholder": "¿Qué salió mal? (opcional)", "fb.aria": "Comentario de la valoración",
       "fb.send": "Enviar", "fb.cancel": "Cancelar",
-      "toast.fbOk": "Gracias: se registró user-feedback = {v} en la traza", "toast.fbFail": "No se pudo enviar la valoración: {e}",
+      "toast.fbOk": "Valoración verificada en esta respuesta", "toast.fbFail": "No se pudo enviar la valoración: {e}",
       "toast.copied": "ID de traza copiado",
       "voice.caller": "Cliente", "voice.auto": "Auto (según la grabación)", "voice.reload": "Recargar llamadas de ejemplo",
       "voice.upload": "Subir una llamada", "voice.formats": ".wav o .mp3", "voice.choose": "Elegir archivo",
@@ -190,9 +194,8 @@
     let q = null;
     try { q = new URLSearchParams(location.search).get("lang"); } catch { /* no URL API */ }
     q = (q || "").toLowerCase();
-    if (LANGS.includes(q)) { try { localStorage.setItem("nw.lang", JSON.stringify(q)); } catch { /* private mode */ } return q; }
-    let saved = null;
-    try { saved = JSON.parse(localStorage.getItem("nw.lang")); } catch { /* private mode */ }
+    if (LANGS.includes(q)) { store.set("lang", q); return q; }
+    const saved = store.get("lang", null);
     return LANGS.includes(saved) ? saved : "en";
   })();
   // t(key, vars, fallback): active language → English → fallback (server text) → key
@@ -347,6 +350,7 @@
       const info = await api(`/api/info${refresh ? "?refresh=1" : ""}`);
       S.info = info; S.offline = false;
       renderInfo(info);
+      renderChips();
       if (!S.customers.length) { S.customers = info.customers; renderCustomers(); renderVoiceCustomers(); }
       return info;
     } catch (e) {
@@ -370,7 +374,7 @@
         </span>
       </button>`).join("");
     $$("#customerList .customer").forEach((b) => b.addEventListener("click", () => {
-      if (b.dataset.id === S.customer) return;
+      if (S.busy || S.resetting || b.dataset.id === S.customer) return;
       S.customer = b.dataset.id; store.set("customer", S.customer);
       renderCustomers(); newConversation();
     }));
@@ -399,14 +403,38 @@
   }
 
   async function newConversation() {
-    S.messages = [];
+    if (S.busy || S.resetting) return;
+    setBusy(true); S.session = null; S.messages = [];
     try { S.session = (await postJSON("/api/session", { customer_id: S.customer })).session_id; }
     catch (e) { S.session = null; toast(e.message, true); }
-    renderSessionId();
+    setBusy(false); renderSessionId();
     persist(); renderTranscript();
     $("#input").focus();
   }
   $("#newConv").addEventListener("click", newConversation);
+  function sessionNotice(message) {
+    const notice = $("#sessionNotice"); notice.textContent = message; notice.hidden = !message;
+  }
+  $("#resetState").addEventListener("click", async () => {
+    if (!S.session || S.resetting) return;
+    S.resetting = true; $("#resetState").disabled = true;
+    const request = S.resetRequest || {session_id: S.session, request_id: crypto.randomUUID()};
+    S.resetRequest = request;
+    try {
+      const reset = await postJSON("/api/reset", request);
+      S.session = reset.session_id; S.messages = []; S.resetRequest = null; S.activeRequest = null;
+      persist(); renderSessionId(); renderTranscript();
+      sessionNotice(LANG === "es" ? "Estado restablecido. El historial de Langfuse se conserva." : "Demo state reset. Langfuse history is retained.");
+    } catch(e) { sessionNotice(e.message); }
+    finally { S.resetting = false; $("#resetState").disabled = false; setBusy(false); }
+  });
+  $("#cancelReply").addEventListener("click", async () => {
+    if (!S.activeRequest) return;
+    try {
+      await postJSON("/api/cancel", S.activeRequest);
+      sessionNotice(LANG === "es" ? "Se canceló el trabajo pendiente. Las acciones completadas no se deshacen." : "Pending work cancelled. Completed actions are not undone.");
+    } catch(e) { sessionNotice(e.message); }
+  });
   function renderSessionId() {
     $("#sessionId").textContent = S.session || "—";
     $("#sessionId").title = S.session ? t("side.session", { id: S.session }) : t("side.sessionShort");
@@ -472,10 +500,10 @@
     if (tid && S.info?.capabilities?.feedback) {
       const fb = r.feedback;
       foot.push(`<span class="fb">
-        <button data-fb="1" title="${esc(t("fb.up"))}" aria-label="${esc(t("fb.upAria"))}" class="${fb === 1 ? "on-up" : ""}" ${fb != null ? "disabled" : ""}>${icon("up")}</button>
-        <button data-fb="0" title="${esc(t("fb.down"))}" aria-label="${esc(t("fb.downAria"))}" class="${fb === 0 ? "on-down" : ""}" ${fb != null ? "disabled" : ""}>${icon("down")}</button>
+        <button data-fb="1" title="${esc(t("fb.up"))}" aria-label="${esc(t("fb.upAria"))}" class="${fb === 1 ? "on-up" : ""}" >${icon("up")}</button>
+        <button data-fb="0" title="${esc(t("fb.down"))}" aria-label="${esc(t("fb.downAria"))}" class="${fb === 0 ? "on-down" : ""}" >${icon("down")}</button>
       </span>`);
-      if (fb != null) foot.push(`<span class="fb-note">${esc(t("fb.sent"))}</span>`);
+      if (fb != null) foot.push(`<span class="fb-note">${esc(t("fb.sent"))}${r.feedback_comment ? " · " + esc(r.feedback_comment) : ""}</span>`);
     }
 
     wrap.innerHTML = `<div class="mini-avatar"><svg viewBox="0 0 32 32"><use href="#i-logo"/></svg></div>
@@ -510,18 +538,21 @@
         button.textContent = LANG === "es" ? "Confirmar acción" : "Confirm action";
         button.addEventListener("click", async () => {
           if (S.busy) return;
+          const confirmationSession = S.session;
+          S.activeRequest = {session_id: confirmationSession, request_id: "confirm-" + action.action_id};
           button.disabled = true; setBusy(true);
           action.confirmation_lang = action.confirmation_lang || LANG;
           persist();
           try {
             const confirmed = await postJSON("/api/confirm", {session_id: S.session,
               action_id: action.action_id, request_id: "confirm-" + action.action_id, lang: action.confirmation_lang});
+            if (S.resetting || S.session !== confirmationSession) return;
             S.messages.push({role: "user", content: LANG === "es" ? "Confirmo la acción indicada." : "I confirm the displayed action."});
             S.messages.push({role: "assistant", content: confirmed.answer, meta: confirmed});
             action.confirmed = true;
             persist(); renderTranscript();
           } catch (e) { toast(e.message); button.disabled = false; }
-          finally { setBusy(false); }
+          finally { S.activeRequest = null; setBusy(false); }
         });
         button.disabled = !!action.confirmed;
         box.appendChild(button);
@@ -546,7 +577,6 @@
       navigator.clipboard?.writeText(copyEl.dataset.copy).then(() => toast(t("toast.copied")), () => toast(copyEl.dataset.copy));
     });
     $$(".fb button", wrap).forEach((b) => b.addEventListener("click", () => {
-      if (r.feedback != null) return;
       const v = +b.dataset.fb;
       if (v === 1) return sendFeedback(idx, 1, null);
       openFeedbackBox(wrap, idx);
@@ -563,7 +593,7 @@
       <button class="btn btn-sm btn-ghost">${esc(t("fb.cancel"))}</button>`;
     $(".stack", wrap).appendChild(box);
     box.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    const ta = $("textarea", box); ta.focus({ preventScroll: true });
+    const ta = $("textarea", box); ta.value = S.messages[idx]?.meta?.feedback_comment || ""; ta.focus({ preventScroll: true });
     const [sendB, cancelB] = $$("button", box);
     sendB.addEventListener("click", () => sendFeedback(idx, 0, ta.value.trim() || null));
     cancelB.addEventListener("click", () => box.remove());
@@ -573,9 +603,14 @@
   async function sendFeedback(idx, value, comment) {
     const m = S.messages[idx]; if (!m || !m.meta) return;
     try {
-      await postJSON("/api/feedback", { trace_id: m.meta.trace_id, value, comment });
-      m.meta.feedback = value; persist();
-      replaceMessage(idx);
+      let result = await postJSON("/api/feedback", { session_id: m.meta.session_id, trace_id: m.meta.trace_id, observation_id: m.meta.observation_id, value, comment: comment || "" });
+      for (let attempt = 0; result.status === "pending" && attempt < 5; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        result = await api("/api/feedback?" + new URLSearchParams({session_id: m.meta.session_id, trace_id: m.meta.trace_id, observation_id: m.meta.observation_id}));
+      }
+      if (result.status !== "saved") { toast(LANG === "es" ? "Valoración enviada; verificación pendiente. Puede volver a intentarlo." : "Feedback submitted; verification pending. You can retry."); return; }
+      m.meta.feedback = result.value; m.meta.feedback_comment = result.comment; persist();
+      if (S.messages[idx] === m) replaceMessage(idx);
       toast(t("toast.fbOk", { v: value }));
     } catch (e) { toast(t("toast.fbFail", { e: e.message }), true); }
   }
@@ -588,6 +623,8 @@
   function setBusy(b) {
     S.busy = b;
     $("#sendBtn").disabled = b;
+    $("#newConv").disabled = b;
+    $("#cancelReply").hidden = !b || !S.activeRequest;
     $$("#chips .chip").forEach((c) => (c.disabled = b));
   }
 
@@ -611,11 +648,20 @@
     setBusy(true);
     let res;
     const requestId = retryId || crypto.randomUUID();
+    const requestSession = S.session;
+    S.activeRequest = {session_id: requestSession, request_id: requestId}; setBusy(true);
     try {
       res = await postJSON("/api/chat", { message: text, customer_id: S.customer, channel: S.channel, session_id: S.session, prompt_label: S.label || null, lang: retryLang || LANG, request_id: requestId });
     } catch (e) {
-      res = { answer: t("chat.unreachable"), error: e.message, retry_request: { text, id: requestId, lang: retryLang || LANG } };
+      if (e.status === 409 && e.message.startsWith("Conversation expired")) {
+        S.session = null; S.messages = []; persist(); renderTranscript(); renderSessionId(); sessionNotice(e.message);
+      }
+      res = e.status === 409 && e.message.includes("cancelled")
+        ? {answer: LANG === "es" ? "Solicitud cancelada." : "Request cancelled.", cancelled: true}
+        : { answer: t("chat.unreachable"), error: e.message, retry_request: { text, id: requestId, lang: retryLang || LANG } };
     } finally { clearInterval(tick); typing.remove(); S.typing = null; setBusy(false); }
+    S.activeRequest = null; $("#cancelReply").hidden = true;
+    if (S.resetting || requestSession !== S.session) return;
     if (res.session_id) S.session = res.session_id;
     const meta = { ...res }; delete meta.answer;
     S.messages.push({ role: "assistant", content: res.answer || t("chat.noAnswer"), meta });
@@ -987,9 +1033,20 @@
     }
     const saved = store.get("conv", null);
     if (saved && saved.customer === S.customer && saved.session && Array.isArray(saved.messages)) {
-      S.session = saved.session; S.messages = saved.messages;
-      renderSessionId();
-      renderTranscript();
+      try {
+        await api("/api/session?" + new URLSearchParams({session_id: saved.session}));
+        S.session = saved.session; S.messages = saved.messages;
+        renderSessionId(); renderTranscript();
+      } catch(e) {
+        if (e.status !== 409) {
+          sessionNotice(LANG === "es" ? "No se puede verificar la conversación. Actualice la página cuando se restablezca la conexión." : "The conversation could not be verified. Reload the page when the connection returns.");
+          setBusy(true);
+          return;
+        }
+        S.session = null; S.messages = []; persist();
+        sessionNotice(LANG === "es" ? "La conversación anterior caducó o se restableció. El estado bancario no se conserva después de reiniciar el servicio." : "The previous conversation expired or was reset. Banking state is not retained after a service restart.");
+        await newConversation();
+      }
     } else {
       await newConversation();
     }

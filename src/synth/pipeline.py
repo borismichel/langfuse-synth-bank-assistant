@@ -35,10 +35,21 @@ def run_probe(cfg) -> int:
 
 
 def run_plan(cfg) -> int:
-    count = cfg.generation.target_traces
-    if not 3 <= count <= 24:
-        raise ValueError('The foundation candidate supports 3–24 traces; broader volumes await qualification.')
-    print('PLAN_COUNTS=' + json.dumps({'version': 1, 'traces': count, 'observations': count * 3, 'scores': count}, separators=(',', ':')), flush=True)
+    from langfuse_synth_core.timegen import resolve_run_date
+    from tempfile import TemporaryDirectory
+    from langfuse_synth_core.seed.count import count_spool
+    from .materialize import build_events
+    # Use the same materialization and core metering as the cap gate, in isolated state.
+    with TemporaryDirectory(prefix='bank-plan-') as tmp:
+        spool = Path(tmp) / 'events.ndjson'
+        ingestor = Ingestor.from_env(cfg.target.base_url, dry_run=True, spool_path=spool)
+        ingestor.open_spool()
+        ingestor.extend(build_events(cfg.generation.target_traces, {'seed': cfg.generation.seed},
+                                    run_date=resolve_run_date(cfg.generation.as_of_date)))
+        ingestor.close_spool()
+        measured = count_spool(spool)
+    print('PLAN_COUNTS=' + json.dumps({'version': 1, **{key: measured[key] for key in
+        ('traces', 'observations', 'scores')}}, separators=(',', ':')), flush=True)
     print('Seed model calls: 0. Historical answers, labels, token usage and costs are synthetic fixtures. Langfuse ingestion is billable according to the target plan.', flush=True)
     return 0
 
@@ -59,17 +70,37 @@ def run_import(cfg, *, spool_path=None, output_dir=None) -> int:
     run_probe(cfg)
     project_id, _ = assert_demo_project(cfg.target.base_url, cfg.target.project_hint)
     Path(RunReceipt.state_path()).unlink(missing_ok=True)
-    ingestor = Ingestor.from_env(cfg.target.base_url, spool_path=spool)
-    sent = ingestor.import_spool(path=spool, confirm_cleared=False,
+    from datetime import datetime
+    from langfuse_synth_core.seed.count import count_spool
+    from .history_prompts import read_bindings
+    from .materialize import build_events
+    from .story import history_anchors
+    bindings = read_bindings(cfg)
+    # Re-materialise through core with the recorded inputs and resolved prompt versions.
+    # The measured canonical spool stays immutable and target-independent.
+    bound_spool = spool.with_name('events.bound.ndjson')
+    events = build_events(receipt.target_traces, {'seed': receipt.seed, 'prompt_bindings': bindings},
+                          run_date=datetime.fromisoformat(pending['run_date']))
+    bound = Ingestor.from_env(cfg.target.base_url, dry_run=True, spool_path=bound_spool)
+    bound.open_spool()
+    bound.extend(events)
+    bound.close_spool()
+    if count_spool(bound_spool) != count_spool(spool):
+        raise ValueError('Prompt resolution changed measured record counts; no import performed')
+    receipt.history_anchors = history_anchors(events)
+    # Protect the canonical spool too: even a failed first network write is append-only.
+    Path(str(spool) + '.imported').write_text('Bound import attempted; use a fresh target/deployment.\n')
+    ingestor = Ingestor.from_env(cfg.target.base_url, spool_path=bound_spool)
+    sent = ingestor.import_spool(path=bound_spool, confirm_cleared=False,
                                  log=lambda line: print(line, flush=True))
     receipt.public_key = os.environ['LANGFUSE_PUBLIC_KEY']
     receipt.save()
     out = Path(output_dir or os.environ.get('SYNTH_OUT_DIR', '/app/out'))
     out.mkdir(parents=True, exist_ok=True)
     project_url = cfg.target.base_url + '/project/' + quote(project_id, safe='')
-    links = '\n'.join(f'- [{beat}]({project_url}/traces/{e["trace_id"]}) — {e["trace_id"]}'
-                      for beat, e in zip(('Baseline', 'Outdated policy', 'Corrected policy'), receipt.examples))
+    links = '\n'.join(f'- [{e["case_id"]}]({project_url}/traces/{e["trace_id"]}) — session `{e["session_id"]}`'
+                      for e in receipt.history_anchors['cases'])
     (out / 'DEMO_SCRIPT.md').write_text(Path('DEMO_SCRIPT.md').read_text() +
-        f'\n\n## This deployment\n\nTarget: {project_url}\n\nRun anchor: {pending["run_date"]}\n\n{links}\n\nVerification runs next; import alone does not prove visibility.\n')
+        f'\n\n## This deployment\n\nTarget: {project_url}\n\nHistory run: {receipt.history_run_id} — {pending["run_date"]}\n\n{links}\n\nVerification runs next; import alone does not prove visibility.\n')
     print(f'Imported {sent} records; verification receipt and target runbook saved', flush=True)
     return 0

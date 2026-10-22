@@ -7,7 +7,7 @@
 - Upstream Apache-2.0 licence remains in `LICENSE`; banking source and notices are preserved.
 - Root package slug: `northwind-bank-assistant`; GHCR release identity: `ghcr.io/borismichel/langfuse-synth-bank-assistant`.
 - Core baseline and reusable publishing workflow: v5.0.0, commit `5f56e75f9a8b5d160ddf54a8fcde380d0d15a205`.
-- Runtime and authoring pin: tested integration candidate `3489a0db232405b84a42443e825bbe8f9158189f`, which adds the documented split-generation Manifest contract and native Companion factories for the existing LangGraph clients. This is an immutable integration candidate, not a stable core release. Coordinate a stable release and consumer repins before final qualification. The publishing workflow remains pinned independently to the unchanged v5.0.0 release implementation.
+- Runtime and authoring pin: tested integration candidate `e6f6622a630068f383f48445f957fb4eab278797`, which includes the split-generation Manifest contract, native Companion factories and protected live-route transport gate. This is an immutable integration candidate, not a stable core release. Coordinate a stable release and consumer repins before final qualification. The publishing workflow remains pinned independently to the unchanged v5.0.0 release implementation.
 - Python 3.12.15 and Langfuse SDK 5.0.4; full dependency resolution in `uv.lock`.
 
 ## Workflow audit
@@ -29,7 +29,7 @@ Maintained Langfuse skill entrypoint SHA256: `e8908ea1c924374ba7bc5e82b220709d10
 
 ## Candidate version
 
-Package version `0.2.0` adds the bilingual Companion to the immutable `v0.1.0` foundation. Its scope is exact-image, live-target and deployed-URL qualification of #367; it does not represent full-spec catalogue completion. Record the signed image receipt after publication rather than reusing the foundation digest.
+Package version `0.3.0` adds participant session/reset/feedback and complete deterministic history to the bilingual banking Companion. It also fixes duplicate native-provider generation accounting. Its scope is exact-image, live-target and deployed-URL qualification of #367–#370; it does not represent full-spec catalogue completion. Record the signed image receipt after publication rather than reusing the foundation digest.
 
 ## Qualification status
 

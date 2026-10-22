@@ -21,7 +21,7 @@ its Apache license and notice accompany this package.
 Both APM exporters attach to the existing process providers: one in the
 Companion and one in its private MCP child. W3C trace context keeps their trace
 identity and parent structure aligned with Langfuse. The MCP child receives only
-the local OTLP destination, never a provider or portal credential. There is no
+the local OTLP destination for this feature, never a model-provider or portal credential. There is no
 second model pipeline and no APM usage or cost accounting.
 
 The APM copy retains IDs, parent IDs, timings, span kind and status code. It
