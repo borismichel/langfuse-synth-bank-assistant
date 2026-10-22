@@ -12,7 +12,7 @@ Re-bless a deliberate pool change (never a hand-edit) with:
 
     synth-authoring freeze golden_seed:seed \\
         --golden tests/golden/northwind_bank_assistant_spool.ndjson \\
-        --target-traces 24 --search-path tests --search-path src
+        --target-traces 58 --search-path tests --search-path src
 """
 import importlib.util
 from pathlib import Path
@@ -24,7 +24,7 @@ pytestmark = pytest.mark.skipif(
     reason="golden gate ships in langfuse-synth-core[authoring]; install the [dev] extra to run it",
 )
 
-GOLDEN_TARGET_TRACES = 24
+GOLDEN_TARGET_TRACES = 58
 GOLDEN_PATH = Path(__file__).resolve().parent / "golden" / "northwind_bank_assistant_spool.ndjson"
 TESTS_DIR = str(Path(__file__).resolve().parent)
 SRC_DIR = str(Path(__file__).resolve().parent.parent / "src")
