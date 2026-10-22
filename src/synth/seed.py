@@ -10,8 +10,9 @@ from langfuse_synth_core.seed.ingest import Ingestor
 from langfuse_synth_core.timegen import resolve_run_date
 
 from .config import Config
-from .materialize import build_events
-from .receipt import RunReceipt, SAMPLE_LIMIT
+from .materialize import build_events, run_identity
+from .receipt import RunReceipt
+from .story import history_anchors
 
 
 def spool_file() -> Path:
@@ -33,19 +34,11 @@ def run_seed(cfg: Config, *, dry_run=False, do_import=True, spool_path=None,
     ingestor.open_spool()
     ingestor.extend(events)
     ingestor.close_spool()
-    examples = []
-    for event in events:
-        if event.get('type') == 'score-create':
-            body = event['body']
-            examples.append({'trace_id': body['traceId'], 'score_id': body['id'],
-                             'observation_id': body['observationId'], 'name': body['name'],
-                             'value': body['value'], 'data_type': body['dataType'],
-                             'trace_timestamp': event['timestamp']})
-            if len(examples) == SAMPLE_LIMIT:
-                break
     pending = dict(base_url=cfg.target.base_url, public_key=os.environ.get('LANGFUSE_PUBLIC_KEY', ''),
                    seed=cfg.generation.seed, target_traces=cfg.generation.target_traces,
-                   as_of_date=str(cfg.generation.as_of_date or ''), examples=examples)
+                   as_of_date=str(cfg.generation.as_of_date or ''),
+                   history_run_id=run_identity(cfg.generation.seed, run_date),
+                   history_anchors=history_anchors(events))
     (spool.parent / 'pending-run.json').write_text(json.dumps({
         'receipt': pending, 'spool_sha256': hashlib.sha256(spool.read_bytes()).hexdigest(),
         'run_date': run_date.isoformat(),

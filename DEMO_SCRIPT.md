@@ -1,20 +1,33 @@
 # Northwind Bank Assistant — Presenter Runbook
 
-Synthetic card-dispute evidence for a banking operations audience. The frozen scenario compares the same customer's report against current and retired bank policies. The current policy follows upstream Northwind knowledge article KB-102; the retired 14-day policy is a deliberately incorrect fixture. The frozen history contains no actual customer data or live model responses. The separate Companion uses the selected provider for live conversations.
+Synthetic bilingual banking history for a banking operations audience. All customers, answers, tool receipts, scores, token counts and costs are frozen demonstration fixtures. They are not actual customer data, model spend, independent human review or managed judge results. The separate Companion produces genuine live evidence using the provider selected in Depot.
 
-## Walkthrough
+## Historical walkthrough
 
-1. Open **Baseline** below. Read the customer's report, retrieved current policy and answer. The report is within the synthetic 60-day window. The assistant offers an investigation without guaranteeing a refund; `policy-correctness` is 1.
-2. Open **Outdated policy**. Compare the same report and customer with the retired 14-day document. The assistant incorrectly refuses the investigation; `policy-correctness` is 0.
-3. Open **Corrected policy**. Confirm that retrieval selects the current policy and the answer offers an investigation without promising a refund; `policy-correctness` is 1. Compare the retrieval and answer observations and their timestamps.
+The links under **This deployment** identify every required turn in this exact imported run. Start with these cases:
 
-The scores, token usage and costs are frozen examples, not results from live judges or incurred model spend. All three examples share one comparison session; each answer has its own observation score.
+1. **fees-en-1**, **fees-en-2** and **fees-es** show bilingual policy retrieval. The two English turns share a session and carry the previous question and answer into the next generation.
+2. **lost-card-en-request** → **lost-card-en-confirm**, their Spanish equivalents and **dispute-request** → **dispute-confirm** show separate proposal and confirmation turns. A request does not mutate banking state; only its confirmation contains the successful action receipt. **failed-action** and **noop-action** retain unsuccessful results rather than claiming a new block.
+3. **dispute-window-en-baseline/failure/recovery** and the Spanish comparison reproduce the original lookup regression: a 30-day transaction query misses the 41-day-old GADGETSTORE payment; a 60-day query finds it. The recent-payment control succeeds with 30 days. Compare tool arguments, results and answer correctness. A truthful lookup failure can pass conduct policies while failing the banking task.
+4. **cost-baseline/failure/recovery** preserve the same successful answer while retrieval grows from two documents to eight and returns to two. Inspect generation input, provided tokens and synthetic costs. These are constructed contrasts, not measured live performance. **policy-baseline/failure/recovery** retain the separate deliberately retired 14-day policy example against the current 60-day rule.
+5. **injection-en/es**, **masked-card-en/es**, **cross-customer-refusal** and the Spanish register failure/control demonstrate refusals, redacted exports and formal Spanish. Blocked input has no provider generation. Regex masking illustrates supported patterns; it does not detect every name or address.
+6. The **conduct-** cases preserve all 22 upstream calibration examples. Inspect per-policy P1–P5 labels and the derived status, coverage and numeric headline. Failures remain violations even when another policy is unknown. **missing-verdict**, **invalid-verdict**, **conduct-p4-missing** and **conduct-p4-history** have no numeric compliance headline. Earlier assistant claims are explicitly non-authoritative. **unscored** has no scores at all. These expected labels were constructed by the fixture authors; they do not establish held-out judge accuracy.
+
+Each turn has one delivered-answer root, orchestration, input/output guardrails and, where applicable, native role/tool-call shaped generations, retrieval and MCP client/server tool spans. All frozen scores target the delivered-answer root and have API source in `synthetic-history`; historical policy names are prefixed `historical-`. They cannot serve as EVAL-only live reducer evidence. The content-addressed history prompt names link to the actual versions resolved on this target; the live production label is separate.
+
+The minimum is 58 mandatory turns. The default 64 and larger supported volumes append background conversations without changing mandatory IDs, timestamps or cohorts. Only actual conversational turns share a session; release comparisons use metadata to correlate separate sessions. Changing the seed or as-of date gives the history a distinct run identity. No historical media is shipped, uploaded or synthesised.
+
+## History verification
+
+Generation is network-free and model-free. Setup resolves frozen prompt content to actual target versions after the deployment confirmation. Import preserves the canonical target-independent spool, binds native prompt associations in a separate spool and requires identical measured record counts. Only a successful import publishes `.synth_verify.json` with `history_run_id` and versioned `history_anchors` for all 58 required turns; this is separate from live conversation state.
+
+Verification reads every required trace and root, current-run timestamp/session, observation tree, exact prompt association and fixture score value/type/source/subject. Missing current-run evidence fails even when older records have the same names or case labels. An imported receipt is not a claim of eventual visibility; the subsequent verification must pass.
 
 ## Candidate capabilities
 
 Available: model-free history, target validation, volume confirmation, split generation/import, exact-run verification, bilingual live retrieval and guardrails, customer-bound confirmed banking actions, private participant state and reset, verified answer feedback, managed production prompt association, masked tracing, and this target-specific runbook.
 
-Pending under Depot spec #365: full history, managed judges and conduct aggregation, annotations, experiments, prompt promotion, provider comparisons, voice, n8n, APM, governance and full operational qualification. This candidate is not the full-spec catalogue release.
+Pending under Depot spec #365: managed judges and conduct aggregation, annotations, experiments, prompt promotion, provider comparisons, voice, n8n, APM, governance and full operational qualification. This candidate is not the full-spec catalogue release.
 
 ## Deployment and recovery
 

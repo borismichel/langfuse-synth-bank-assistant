@@ -43,3 +43,6 @@ include = ["synth*", "northwind*"]
 [tool.pytest.ini_options]
 pythonpath = ["src", "tests", "demos/bank-assistant"]
 testpaths = ["tests"]
+
+[tool.setuptools.package-data]
+synth = ["history.json"]
