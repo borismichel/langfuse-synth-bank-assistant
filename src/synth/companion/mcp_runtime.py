@@ -12,6 +12,8 @@ def main():
     adapter = CompanionAdapter(cfg, langfuse_factory=partial(
         config.langfuse_factory, service_name='core-banking-mcp'))
     config.bind_adapter(adapter)
+    if endpoint := os.environ.get("NORTHWIND_APM_OTLP_ENDPOINT"):
+        config.configure_apm(endpoint)
     from northwind.mcp_server import mcp
     # Uvicorn restores/re-raises signals after stopping. Keep that final re-raise
     # cooperative so this process reaches SDK flush instead of default SIGTERM exit.

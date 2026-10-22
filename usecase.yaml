@@ -16,6 +16,11 @@ base_config:
 config_schema:
   type: object
   properties:
+    runtime.apm_enabled:
+      type: boolean
+      default: false
+      title: APM
+      description: Start a private Jaeger view with this live instance. Trace data resets when it stops.
     generation.seed:
       type: integer
       default: 42
@@ -83,6 +88,9 @@ live_components:
   - LANGFUSE_SECRET_KEY
   - LLM_API_KEY
   health_path: /api/health
+  protected_paths:
+  - path: /apm
+    access: presenter
   routes:
   - path: /
     title: Northwind Bank

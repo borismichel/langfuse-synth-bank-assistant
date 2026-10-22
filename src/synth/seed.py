@@ -33,6 +33,9 @@ def run_seed(cfg: Config, *, dry_run=False, do_import=True, spool_path=None,
     ingestor.open_spool()
     ingestor.extend(events)
     ingestor.close_spool()
+    # Nonsecret runtime options use the existing read-only live spool mount.
+    (spool.parent / 'runtime-config.json').write_text(json.dumps(
+        {'apm_enabled': cfg.runtime.apm_enabled}, sort_keys=True))
     examples = []
     for event in events:
         if event.get('type') == 'score-create':

@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Optional
 
 DEMO_DIR = Path(__file__).resolve().parent.parent
 PROFILE = "depot"
@@ -41,7 +41,7 @@ AGENT_MODEL = "claude-sonnet-4-6"
 JUDGE_MODEL = AGENT_MODEL
 MCP_URL = "http://127.0.0.1:8765/mcp"
 MCP_ENABLED = False  # #368 enables the supervised, customer-bound banking service.
-APM_OTLP_ENDPOINT = "off"  # #382 enables managed APM with its own qualification.
+APM_OTLP_ENDPOINT = "off"  # Enabled only after the supervised local service is ready.
 APM_OTLP_HEADERS = ""
 APM_UI_TRACE_URL = ""
 
@@ -71,43 +71,18 @@ def native_llm_factory(*, provider, model, api_key):
         return ChatAnthropic(model=model, api_key=api_key, temperature=0.2, max_tokens=1024, max_retries=1, timeout=60)
     raise ValueError("Unsupported banking model provider")
 
-# Attributes that carry prompts, completions, tool payloads. Stripped from the
-# APM copy: the APM gets operational telemetry, Langfuse gets the AI payloads.
-_PAYLOAD_PREFIXES = (
-    "langfuse.observation.input", "langfuse.observation.output",
-    "langfuse.trace.input", "langfuse.trace.output",
-    "langfuse.observation.metadata", "langfuse.trace.metadata",
-    "gen_ai.prompt", "gen_ai.completion", "gen_ai.input", "gen_ai.output",
-    "input.value", "output.value", "llm.input_messages", "llm.output_messages",
-)
-
-
-def _payload_free_exporter(inner):
-    """Wrap an exporter so spans lose their payload attributes on the way out."""
-    from opentelemetry.sdk.trace import ReadableSpan
-    from opentelemetry.sdk.trace.export import SpanExporter
-
-    class PayloadStrippingExporter(SpanExporter):
-        def export(self, spans: Sequence[ReadableSpan]):
-            clean = []
-            for s in spans:
-                attrs = {k: v for k, v in (s.attributes or {}).items()
-                         if not k.startswith(_PAYLOAD_PREFIXES)}
-                attrs["langfuse.trace_url"] = trace_url(format(s.context.trace_id, "032x"))
-                clean.append(ReadableSpan(
-                    name=s.name, context=s.context, parent=s.parent, resource=s.resource,
-                    attributes=attrs, events=s.events, links=s.links, kind=s.kind,
-                    status=s.status, start_time=s.start_time, end_time=s.end_time,
-                    instrumentation_scope=s.instrumentation_scope))
-            return inner.export(clean)
-
-        def shutdown(self):
-            return inner.shutdown()
-
-        def force_flush(self, timeout_millis: int = 30000):
-            return inner.force_flush(timeout_millis)
-
-    return PayloadStrippingExporter()
+def configure_apm(endpoint: str, trace_path: str = ''):
+    """Only a supervised child on this process's loopback may receive spans."""
+    from urllib.parse import urlsplit
+    global APM_OTLP_ENDPOINT, APM_UI_TRACE_URL
+    parsed = urlsplit(endpoint)
+    if (parsed.scheme != 'http' or parsed.hostname != '127.0.0.1' or not parsed.port
+            or parsed.path != '/v1/traces' or parsed.query or parsed.fragment or parsed.username):
+        raise ValueError('APM requires the supervised loopback receiver')
+    if _provider is not None and APM_OTLP_ENDPOINT != endpoint:
+        raise RuntimeError('Configure APM before constructing the shared tracer')
+    APM_OTLP_ENDPOINT = endpoint
+    APM_UI_TRACE_URL = trace_path
 
 
 _provider = None
@@ -123,6 +98,7 @@ def tracer_provider(service_name: str = "northwind-assistant"):
     from opentelemetry.sdk.resources import Resource
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    from synth.companion.apm import OperationalExporter
 
     # Sampling lives on the PROVIDER. When an app passes its own provider to
     # Langfuse(tracer_provider=...), the SDK cannot install its sample_rate
@@ -140,10 +116,13 @@ def tracer_provider(service_name: str = "northwind-assistant"):
     }))
     if APM_OTLP_ENDPOINT and APM_OTLP_ENDPOINT.lower() not in ("none", "off", "disabled"):  # CI: no APM
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-        headers = dict(h.split("=", 1) for h in APM_OTLP_HEADERS.split(",") if "=" in h)
+        import requests
+        local_session = requests.Session()
+        local_session.trust_env = False
+        headers = {}
         _provider.add_span_processor(BatchSpanProcessor(
-            _payload_free_exporter(OTLPSpanExporter(endpoint=APM_OTLP_ENDPOINT, headers=headers)),
-            schedule_delay_millis=1000))
+            OperationalExporter(OTLPSpanExporter(endpoint=APM_OTLP_ENDPOINT, headers=headers, timeout=2, session=local_session)),
+            schedule_delay_millis=500, max_queue_size=256, max_export_batch_size=64))
     trace.set_tracer_provider(_provider)
     return _provider
 
@@ -179,6 +158,8 @@ def shutdown():
     flush()
     if _langfuse is not None:
         _langfuse.shutdown()
+    if _provider is not None:
+        _provider.shutdown()
 
 
 def flush() -> None:

@@ -43,3 +43,12 @@ Open each turn's **Open in Langfuse** link. The proposal and confirmation are se
 The customer selector starts a new conversation for that participant and customer. Another browser participant using Ana starts with independent synthetic state. A new conversation keeps that participant's existing banking state; it is not a reset. Process restart discards local state and confirmations. The app owns one private loopback MCP child; a child failure makes readiness false while the page remains available. Redeploy to restore the service. Full reset and retention controls follow in the session-lifecycle ticket.
 
 Developer preview: `.venv/bin/python -m synth.companion.preview` in a separate process. Preview clears credentials and blocks outgoing connections; its labelled replies are fixtures and its readiness is false.
+
+## APM
+
+If **APM** was enabled during configuration, submit a banking turn and open its
+**Open in APM** link while signed in as a presenter. Compare its trace ID with
+**Open in Langfuse**, then inspect the banking service and MCP timings. APM keeps
+operational structure and removes customer payloads; Langfuse retains the masked
+AI context. Public participants cannot open the APM view. Stopping the live
+instance clears its APM history. See [APM configuration and troubleshooting](docs/APM.md).

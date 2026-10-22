@@ -19,6 +19,7 @@ class BankingService:
         self.epoch = secrets.token_hex(16)
         self.process = None
         self.url = ''
+        self.apm_endpoint = ''
         self.started = False
         self.error = None
         self.monitor = None
@@ -45,6 +46,8 @@ class BankingService:
                    NORTHWIND_MCP_PORT=str(port), NORTHWIND_BINDING_SECRET=self.secret,
                    PORTAL_LIVE_INSTANCE_ID=self.instance, NORTHWIND_PROCESS_EPOCH=self.epoch,
                    PYTHONUNBUFFERED='1')
+        if self.apm_endpoint:
+            env['NORTHWIND_APM_OTLP_ENDPOINT'] = self.apm_endpoint
         # Child stdout/stderr inherit the container log stream; no shell/detached process.
         self.process = await asyncio.create_subprocess_exec(
             sys.executable, '-m', 'synth.companion.mcp_runtime', env=env)
