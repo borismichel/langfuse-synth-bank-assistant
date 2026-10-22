@@ -23,7 +23,10 @@ def bindings_path():
 def setup_history_prompts(cfg, client):
     """Only absent content-addressed prompts are created. Never overwrite existing content."""
     bindings = {}
-    for key, expected in prompts().items():
+    expected_prompts = prompts()
+    total = len(expected_prompts)
+    for index, (key, expected) in enumerate(expected_prompts.items(), 1):
+        print(f'Resolving historical prompt {index}/{total}: {key}', flush=True)
         try:
             prompt = client.get_prompt(expected['name'], label='latest', cache_ttl_seconds=0,
                                        max_retries=0, fetch_timeout_seconds=15)
@@ -34,6 +37,7 @@ def setup_history_prompts(cfg, client):
         if prompt.prompt != expected['text']:
             raise ValueError(f'Historical prompt content collision: {expected["name"]}; no overwrite performed')
         bindings[key] = {'name': expected['name'], 'version': prompt.version}
+        print(f'Resolved historical prompt {index}/{total}: version {prompt.version}', flush=True)
     path = bindings_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({'base_url': cfg.target.base_url,

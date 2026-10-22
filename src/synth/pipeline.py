@@ -15,7 +15,7 @@ from langfuse_synth_core.target import TargetProfile
 from .receipt import RunReceipt
 
 
-def run_probe(cfg) -> int:
+def check_target(cfg) -> int:
     print('Checking target compatibility and project access', flush=True)
     if not all(os.environ.get(key) for key in ('LANGFUSE_PUBLIC_KEY', 'LANGFUSE_SECRET_KEY')):
         raise ValueError('Depot project credentials are required; workstation files are never read.')
@@ -34,22 +34,38 @@ def run_probe(cfg) -> int:
     return 0
 
 
+def run_probe(cfg) -> int:
+    from langfuse_synth_core.probe import run_backdate_probe
+    check_target(cfg)
+    print('Checking historical ingestion: one distinguishable probe trace with two observations; no model calls', flush=True)
+    if not run_backdate_probe(cfg.target.base_url, cfg.target.project_hint, cfg.generation.seed,
+                              window_days=cfg.generation.history_days,
+                              name='northwind.probe.backdate_check',
+                              log=lambda line: print(line, flush=True)):
+        raise ValueError('Historical ingestion check failed; setup and seed must not continue')
+    return 0
+
+
 def run_plan(cfg) -> int:
     from langfuse_synth_core.timegen import resolve_run_date
     from tempfile import TemporaryDirectory
     from langfuse_synth_core.seed.count import count_spool
     from .materialize import build_events
+    print(f'Planning {cfg.generation.target_traces} turn traces across {cfg.generation.history_days} UTC days, including all 58 required turns', flush=True)
     # Use the same materialization and core metering as the cap gate, in isolated state.
     with TemporaryDirectory(prefix='bank-plan-') as tmp:
         spool = Path(tmp) / 'events.ndjson'
         ingestor = Ingestor.from_env(cfg.target.base_url, dry_run=True, spool_path=spool)
         ingestor.open_spool()
-        ingestor.extend(build_events(cfg.generation.target_traces, {'seed': cfg.generation.seed},
+        ingestor.extend(build_events(cfg.generation.target_traces, {'seed': cfg.generation.seed, 'history_days': cfg.generation.history_days},
                                     run_date=resolve_run_date(cfg.generation.as_of_date)))
         ingestor.close_spool()
         measured = count_spool(spool)
     print('PLAN_COUNTS=' + json.dumps({'version': 1, **{key: measured[key] for key in
         ('traces', 'observations', 'scores')}}, separators=(',', ':')), flush=True)
+    print(f'Estimated billable units: {measured["observations"] + measured["scores"]}. Trace roots are included in observations. Excludes the 2-observation probe and later live/evaluator usage.', flush=True)
+    print('Candidate limits: 58–256 turn traces, 1–90 days. Full resource-limit qualification is pending; this plan is not deployment proof. Monetary ingestion estimate unavailable: pricing depends on the target contract.', flush=True)
+    print('Live chat, voice and evaluators can incur provider charges separately when enabled.', flush=True)
     print('Seed model calls: 0. Historical answers, labels, token usage and costs are synthetic fixtures. Langfuse ingestion is billable according to the target plan.', flush=True)
     return 0
 
@@ -67,7 +83,7 @@ def run_import(cfg, *, spool_path=None, output_dir=None) -> int:
         raise ValueError('Generated spool changed; no import performed.')
     if Path(str(spool) + '.imported').exists():
         raise ValueError('Import already attempted. Use a fresh target/deployment or authorised project reset before another import.')
-    run_probe(cfg)
+    check_target(cfg)
     project_id, _ = assert_demo_project(cfg.target.base_url, cfg.target.project_hint)
     Path(RunReceipt.state_path()).unlink(missing_ok=True)
     from datetime import datetime
@@ -79,7 +95,7 @@ def run_import(cfg, *, spool_path=None, output_dir=None) -> int:
     # Re-materialise through core with the recorded inputs and resolved prompt versions.
     # The measured canonical spool stays immutable and target-independent.
     bound_spool = spool.with_name('events.bound.ndjson')
-    events = build_events(receipt.target_traces, {'seed': receipt.seed, 'prompt_bindings': bindings},
+    events = build_events(receipt.target_traces, {'seed': receipt.seed, 'history_days': receipt.history_days, 'prompt_bindings': bindings},
                           run_date=datetime.fromisoformat(pending['run_date']))
     bound = Ingestor.from_env(cfg.target.base_url, dry_run=True, spool_path=bound_spool)
     bound.open_spool()

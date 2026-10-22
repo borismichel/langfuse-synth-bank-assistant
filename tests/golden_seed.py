@@ -38,7 +38,7 @@ def seed(target_traces: int, params: Mapping[str, Any]) -> bytes:
     """Materialize the full pre-upload Spool for `target_traces` through the runtime seed
     path; return its bytes.
 
-    `params` supports `seed` and `as_of_date`, or their `generation.`-prefixed
+    `params` supports `seed`, `history_days` and `as_of_date`, or their `generation.`-prefixed
     config names. The default date stays pinned for the golden. Volume belongs to
     the dedicated `target_traces` argument. Extend the supported inputs explicitly
     when the Recipe gains new declared parameters.
@@ -48,8 +48,8 @@ def seed(target_traces: int, params: Mapping[str, Any]) -> bytes:
         name = key.removeprefix("generation.")
         if name == "target_traces":
             raise ValueError("set volume with the target_traces argument, not params")
-        if name not in {"seed", "as_of_date"}:
-            raise ValueError(f"unsupported golden parameter {key!r}; use seed or as_of_date")
+        if name not in {"seed", "as_of_date", "history_days"}:
+            raise ValueError(f"unsupported golden parameter {key!r}; use seed, history_days or as_of_date")
         if name in declared:
             raise ValueError(f"golden parameter {name!r} specified more than once")
         if name == "seed" and (type(value) is not int or value < 0):

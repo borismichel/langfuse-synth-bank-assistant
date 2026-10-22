@@ -16,3 +16,6 @@ generation:
   # The single, cross-kit operator volume knob (Spec A §4). The kit deterministically
   # derives its internal generation params from it via the identity derivation hook.
   target_traces: 64
+
+  # Inclusive UTC window; all 58 required turns remain at every volume.
+  history_days: 7

@@ -46,18 +46,21 @@ def clean(value):
     return value
 
 
-def run_identity(seed, run_date):
+def run_identity(seed, run_date, history_days=7):
     digest = hashlib.sha256(FIXTURE_PATH.read_bytes()).hexdigest()
-    return hashlib.sha256(f'bank-history-v1:{seed}:{run_date.isoformat()}:{digest}'.encode()).hexdigest()[:24]
+    return hashlib.sha256(f'bank-history-v2:{seed}:{run_date.isoformat()}:{history_days}:{digest}'.encode()).hexdigest()[:24]
 
 
-def build_events(target_traces: int, params: Mapping[str, Any], *, run_date: datetime) -> list[dict]:
+def build_events(target_traces: int, params: Mapping[str, Any], *, run_date: datetime, progress=None) -> list[dict]:
     corpus = fixture()
-    run_id = run_identity(int(params.get('seed', 42)), run_date)
+    history_days = int(params.get('history_days', 7))
+    run_id = run_identity(int(params.get('seed', 42)), run_date, history_days)
     rng = Rng(int(params.get('seed', 42))).sub('bank-history', run_id)
     docs = {doc['id']: doc for doc in corpus['knowledge']}
     events, history = [], {}
     for index, raw in enumerate(cases_for_count(target_traces)):
+        if progress and index % 16 == 0:
+            progress(f'Materializing turn {index + 1}/{target_traces}')
         case = clean(raw)
         r = rng.sub(case['id'])
         trace_id = r.trace_id(0)
@@ -65,7 +68,8 @@ def build_events(target_traces: int, params: Mapping[str, Any], *, run_date: dat
         group = case['group']
         prior = history.setdefault(group, [])
         session = 'bank-history-' + rng.sub('session', group).trace_id(0)
-        ts = run_date - timedelta(days=7) + timedelta(seconds=index * 60)
+        day = index * (history_days - 1) // 57 if index < 58 else (index - 58) % history_days
+        ts = run_date.replace(hour=9, minute=0, second=0, microsecond=0) - timedelta(days=history_days - 1 - day) + timedelta(seconds=index * 60)
         authority = case.get('authority_override')
         if authority is None:
             authority = '\n'.join(f"[{key}] {docs[key]['text']}" for key in case['docs'])
