@@ -1,23 +1,4 @@
-"""`synth verify` — read the data back through the library and assert it landed.
-
-The read seam (`langfuse_synth_core.read`) is the read-client: it owns the Langfuse API
-endpoints, follows their pagination to the end, and normalises what comes back. What stays
-HERE is the scenario talking — which assertions to make about what landed. The walking
-skeleton verifies exact trace and score identities from the last successful seed receipt.
-Grow the checks as the story grows.
-
-The receipt uses the shared spool mount (`SYNTH_STATE_DIR`) and its own filename so
-optional `--anchors` kit state is preserved. Trace timestamps distinguish older runs
-that reused the deterministic seed's IDs; score identity, value and relationship must
-all agree. This is bounded representative evidence, not a full-dataset audit.
-
-Add scenario reads as calls on the `reader` — `reader.trace(id)`, `reader.observations(…)`,
-`reader.scores(name=…)`, `reader.experiments(…)` — rather than reaching for an HTTP client
-of your own: that is what keeps this kit off the endpoints and out of the next migration.
-The handful of endpoints the seam does not model (datasets, dataset-items, score-configs,
-prompts, annotation queues) are read with `lfread.get_json`, which carries the same auth and
-the same Retry-After-aware backoff.
-"""
+"""Verify every mandatory historical turn against the successfully imported current run."""
 from __future__ import annotations
 
 import math
@@ -27,13 +8,12 @@ from dataclasses import dataclass, field
 
 import requests
 
-from langfuse_synth_core.read import ReadError, parse_ts
+from langfuse_synth_core.read import ReadError
 from langfuse_synth_core.target import TargetProfile
-from langfuse_synth_core.timegen import iso
 
 from .config import Config
-from .receipt import RunReceipt, SAMPLE_LIMIT
-from .story import check_story
+from .receipt import RunReceipt
+from .story import check_case, validate_anchors
 
 
 @dataclass
@@ -55,29 +35,6 @@ class VerifyReport:
         return all(c.ok for c in self.checks)
 
 
-def _read_examples(reader, examples: list[dict]) -> VerifyReport:
-    report = VerifyReport()
-    for example in examples:
-        trace_id, score_id = example["trace_id"], example["score_id"]
-        trace = reader.trace(trace_id, with_scores=False)
-        trace_ok = (trace is not None and trace.id == trace_id
-                    and trace.timestamp is not None
-                    and iso(trace.timestamp) == example["trace_timestamp"])
-        report.add(f"trace:{trace_id}", trace_ok,
-                   "expected trace and run timestamp visible" if trace_ok
-                   else f"missing trace {trace_id} or mismatched run timestamp")
-        scores = reader.scores(trace_id=trace_id, name=example["name"], limit_pages=1)
-        score = next((s for s in scores if s.id == score_id), None)
-        score_ok = (score is not None and score.trace_id == trace_id
-                    and score.observation_id == example["observation_id"]
-                    and score.name == example["name"] and score.value == example["value"]
-                    and score.data_type == example["data_type"])
-        report.add(f"score:{score_id}", score_ok,
-                   "expected score, value and trace relationship visible" if score_ok
-                   else f"missing or mismatched score {score_id} on trace {trace_id}")
-    report.add("banking_story", *check_story(reader, examples))
-    return report
-
 
 def run_verify(
     cfg: Config, *, timeout_seconds: float = 60, poll_interval: float = 2,
@@ -95,23 +52,14 @@ def run_verify(
     report = VerifyReport()
     try:
         receipt = RunReceipt.load()
-        if (not isinstance(receipt.examples, list)
-                or not 1 <= len(receipt.examples) <= SAMPLE_LIMIT):
-            raise ValueError("receipt needs 1–5 representative score/trace pairs")
-        for example in receipt.examples:
-            if not isinstance(example, dict) or "value" not in example:
-                raise ValueError("receipt example needs a score value")
-            for key in ("trace_id", "score_id", "observation_id", "name", "data_type", "trace_timestamp"):
-                if not isinstance(example.get(key), str) or not example[key]:
-                    raise ValueError(f"receipt example needs a nonempty {key}")
-            parse_ts(example["trace_timestamp"])
+        validate_anchors(receipt.history_anchors, receipt.history_run_id)
         if (receipt.base_url != cfg.target.base_url
                 or receipt.public_key != os.environ.get("LANGFUSE_PUBLIC_KEY", "")
                 or receipt.seed != cfg.generation.seed
                 or receipt.target_traces != cfg.generation.target_traces
                 or receipt.as_of_date != str(cfg.generation.as_of_date or "")):
             raise ValueError("receipt target or generation configuration differs from invocation")
-    except (OSError, ValueError, TypeError, AttributeError) as exc:
+    except (OSError, ValueError, TypeError, AttributeError, KeyError) as exc:
         report.add("run_receipt", False, f"Missing or invalid receipt; run synth seed: {exc}")
     else:
         profile = TargetProfile.detect(cfg.target.base_url)
@@ -120,7 +68,9 @@ def run_verify(
         deadline = clock() + timeout_seconds
         while True:
             try:
-                report = _read_examples(reader, receipt.examples)
+                report = VerifyReport()
+                for case in receipt.history_anchors['cases']:
+                    report.add(case['case_id'], *check_case(reader, case))
             except (ReadError, requests.RequestException) as exc:
                 report = VerifyReport()
                 report.add("target_read", False, f"Cannot read expected records: {exc}")

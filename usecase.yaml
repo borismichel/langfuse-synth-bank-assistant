@@ -1,9 +1,9 @@
 schema_version: 1
 slug: northwind-bank-assistant
 name: Northwind Bank Assistant
-tagline: Investigate a banking policy regression using synthetic evidence.
-story: 'Compare a synthetic card-dispute baseline, outdated-policy failure and corrected
-  answer in Langfuse, then inspect bilingual live retrieval and guardrails. Further
+tagline: Inspect bilingual banking actions, regressions and conduct evidence.
+story: 'Compare frozen banking actions, dispute and retrieval-cost regressions, and
+  conduct policy cases in Langfuse, then use the bilingual live assistant. Further
   interactive capabilities are tracked by Depot spec #365.'
 target:
   project_hint: demo
@@ -27,13 +27,12 @@ config_schema:
         copy (the v4 write path has no upsert).
     generation.target_traces:
       type: integer
-      minimum: 3
-      maximum: 24
-      default: 3
+      minimum: 58
+      maximum: 256
+      default: 64
       title: Target traces
-      description: Total number of traces to generate. The single, uniform volume
-        knob for this demo; the kit deterministically derives its internal generation
-        params from it.
+      description: Includes 58 mandatory banking turns. Additional traces add background
+        conversations without removing required cases.
   required: []
 pipeline:
 - id: probe

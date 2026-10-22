@@ -24,6 +24,8 @@ def run_setup_prompts(cfg):
                 print(f'Created initial banking prompt: version {prompt.version}', flush=True)
             else:
                 raise ValueError('Existing banking prompt has no production label; assign it explicitly before deploying.')
+        from .history_prompts import setup_history_prompts
+        setup_history_prompts(cfg, client)
     finally:
         client.flush()
         client.shutdown()
