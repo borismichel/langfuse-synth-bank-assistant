@@ -19,96 +19,57 @@ both tools — the correlation key an SRE pastes from an infrastructure alert in
 Langfuse, or vice versa. The APM copy carries timings, status and structure but
 no prompts or completions, so customer text never reaches the APM.
 
-Configuration is read from this demo's .env only. Shell-exported LANGFUSE_*
-variables are ignored on purpose: a key for another project silently sends
-traces elsewhere while your queries read this one.
+Configuration and ready clients are supplied by the Depot Companion Adapter.
+Workstation profiles and .env files are never read.
 """
 
 from __future__ import annotations
 
-import base64
 import os
-import subprocess
 from pathlib import Path
 from typing import Optional, Sequence
 
-from dotenv import dotenv_values
-
 DEMO_DIR = Path(__file__).resolve().parent.parent
-_ENV = {k: v for k, v in dotenv_values(DEMO_DIR / ".env").items() if v is not None}
-
-# Target profile. `cloud` (default when .env.cloud exists) overlays .env.cloud —
-# Langfuse Cloud keys — on top of .env; `selfhosted` uses the local EE stack.
-PROFILE = (os.environ.get("NORTHWIND_PROFILE") or _ENV.get("NORTHWIND_PROFILE")
-           or ("cloud" if (DEMO_DIR / ".env.cloud").exists() else "selfhosted"))
-if PROFILE != "selfhosted":
-    _overlay = DEMO_DIR / f".env.{PROFILE}"
-    if not _overlay.exists():
-        raise SystemExit(f"NORTHWIND_PROFILE={PROFILE} but {_overlay.name} is missing")
-    _ENV.update({k: v for k, v in dotenv_values(_overlay).items() if v})
-    if "LANGFUSE_BASE_URL" not in _ENV and _ENV.get("LANGFUSE_HOST"):
-        _ENV["LANGFUSE_BASE_URL"] = _ENV["LANGFUSE_HOST"]
-
-
-def _main_checkout_env() -> dict:
-    """Model API keys may live in the repo-root .env of the main checkout."""
-    try:
-        common = subprocess.run(["git", "rev-parse", "--git-common-dir"], cwd=DEMO_DIR,
-                                capture_output=True, text=True, check=True).stdout.strip()
-        root = (DEMO_DIR / common).resolve().parent
-        return {k: v for k, v in dotenv_values(root / ".env").items() if v}
-    except Exception:  # noqa: BLE001
-        return {}
+PROFILE = "depot"
+_adapter = None
+LANGFUSE_BASE_URL = ""
+PROJECT_ID = ""
+ENVIRONMENT = os.environ.get("LANGFUSE_TRACING_ENVIRONMENT", "production")
+RELEASE = "bank-depot-0.2.0"
+SAMPLE_RATE = 1.0
+AGENT_MODEL = "claude-sonnet-4-6"
+JUDGE_MODEL = AGENT_MODEL
+MCP_URL = "http://127.0.0.1:8765/mcp"
+MCP_ENABLED = False  # #368 enables the supervised, customer-bound banking service.
+APM_OTLP_ENDPOINT = "off"  # #382 enables managed APM with its own qualification.
+APM_OTLP_HEADERS = ""
+APM_UI_TRACE_URL = ""
 
 
-_ROOT_ENV = _main_checkout_env()
+def env(key, default=None):
+    return os.environ.get(key, default)
 
 
-def env(key: str, default: Optional[str] = None) -> Optional[str]:
-    """Demo .env first, then the process env for non-Langfuse keys."""
-    if _ENV.get(key):
-        return _ENV[key]
-    if not key.startswith("LANGFUSE_") and os.environ.get(key):
-        return os.environ[key]
-    return default
+def bind_adapter(adapter):
+    global _adapter, LANGFUSE_BASE_URL
+    _adapter = adapter
+    LANGFUSE_BASE_URL = adapter.base_url
 
 
-# Pin the Langfuse settings into the process env so every SDK entry point
-# (including the LangChain CallbackHandler) reads THIS project's keys.
-for _k in ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_BASE_URL",
-           "LANGFUSE_TRACING_ENVIRONMENT", "LANGFUSE_SAMPLE_RATE", "LANGFUSE_MASK_PII"):
-    if _ENV.get(_k):
-        os.environ[_k] = _ENV[_k]
-for _k in ("LANGFUSE_HOST",):
-    os.environ.pop(_k, None)
+def get_adapter():
+    if _adapter is None:
+        raise RuntimeError("Banking runtime must be started through the Depot Companion Adapter")
+    return _adapter
 
-LANGFUSE_BASE_URL = env("LANGFUSE_BASE_URL", "http://localhost:3100").rstrip("/")
-LANGFUSE_PUBLIC_KEY = env("LANGFUSE_PUBLIC_KEY")
-LANGFUSE_SECRET_KEY = env("LANGFUSE_SECRET_KEY")
-PROJECT_ID = env("LANGFUSE_PROJECT_ID", "retail-assistant")
-# NORTHWIND_ENVIRONMENT / NORTHWIND_SAMPLE_RATE (process env) override the .env
-# defaults for one run — e.g. a staging batch, or a 25%-sampled batch.
-ENVIRONMENT = os.environ.get("NORTHWIND_ENVIRONMENT") or env("LANGFUSE_TRACING_ENVIRONMENT", "production")
-RELEASE = env("NORTHWIND_RELEASE", "assistant-1.6.1")  # see agent.py release knobs; 1.5.0 card-data warning guardrail
-SAMPLE_RATE = float(os.environ.get("NORTHWIND_SAMPLE_RATE") or env("LANGFUSE_SAMPLE_RATE", "1.0"))
-os.environ["LANGFUSE_TRACING_ENVIRONMENT"] = ENVIRONMENT
-os.environ["LANGFUSE_SAMPLE_RATE"] = str(SAMPLE_RATE)
 
-ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY") or _ROOT_ENV.get("ANTHROPIC_API_KEY")
-OPENAI_API_KEY = (env("OPENAI_API_KEY") or env("OPEN_AI_API_KEY")
-                  or _ROOT_ENV.get("OPENAI_API_KEY") or _ROOT_ENV.get("OPEN_AI_API_KEY"))
-if ANTHROPIC_API_KEY:
-    os.environ.setdefault("ANTHROPIC_API_KEY", ANTHROPIC_API_KEY)
-if OPENAI_API_KEY:
-    os.environ.setdefault("OPENAI_API_KEY", OPENAI_API_KEY)
-
-AGENT_MODEL = env("AGENT_MODEL", "claude-sonnet-4-6")
-JUDGE_MODEL = env("JUDGE_MODEL", "claude-sonnet-4-6")
-MCP_URL = os.environ.get("NORTHWIND_MCP_URL") or env("MCP_URL", "http://localhost:8765/mcp")
-
-APM_OTLP_ENDPOINT = env("APM_OTLP_ENDPOINT", "http://localhost:14318/v1/traces")
-APM_OTLP_HEADERS = env("APM_OTLP_HEADERS", "")
-APM_UI_TRACE_URL = env("APM_UI_TRACE_URL", "http://localhost:16686/trace/{trace_id}")
+def native_llm_factory(*, provider, model, api_key):
+    if provider == "openai":
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(model=model, api_key=api_key, temperature=0.2, max_retries=1, timeout=60)
+    if provider == "anthropic":
+        from langchain_anthropic import ChatAnthropic
+        return ChatAnthropic(model=model, api_key=api_key, temperature=0.2, max_tokens=1024, max_retries=1, timeout=60)
+    raise ValueError("Unsupported banking model provider")
 
 # Attributes that carry prompts, completions, tool payloads. Stripped from the
 # APM copy: the APM gets operational telemetry, Langfuse gets the AI payloads.
@@ -187,8 +148,9 @@ def tracer_provider(service_name: str = "northwind-assistant"):
     return _provider
 
 
-def get_langfuse(service_name: str = "northwind-assistant"):
+def langfuse_factory(*, host, public_key, secret_key):
     """Langfuse client bound to the shared provider, with masking + sampling."""
+    service_name = "northwind-assistant"
     global _langfuse
     if _langfuse is not None:
         return _langfuse
@@ -198,16 +160,26 @@ def get_langfuse(service_name: str = "northwind-assistant"):
 
     provider = tracer_provider(service_name)
     _langfuse = Langfuse(
-        public_key=LANGFUSE_PUBLIC_KEY,
-        secret_key=LANGFUSE_SECRET_KEY,
-        base_url=LANGFUSE_BASE_URL,
+        public_key=public_key,
+        secret_key=secret_key,
+        base_url=host,
         environment=ENVIRONMENT,
         release=RELEASE,
         sample_rate=SAMPLE_RATE,
         tracer_provider=provider,
-        **({"mask_otel_spans": masking.mask_otel_spans} if masking.enabled() else {}),
+        mask_otel_spans=masking.mask_otel_spans,
     )
     return _langfuse
+
+
+def get_langfuse(service_name="northwind-assistant"):
+    return get_adapter().langfuse()
+
+
+def shutdown():
+    flush()
+    if _langfuse is not None:
+        _langfuse.shutdown()
 
 
 def flush() -> None:
@@ -256,29 +228,20 @@ def project_id() -> str:
         try:
             _project_id = api("GET", "/api/public/projects")["data"][0]["id"]
         except Exception:  # noqa: BLE001
-            _project_id = PROJECT_ID
+            return ""
     return _project_id
 
 
 def trace_url(trace_id: str) -> str:
-    return f"{LANGFUSE_BASE_URL}/project/{project_id()}/traces/{trace_id}"
+    pid = project_id()
+    return f"{LANGFUSE_BASE_URL}/project/{pid}/traces/{trace_id}" if pid else ""
 
 
 def apm_url(trace_id: str) -> str:
     return APM_UI_TRACE_URL.format(trace_id=trace_id)
 
 
-def basic_auth() -> str:
-    return "Basic " + base64.b64encode(
-        f"{LANGFUSE_PUBLIC_KEY}:{LANGFUSE_SECRET_KEY}".encode()).decode()
-
-
-def api(method: str, path: str, body=None, timeout: int = 30, params: Optional[dict] = None):
-    """Minimal Langfuse public-API client (returns parsed JSON; raises on HTTP error)."""
-    import httpx
-
-    r = httpx.request(method, f"{LANGFUSE_BASE_URL}{path}", json=body, params=params,
-                      headers={"Authorization": basic_auth()}, timeout=timeout)
-    if r.status_code >= 400:
-        raise RuntimeError(f"{method} {path} → {r.status_code}: {r.text[:500]}")
-    return r.json() if r.content else None
+def api(method, path, body=None, timeout=30, params=None):
+    if method != "GET":
+        raise RuntimeError("This operation requires a delivered presenter capability")
+    return get_adapter().read_json(path, params=params)

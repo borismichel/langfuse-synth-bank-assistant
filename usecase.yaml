@@ -3,8 +3,8 @@ slug: northwind-bank-assistant
 name: Northwind Bank Assistant
 tagline: Investigate a banking policy regression using synthetic evidence.
 story: 'Compare a synthetic card-dispute baseline, outdated-policy failure and corrected
-  answer in Langfuse. This initial package supplies frozen history; interactive capabilities
-  are tracked by Depot spec #365.'
+  answer in Langfuse, then inspect bilingual live retrieval and guardrails. Further
+  interactive capabilities are tracked by Depot spec #365.'
 target:
   project_hint: demo
   supports:
@@ -44,6 +44,10 @@ pipeline:
   gate: confirm
   parse:
     plan_counts: regex:PLAN_COUNTS=(\{[^\n]+\})
+- id: prompts
+  run: synth setup-prompts --config {config}
+  fatal: true
+  timeout_minutes: 5
 - id: seed
   run: synth seed --config {config}
   generate: synth generate-spool --config {config}
@@ -64,3 +68,21 @@ teardown:
   note: Depot removes local containers and state. Seeded Langfuse observations remain.
     Use a fresh disposable project or an explicitly authorised project reset before
     importing again.
+llm:
+  providers:
+  - anthropic
+  - openai
+live_components:
+- name: companion
+  description: Bilingual banking assistant with retrieval and guardrails. Banking
+    actions and optional workshop capabilities remain unavailable in this candidate.
+  command: synth companion --config {config} --host 0.0.0.0 --port 8080
+  port: 8080
+  requires_secrets:
+  - LANGFUSE_PUBLIC_KEY
+  - LANGFUSE_SECRET_KEY
+  - LLM_API_KEY
+  health_path: /api/health
+  routes:
+  - path: /
+    title: Northwind Bank

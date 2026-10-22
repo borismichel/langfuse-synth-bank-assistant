@@ -211,7 +211,7 @@
   }
 
   async function api(path, opts = {}) {
-    const r = await fetch(path, opts);
+    const r = await fetch((window.NORTHWIND_BASE_PATH || "") + path, opts);
     let body = null;
     try { body = await r.json(); } catch { /* non-JSON */ }
     if (!r.ok) {
@@ -300,7 +300,7 @@
     { l: "Tarjeta 4111 … ¿bloqueada?", t: "Mi número de tarjeta es 4111 1111 1111 1111, ¿está bloqueada?", k: "risk" },
     { l: "¿Protección de sobregiro?", t: "¿Cómo funciona la protección de sobregiro y cuánto cuesta?", k: "kb" },
   ];
-  const quick = () => (LANG === "es" ? QUICK_ES : QUICK_EN);
+  const quick = () => (LANG === "es" ? QUICK_ES : QUICK_EN).filter(q => q.k !== "act" || S.info?.capabilities?.banking_actions);
 
 
   /* ── Tabs ────────────────────────────────────────────────────────────── */
@@ -401,7 +401,7 @@
   async function newConversation() {
     S.messages = [];
     try { S.session = (await postJSON("/api/session")).session_id; }
-    catch { S.session = "nw-" + (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())); }
+    catch (e) { S.session = null; toast(e.message, true); }
     renderSessionId();
     persist(); renderTranscript();
     $("#input").focus();
@@ -469,7 +469,7 @@
     foot.push(`<span class="grow"></span>`);
     if (r.trace_url) foot.push(`<a class="btn btn-xs btn-navy" href="${esc(r.trace_url)}" target="_blank" rel="noopener">${esc(t("foot.openLf"))}${icon("ext")}</a>`);
     if (r.apm_url) foot.push(`<a class="btn btn-xs" href="${esc(r.apm_url)}" target="_blank" rel="noopener">${icon("pulse")}${esc(t("foot.openApm"))}${icon("ext")}</a>`);
-    if (tid) {
+    if (tid && S.info?.capabilities?.feedback) {
       const fb = r.feedback;
       foot.push(`<span class="fb">
         <button data-fb="1" title="${esc(t("fb.up"))}" aria-label="${esc(t("fb.upAria"))}" class="${fb === 1 ? "on-up" : ""}" ${fb != null ? "disabled" : ""}>${icon("up")}</button>
@@ -539,6 +539,7 @@
     text = (text ?? $("#input").value).trim();
     if (!text || S.busy) return;
     if (!S.session) await newConversation();
+    if (!S.session) return;
     $("#input").value = ""; autosize();
     if (!S.messages.length) $("#transcript").innerHTML = "";
     S.messages.push({ role: "user", content: text });
@@ -851,7 +852,7 @@
     const started = Date.now() - (job.elapsed_s || 0) * 1000;
     C.timer = setInterval(() => { if (C.job && C.job.running) $("#conElapsed").textContent = `${((Date.now() - started) / 1000).toFixed(0)} s`; }, 500);
     $("#conElapsed").textContent = "";
-    const es = new EventSource(`/api/run-stream/${job.job_id}?offset=0`);
+    const es = new EventSource(`${window.NORTHWIND_BASE_PATH || ""}/api/run-stream/${job.job_id}?offset=0`);
     C.es = es;
     let pending = []; let raf = 0;
     const flush = () => {

@@ -10,7 +10,7 @@ COPY src ./src
 COPY config ./config
 COPY usecase.yaml DEMO_SCRIPT.md LICENSE ./
 COPY docs/DEPOT_KIT.md docs/DEPOT_PROVENANCE.md ./docs/
-# Only the banking subtree is retained. Live application packaging is completed by #367.
+# Only the banking subtree is retained, including the preserved Companion assets.
 COPY demos/bank-assistant ./demos/bank-assistant
 RUN uv sync --frozen --no-dev --no-editable \
     && mkdir -p /app/out /app/.synth_spool \
