@@ -237,12 +237,8 @@ def _text(content: Any) -> str:
     return "".join(b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text")
 
 
-def make_llm(model: str):
-    if model.startswith(("gpt", "o1", "o3", "o4")):
-        from langchain_openai import ChatOpenAI
-        return ChatOpenAI(model=model, temperature=0.2)
-    from langchain_anthropic import ChatAnthropic
-    return ChatAnthropic(model=model, temperature=0.2, max_tokens=1024)
+def make_llm(model: Optional[str] = None):
+    return config.get_adapter().native_llm(model=model)
 
 
 class State(TypedDict):
@@ -329,6 +325,8 @@ def _build_tools(langfuse, session: Optional[ClientSession], customer_id: str, e
         """Schedule a call-back from a human Northwind agent."""
         return await _mcp("schedule_callback", {"topic": topic, "preferred_time": preferred_time}, callbacks)
 
+    if not config.MCP_ENABLED:
+        return [search_knowledge_base]
     return [search_knowledge_base, list_accounts, get_recent_transactions, block_card,
             open_dispute, schedule_callback]
 
@@ -401,8 +399,11 @@ async def run_turn(message: str, *, customer_id: str = "C-1001", session_id: Opt
                    extra_metadata: Optional[dict] = None, trace_name: str = TRACE_NAME) -> dict:
     """One customer turn = one trace. Returns the answer plus links into Langfuse and the APM."""
     langfuse = config.get_langfuse()
-    model = model or config.AGENT_MODEL
+    selected_llm = make_llm(model)
+    model = getattr(selected_llm, "model", None) or getattr(selected_llm, "model_name", None) or model or config.AGENT_MODEL
     system_text, lf_prompt = prompts.get_system_prompt(langfuse, prompt_label)
+    if not config.MCP_ENABLED:
+        system_text += "\nOnly knowledge lookup is enabled. Account information and banking actions are unavailable. Never claim to have blocked a card, opened a dispute or booked a callback."
     if channel == "voice":  # channel modifier: the answer will be spoken, not read
         system_text += ("\n\nThis is a phone call: reply in at most three short spoken sentences, "
                         "no markdown, no lists, no links, and do not read article ids aloud.")
@@ -442,7 +443,7 @@ async def run_turn(message: str, *, customer_id: str = "C-1001", session_id: Opt
             handler = CallbackHandler()
             run_cfg = {"callbacks": [handler], "recursion_limit": 14,
                        "run_name": "northwind-orchestration", "metadata": {"langfuse_session_id": session_id}}
-            llm = make_llm(model)
+            llm = selected_llm
 
             async def _invoke(session):
                 tools = _build_tools(langfuse, session, customer_id, evidence, used, trace_attrs)
@@ -452,7 +453,7 @@ async def run_turn(message: str, *, customer_id: str = "C-1001", session_id: Opt
 
             error = None
             try:
-                if check["blocked"]:
+                if check["blocked"] or not config.MCP_ENABLED:
                     state = await _invoke(None)
                 else:
                     async with streamablehttp_client(config.MCP_URL) as (read, write, _):
@@ -460,14 +461,13 @@ async def run_turn(message: str, *, customer_id: str = "C-1001", session_id: Opt
                             await session.initialize()
                             state = await _invoke(session)
             except Exception as exc:  # noqa: BLE001 — recorded on the trace, then surfaced
-                import traceback
-                traceback.print_exception(exc)
+                print("Banking turn failed: " + type(exc).__name__, file=sys.stderr, flush=True)
                 while isinstance(exc, BaseExceptionGroup) and exc.exceptions:
                     exc = exc.exceptions[0]
                 error = exc
                 state = {"messages": [AIMessage(content="Sorry — I'm having trouble right now. "
                                                         "Please try again or call us.")], "blocked": False}
-                root.update(level="ERROR", status_message=f"{type(exc).__name__}: {exc}"[:300])
+                root.update(level="ERROR", status_message=type(exc).__name__)
 
             answer = _text(state["messages"][-1].content)
             cited = sorted(set(re.findall(r"\bKB-\d{3}\b", answer)))
@@ -514,11 +514,11 @@ async def run_turn(message: str, *, customer_id: str = "C-1001", session_id: Opt
                        business.evidence_tool_results(evidence), check["blocked"], answer)
     if error is not None:
         config.flush()
-    return {"answer": answer, "trace_id": trace_id, "trace_url": config.trace_url(trace_id),
+    return {"answer": answer, "observation_id": obs_id, "trace_id": trace_id, "trace_url": config.trace_url(trace_id),
             "apm_url": config.apm_url(trace_id), "sources": cited, "retrieved": retrieved,
             "tools_used": used, "blocked": check["blocked"], "risks": check["risks"],
             "prompt_version": getattr(lf_prompt, "version", None), "model": model, "business": biz,
-            "error": f"{type(error).__name__}: {error}" if error else None}
+            "error": type(error).__name__ if error else None}
 
 
 def _segment(customer_id: str) -> str:
@@ -598,9 +598,11 @@ def _score_efficiency(langfuse, trace_id, obs_id, messages, first_new: int, mode
     new = [m for m in messages[first_new:] if isinstance(m, AIMessage) and getattr(m, "usage_metadata", None)]
     tin = sum(m.usage_metadata.get("input_tokens", 0) for m in new)
     tout = sum(m.usage_metadata.get("output_tokens", 0) for m in new)
-    pin, pout = _PRICE.get(model, (3.0, 15.0))
+    rates = _PRICE.get(model)
     s = lambda **kw: langfuse.create_score(trace_id=trace_id, observation_id=obs_id, data_type="NUMERIC", **kw)  # noqa: E731
-    s(name="turn-cost-usd", value=round((tin * pin + tout * pout) / 1e6, 6),
-      comment=f"{tin} input + {tout} output tokens at list price ({model}); trace cost is authoritative")
+    if rates is not None:
+        pin, pout = rates
+        s(name="turn-cost-usd", value=round((tin * pin + tout * pout) / 1e6, 6),
+          comment=f"Estimate from bundled list prices: {tin} input + {tout} output tokens ({model}); Langfuse generation cost is authoritative")
     s(name="llm-calls", value=float(len(new)))
     s(name="turn-latency-s", value=round(seconds, 2))

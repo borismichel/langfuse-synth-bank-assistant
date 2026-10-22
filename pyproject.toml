@@ -4,14 +4,20 @@ version = "0.1.0"
 description = "Demo Depot synth kit — fork-based Northwind banking kit."
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    # The shared synthesis library (public git dependency). Pinned to a TAG — never a
+    # The shared synthesis library (public git dependency). Pinned to an immutable commit — never a
     # moving branch — so this kit's vendor-approved output can't be silently rewritten by a
     # later lib change. Bump deliberately (see the lib's RELEASING.md).
-    "langfuse-synth-core @ git+https://github.com/borismichel/langfuse-synth-core@bb2cf441acce20b19482d69d2f7173cb46845772",
+    "langfuse-synth-core[companion] @ git+https://github.com/borismichel/langfuse-synth-core@3489a0db232405b84a42443e825bbe8f9158189f",
     "langfuse==5.0.4",
     "PyYAML>=6,<7",
     "requests>=2.31",
     "packaging>=24",
+    "langgraph>=1,<2",
+    "langchain-core>=1,<2",
+    "langchain-anthropic>=1,<2",
+    "langchain-openai>=1,<2",
+    "mcp>=1.12,<2",
+    "httpx>=0.27,<1",
 ]
 
 [project.optional-dependencies]
@@ -20,7 +26,7 @@ dev = [
     # The determinism golden gate + `synth-authoring validate/freeze` ride the [authoring]
     # extra. SAME ref as the runtime pin above — the gate and the core the kit runs against
     # must be the one, identical build. Bump both pins together, never let them drift.
-    "langfuse-synth-core[authoring] @ git+https://github.com/borismichel/langfuse-synth-core@bb2cf441acce20b19482d69d2f7173cb46845772",
+    "langfuse-synth-core[authoring] @ git+https://github.com/borismichel/langfuse-synth-core@3489a0db232405b84a42443e825bbe8f9158189f",
 ]
 
 [project.scripts]
@@ -31,8 +37,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["src", "demos/bank-assistant"]
+include = ["synth*", "northwind*"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src", "tests"]
+pythonpath = ["src", "tests", "demos/bank-assistant"]
 testpaths = ["tests"]

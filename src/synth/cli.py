@@ -17,6 +17,7 @@ from .config import load_config
 from .seed import run_seed
 from .verify import run_verify
 from .pipeline import run_plan, run_probe, run_import
+from .setup import run_setup_prompts
 
 
 def _add_config_args(parser: argparse.ArgumentParser) -> None:
@@ -54,7 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument("--timeout-seconds", type=float, default=60)
     verify.set_defaults(func=_cmd_verify)
 
-    for verb, function in (("probe", run_probe), ("plan", run_plan), ("import-spool", run_import)):
+    for verb, function in (("setup-prompts", run_setup_prompts), ("probe", run_probe), ("plan", run_plan), ("import-spool", run_import)):
         command = sub.add_parser(verb)
         _add_config_args(command)
         command.set_defaults(func=lambda args, f=function: f(load_config(args.config, overrides=args.set)))
@@ -65,6 +66,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    actual = sys.argv[1:] if argv is None else argv
+    if actual and actual[0] == "companion":
+        from .companion.app import main as serve
+        return serve(actual[1:])
     parser = build_parser()
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
     if not hasattr(args, "func"):  # no subcommand given

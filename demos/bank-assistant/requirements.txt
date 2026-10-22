@@ -1,5 +1,5 @@
 # Northwind Bank assistant — Python 3.12
-langfuse>=4.13.1,<5.0
+langfuse==5.0.4
 # LangGraph agent (the framework the bank's teams use) + MCP tools
 langgraph>=1.0,<2.0
 langchain>=1.0,<2.0

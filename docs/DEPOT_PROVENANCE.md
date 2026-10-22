@@ -7,7 +7,7 @@
 - Upstream Apache-2.0 licence remains in `LICENSE`; banking source and notices are preserved.
 - Root package slug: `northwind-bank-assistant`; GHCR release identity: `ghcr.io/borismichel/langfuse-synth-bank-assistant`.
 - Core baseline and reusable publishing workflow: v5.0.0, commit `5f56e75f9a8b5d160ddf54a8fcde380d0d15a205`.
-- Runtime and authoring pin: tested integration candidate `bb2cf441acce20b19482d69d2f7173cb46845772`, which adds the documented split-generation Manifest contract to the validator. This is an immutable integration candidate, not a stable core release. Coordinate a stable release and consumer repins before final qualification. The publishing workflow remains pinned independently to the unchanged v5.0.0 release implementation.
+- Runtime and authoring pin: tested integration candidate `3489a0db232405b84a42443e825bbe8f9158189f`, which adds the documented split-generation Manifest contract and native Companion factories for the existing LangGraph clients. This is an immutable integration candidate, not a stable core release. Coordinate a stable release and consumer repins before final qualification. The publishing workflow remains pinned independently to the unchanged v5.0.0 release implementation.
 - Python 3.12.15 and Langfuse SDK 5.0.4; full dependency resolution in `uv.lock`.
 
 ## Workflow audit
@@ -22,6 +22,7 @@ Documentation inspected 22 October 2026:
 
 - https://langfuse.com/docs/observability/sdk/upgrade-path/python-v4-to-v5
 - https://langfuse.com/docs/observability/sdk/advanced-features
+- https://langfuse.com/integrations/frameworks/langchain
 - https://langfuse.com/llms.txt
 
 Maintained Langfuse skill entrypoint SHA256: `e8908ea1c924374ba7bc5e82b220709d107db6a3450a0c4d72228a91a2a7534a`.

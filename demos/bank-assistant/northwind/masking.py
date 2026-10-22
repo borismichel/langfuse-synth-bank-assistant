@@ -34,6 +34,7 @@ Known limits — say them out loud:
 from __future__ import annotations
 
 import os
+import json
 import re
 from typing import Optional
 
@@ -184,11 +185,11 @@ def mask_otel_spans(*, params) -> Optional[object]:
                     if changed:
                         replacements[key] = masked_items
             if replacements:
-                replacements[MARKER_ATTRIBUTE] = ",".join(sorted(hits))
+                replacements[MARKER_ATTRIBUTE] = json.dumps(",".join(sorted(hits)))
                 patches[identifier] = OtelSpanPatch(set_attributes=replacements)
         except Exception as exc:  # noqa: BLE001 — must not break the batch
             patches[identifier] = OtelSpanPatch(
                 delete_attributes=_PAYLOAD_ATTRIBUTES,
-                set_attributes={MARKER_ATTRIBUTE: f"error: {type(exc).__name__}"},
+                set_attributes={MARKER_ATTRIBUTE: json.dumps(f"error: {type(exc).__name__}")},
             )
     return MaskOtelSpansResult(span_patches=patches) if patches else None
