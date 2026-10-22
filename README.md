@@ -1,3 +1,5 @@
+> **Demo Depot banking fork:** use the [banking package guide](docs/DEPOT_KIT.md) and root Manifest. The upstream full-stack instructions below remain reference material and are not the Depot deployment path.
+
 # LLM Observability with ClickHouse
 
 **A complete, self-provisioning LLM observability stack — Langfuse on ClickHouse, real instrumented apps, automated evaluation — built to be deployed, presented, and learned from.**

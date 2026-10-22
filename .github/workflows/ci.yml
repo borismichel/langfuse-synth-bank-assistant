@@ -1,0 +1,29 @@
+name: CI
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_call:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.15"
+      - run: pip install uv==0.13.5
+      - name: Install locked runtime and authoring dependencies
+        run: uv sync --frozen --extra dev
+      - name: Offline package checks
+        run: .venv/bin/synth-authoring check . --python .venv/bin/python --json
+      - name: Build isolated banking runtime
+        run: docker build -t northwind-bank:ci .
+      - name: Check non-root banking image
+        run: |
+          docker run --rm northwind-bank:ci sh -c 'test "$(id -u)" = 10001 && test ! -e /app/demos/insurance-claims && synth plan --config config/demo.yaml'
