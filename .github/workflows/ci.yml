@@ -1,52 +1,65 @@
-name: Experiment wrapper diagnosis
+name: CI
 on:
   push:
-    branches: [codex/bank-experiment-wrapper-diagnosis]
-  workflow_dispatch:
+    branches: ["**"]
+  pull_request:
+  workflow_call:
 permissions:
   contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
-  experiment:
+  test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        sample: [1, 2, 3]
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12.15'
+          python-version: "3.12.15"
       - run: pip install uv==0.13.5
-      - name: Install exact locked dependencies
+      - name: Install locked runtime and authoring dependencies
         run: uv sync --frozen --extra dev
-      - name: Enable phase timing and stack samples
-        run: mkdir -p .ci-diagnostics && touch .ci-diagnostics/enabled
-      - name: Exercise original encoding with original 90-second wrapper
-        continue-on-error: true
-        run: |
-          git show fa58ab0837a8af643b838226e1f1764b4bf2b7d5:src/synth/companion/experiments.py > src/synth/companion/experiments.py
-          .venv/bin/python -m pytest tests/test_experiments.py::test_delivered_experiment_controls -q
-      - name: Preserve baseline evidence and restore candidate
-        if: always()
-        run: |
-          mv .ci-diagnostics .ci-baseline
-          mkdir .ci-diagnostics
-          touch .ci-diagnostics/enabled
-          git restore src/synth/companion/experiments.py
-      - name: Exercise candidate encoding with original 90-second wrapper
-        if: always()
-        run: .venv/bin/python -m pytest tests/test_experiments.py::test_delivered_experiment_controls -q
-      - name: Save credential-free diagnostics
+      - name: Offline package checks
+        # Hosted diagnostic 39940386326 passed successive SDK scenarios through
+        # 294 seconds, then the old total-stage limit interrupted remaining tests.
+        # Keep each fixture's own deadline; allow ten minutes for the full suite.
+        run: .venv/bin/synth-authoring check . --python .venv/bin/python --timeout 600 --json
+      - name: Install browser for voice rehearsal
+        run: .venv/bin/python -m playwright install --with-deps chromium
+      - name: Rehearse recording, upload, confirmation and playback
+        timeout-minutes: 3
+        env:
+          VOICE_BROWSER: '1'
+          VOICE_EVIDENCE_DIR: ${{ runner.temp }}/voice-browser
+          PYTHONPATH: src:demos/bank-assistant
+        run: .venv/bin/python tests/sdk_voice_case.py
+      - name: Upload voice browser evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: experiment-wrapper-${{ matrix.sample }}
-          path: |
-            .ci-diagnostics/
-            .ci-baseline/
-          include-hidden-files: true
-          if-no-files-found: error
+          name: voice-browser
+          path: ${{ runner.temp }}/voice-browser
+          if-no-files-found: ignore
+      - name: Build isolated banking runtime
+        run: docker build -t northwind-bank:ci .
+      - name: Check non-root banking image
+        run: |
+          docker run --rm northwind-bank:ci sh -c 'test "$(id -u)" = 10001 && test ! -e /app/demos/insurance-claims && synth plan --config config/demo.yaml'
+      - name: Check optional APM storage and lifecycle
+        run: |
+          docker run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,size=128m \
+            --cap-drop ALL --security-opt no-new-privileges --memory 2g --cpus 2 --pids-limit 512 \
+            -v "$PWD/tests:/tests:ro" northwind-bank:ci python /tests/apm_service_case.py
+      - name: Check delivered private APM route
+        run: |
+          docker run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,size=128m \
+            --cap-drop ALL --security-opt no-new-privileges --memory 2g --cpus 2 --pids-limit 512 \
+            -v "$PWD/tests:/tests:ro" northwind-bank:ci python /tests/apm_companion_case.py
+      - name: Check optional complaint workflow and private editor
+        run: |
+          for proof in n8n_service_case.py n8n_companion_case.py; do
+            docker run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,size=256m \
+              --cap-drop ALL --security-opt no-new-privileges --memory 2g --cpus 2 --pids-limit 512 \
+              -v "$PWD/tests:/tests:ro" northwind-bank:ci python "/tests/$proof"
+          done
