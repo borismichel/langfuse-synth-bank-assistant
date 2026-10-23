@@ -3,7 +3,7 @@ import asyncio,json,os
 from fastapi import HTTPException
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse,JSONResponse
-from pydantic import BaseModel,Field
+from pydantic import BaseModel,Field,ValidationError
 from langfuse_synth_core.live import paths
 from langfuse_synth_core.companion.access import route_access,validate_protected_paths
 from .judges import PolicyJudges
@@ -12,6 +12,8 @@ from .reconciliation import Reconciler
 
 def error_detail(exc):
     # API bodies can contain provider diagnostics; do not reflect them or credentials.
+    if isinstance(exc,ValidationError):
+        return 'Langfuse returned an invalid response; refresh status to confirm the outcome'
     if isinstance(exc,ValueError):return str(exc)
     code=getattr(exc,'status_code',None)
     if code in (401,403):return f'Langfuse access denied (HTTP {code}); check project permissions'

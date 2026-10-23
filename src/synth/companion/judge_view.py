@@ -10,32 +10,22 @@ def judge_page(provider,prefix):
 
 PAGE='''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Policy judges</title><link rel="stylesheet" href="__PREFIX__/static/app.css">
-<style>
-body{height:auto;overflow:auto;background:#f7f8fa;color:#20252d}main{display:block;max-width:1100px;margin:32px auto;padding:0 24px 48px}
-h1{font-size:30px;margin:24px 0 12px}h2{font-size:20px;margin:0 0 16px}p{margin:12px 0;line-height:1.6}
-section{background:white;border:1px solid #d8dce3;border-radius:12px;padding:24px;margin:20px 0}
-label{display:block;font-size:14px;font-weight:600}input{font:inherit;border:1px solid #9da6b3;border-radius:6px;padding:10px;margin:8px 0;display:block;width:100%;background:white;color:inherit}
-input[type=checkbox]{display:inline;width:auto;margin:0 10px 0 0}button{font:inherit;border:1px solid #667386;border-radius:6px;padding:10px 16px;background:white;color:#20252d;cursor:pointer;margin:8px 8px 0 0}button.primary{background:#20252d;color:white}button:disabled{opacity:.5;cursor:wait}
-.fields{display:grid;grid-template-columns:2fr 1fr;gap:24px}.ack{margin:16px 0;font-weight:400;line-height:1.6}a{color:#195998;text-decoration:underline}
-.notice{background:#edf1f6;border-left:4px solid #536b8a;padding:14px 18px;overflow-wrap:anywhere}.summary{display:flex;gap:28px;flex-wrap:wrap;margin:20px 0}.summary dt{font-size:13px;color:#526071}.summary dd{font-size:20px;font-weight:650;margin:6px 0 0}
-table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:12px 8px;text-align:left;border-bottom:1px solid #dce1e8;vertical-align:top}.table-scroll{overflow:auto}details{margin:16px 0}summary{cursor:pointer;font-weight:600}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f3f5f8;padding:16px;font:14px/1.6 ui-monospace,monospace}.answer{border-top:1px solid #dce1e8;padding:16px 0}.verdicts{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.verdict{padding:6px 10px;border:1px solid #b5bfca;border-radius:6px;font-size:13px}.small{font-size:13px;color:#526071}
-@media(max-width:650px){main{padding:0 16px}.fields{grid-template-columns:1fr;gap:8px}section{padding:18px}}
-</style></head><body><main>
+</head><body class="langfuse-theme bank-presenter"><main>
 <nav><a href="__PREFIX__/">Customer assistant</a> · <a href="__PREFIX__/history">Historical evidence</a></nav>
-<h1>Policy judges</h1><p>Managed checks for investment advice, credentials, selling, promises and deposit insurance. These fictional banking policies are demonstration criteria.</p>
+<h1 class="lf-heading">Policy judges</h1><p>Managed checks for investment advice, credentials, selling, promises and deposit insurance. These fictional banking policies are demonstration criteria.</p>
 <p id="notice" class="notice" role="status">Reading native judge status…</p>
-<section><h2>Configuration</h2><p>Selected provider: <strong>__PROVIDER__</strong>. The judge model is separate from the chat model.</p>
+<section class="lf-frame corner-box-corners"><h2>Configuration</h2><p>Selected provider: <strong>__PROVIDER__</strong>. The judge model is separate from the chat model.</p>
 <form id="activate"><div class="fields"><label>Judge model<input name="model" required maxlength="120" autocomplete="off" placeholder="Model available on the selected provider"></label>
 <label>Sampling fraction<input name="sampling" type="number" min="0.01" max="1" step="0.01" value="1" required></label></div>
 <p class="small">Send a live banking answer before activation to verify its judge inputs. After activation, send new answers; earlier turns are not backfilled. Model access and billing are verified by actual evaluation results.</p>
 <label class="ack"><input name="cost" type="checkbox" required>I understand that each sampled answer can trigger five paid evaluations and remote rules continue after the Companion stops.</label>
-<button class="primary">Activate policy judges</button></form><button id="pause">Pause policy judges</button><button id="refresh">Refresh status</button>
+<button class="primary lf-button lf-button__label">Activate policy judges</button></form><button class="lf-button lf-button__label" id="pause">Pause policy judges</button><button class="lf-button lf-button__label" id="refresh">Refresh status</button>
 <p class="small">Pause before ending the deployment. Already queued work may finish. A paused evaluator may require reactivation in Langfuse after its credential or billing issue is resolved.</p></section>
-<section><h2>Native status</h2><dl id="summary" class="summary"></dl><p id="checked" class="small"></p><p id="native"></p>
+<section class="lf-frame corner-box-corners"><h2>Native status</h2><dl id="summary" class="summary"></dl><p id="checked" class="small"></p><p id="native"></p>
 <div class="table-scroll"><table><thead><tr><th>Policy</th><th>Evaluator status</th><th>Version</th><th>Native evaluator</th></tr></thead><tbody id="policies"></tbody></table></div></section>
-<section><h2>Reconciliation</h2><p id="reconciliation">No reconciliation yet.</p><button id="reconcile">Reconcile results</button>
+<section class="lf-frame corner-box-corners"><h2>Reconciliation</h2><p id="reconciliation">No reconciliation yet.</p><button class="lf-button lf-button__label" id="reconcile">Reconcile results</button>
 <p class="small">Reads native results and updates owned derived scores without a model call. Automatic reconciliation runs every 30 seconds while this Companion is running. A rejected or uncertain write requires native inspection before retry. Remote judges may continue after the Companion stops.</p></section>
-<section><h2>Delivered answers</h2><p id="coverage">No readback yet.</p><p id="scope" class="small"></p><p id="controls" class="small"></p><div id="answers"></div></section>
+<section class="lf-frame corner-box-corners"><h2>Delivered answers</h2><p id="coverage">No readback yet.</p><p id="scope" class="small"></p><p id="controls" class="small"></p><div id="answers"></div></section>
 </main><script>
 const base=__BASE_JSON__;const byId=id=>document.getElementById(id);let polling=false;
 function element(tag,text,parent,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;if(parent)parent.append(n);return n;}

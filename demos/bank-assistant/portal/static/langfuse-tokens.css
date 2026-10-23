@@ -1,0 +1,496 @@
+/* ==========================================================================
+   LANGFUSE.COM — AGENT REPRODUCTION STYLESHEET
+   Source: rendered homepage + /guides and their served CSS, 2026-09-20.
+   Read STYLEGUIDE.md for precise usage and geometry.
+
+   Plain CSS. Wrap examples in .langfuse-theme. Add .dark to the SAME
+   wrapper for dark mode. Load Inter variable, Geist Mono 500 and licensed
+   F37 Analog 500 separately; no font files are distributed here.
+   Original corner-box-* and stripe selector names are retained.
+   lf-* names and aliases are convenience recipes introduced by this guide.
+   Remote pattern URLs preserve the original website artwork.
+   ========================================================================== */
+
+/* A. MASTER — LANGFUSE.COM — EXACT PUBLISHED THEME DECLARATIONS.
+   Legacy framework HSL variables coexist with brand hex variables.
+   Use --surface-* / --text-* / --line-* for the branded website appearance.
+   --primary is a legacy HSL tuple. --surface-cta-primary becomes olive in dark. */
+
+.langfuse-theme {
+  --background: 0 0% 99%;
+  --foreground: 222.2 84% 4.9%;
+  --muted: 214 32% 91%;
+  --muted-foreground: #7a7a74;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 84% 4.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 84% 4.9%;
+  --ring: 214 32% 91%;
+  --border: 214 32% 91%;
+  --input: 214 32% 91%;
+  --primary: 222.2 47.4% 11.2%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 214 32% 91%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+  --accent: 214 32% 91%;
+  --accent-foreground:  ;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+  --radius: .5rem;
+  --muted-green: 84 81% 44%;
+  --muted-magenta: 330 90% 70%;
+  --muted-blue: 239 84% 67%;
+  --callout-info: #b3abef;
+  --callout-warning: #e09d00;
+  --callout-error: #cc3314;
+  --callout-success: #538a2e;
+  --callout-idea: #119da4;
+  --line-structure: #cfcfc9;
+  --line-divider-dash: #bebeb6;
+  --line-cta: #404039;
+  --line-code-border: #333;
+  --surface-bg: #f6f6f3;
+  --surface-1: #edede8;
+  --surface-2: #e5e5e1;
+  --surface-code: #333;
+  --surface-cta-primary: #fbff81;
+  --surface-beige-accent: #f1ede1;
+  --surface-button-grey: #403d391a;
+  --surface-code-grey: #3d3d3d;
+  --surface-code-button: #51504f;
+  --text-primary: #222220;
+  --text-secondary: #3d3d38;
+  --text-tertiary: #6b6b66;
+  --text-disabled: #a7a7a0;
+  --text-code-secondary: #fffcf280;
+  --text-links: #4f39f6;
+  --text-code-orange: #c17e2e;
+  --text-code-pink: #d05376;
+  --text-code-blue: #438aa5;
+  --button-icon-color: var(--text-tertiary);
+}
+
+.langfuse-theme.dark {
+  --background: 0 0% 6.7%;
+  --foreground: 210 40% 98%;
+  --muted: 0 0% 18%;
+  --muted-foreground: 215 20.2% 65.1%;
+  --popover: 222.2 14% 4.9%;
+  --popover-foreground: 210 40% 98%;
+  --card: 0 0% 0%;
+  --card-foreground: 210 40% 98%;
+  --ring: 0 0% 18%;
+  --border: 0 0% 18%;
+  --input: 0 0% 18%;
+  --primary: 210 40% 98%;
+  --primary-foreground: 222.2 47.4% 11.2%;
+  --secondary: 0 0% 18%;
+  --secondary-foreground: 210 40% 98%;
+  --accent: 0 0% 18%;
+  --accent-foreground:  ;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 0 85.7% 97.3%;
+  --line-structure: #2c2c29;
+  --line-divider-dash: #232320;
+  --line-cta: #b8b6a0;
+  --line-code-border: #3a3a38;
+  --surface-bg: #171714;
+  --surface-1: #1e1e1b;
+  --surface-2: #252522;
+  --surface-code: #0e0e0c;
+  --surface-cta-primary: #4c4d23;
+  --surface-beige-accent: #f1ede1;
+  --surface-button-grey: #ffffff1a;
+  --surface-code-grey: #2a2a2a;
+  --surface-code-button: #3a3937;
+  --text-primary: #e8e8e4;
+  --text-secondary: #b4b4ae;
+  --text-tertiary: #7a7a74;
+  --text-disabled: #4a4a45;
+  --text-code-secondary: #e8e8dc80;
+  --text-links: #7b8ff8;
+  --text-code-orange: #e8935a;
+  --text-code-pink: #e86b9a;
+  --text-code-blue: #6ab8cc;
+  --button-icon-color: var(--text-primary);
+}
+
+.langfuse-theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, Menlo, monospace;
+  --font-analog: "F37 Analog", serif;
+  --color-surface-bg: var(--surface-bg);
+  --color-surface-2: var(--surface-2);
+  --color-line-cta: var(--line-cta);
+  --color-fd-border: var(--line-structure);
+  --lf-nav-primary-height: 60px;
+  --lf-nav-docs-secondary-height: 40px;
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  background: var(--surface-bg);
+}
+
+/* Exact motif rules. SVG masks retain the curved inner 2px corner joint.
+   315deg equals -45deg, but the live stripe uses a 4px tonal ramp, not
+   a hard-edged stripe with transparent gaps. --stripe-mix is consumed only
+   by bg-stripe-pattern and corner-box-hover-stripes, not all variants. */
+
+:where(.langfuse-theme) .pattern-bg {
+  background-image: url(https://langfuse.com/images/patterns/pattern.png);
+  background-position: top;
+  background-repeat: repeat;
+  background-size: 40px 40px;
+  background-color: var(--surface-bg);
+  --cursor-x: 50%;
+  --cursor-y: 50%;
+  isolation: isolate;
+  position: relative;
+}
+
+:where(.langfuse-theme.dark) .pattern-bg {
+  background-image: linear-gradient(to right, hsl(var(--border) / .45) 1px, transparent 1px), linear-gradient(to bottom, hsl(var(--border) / .45) 1px, transparent 1px);
+}
+
+:where(.langfuse-theme) .pattern-bg:before {
+  content: "";
+  pointer-events: none;
+  z-index: 0;
+  background: radial-gradient(circle 50vmax at var(--cursor-x,50%) var(--cursor-y,50%), #f6f6f326, #f6f6f3d9);
+  position: absolute;
+  inset: 0;
+}
+
+:where(.langfuse-theme.dark) .pattern-bg:before {
+  background: radial-gradient(circle 50vmax at var(--cursor-x,50%) var(--cursor-y,50%), #f6f6f338, #f6f6f3f0);
+}
+
+:where(.langfuse-theme) .link-box {
+  position: relative;
+}
+
+:where(.langfuse-theme) .bg-stripe-pattern,:where(.langfuse-theme) .with-stripes,:where(.langfuse-theme) .link-box:hover,:where(.langfuse-theme) .box-custom-hover:after,:where(.langfuse-theme) .card-hover-stripes:after,:where(.langfuse-theme) .corner-box-hover-stripes:hover {
+  --stripe-mix: 20%;
+  --stripe-base: var(--color-surface-bg);
+  --stripe-line: var(--stripe-color,#6c67601a);
+  background: repeating-linear-gradient(315deg, var(--stripe-base), var(--stripe-base) 2px, var(--stripe-line) 4px, var(--stripe-base) 4px);
+}
+
+:where(.langfuse-theme) .with-stripes-alt {
+  --stripe-base: var(--color-surface-2);
+  --stripe-mix: 20%;
+  --stripe-line: var(--stripe-color,#6c676033);
+  background: repeating-linear-gradient(315deg, var(--stripe-base), var(--stripe-base) 2px, var(--stripe-line) 4px, var(--stripe-base) 4px);
+}
+
+:where(.langfuse-theme) .bg-stripe-pattern,:where(.langfuse-theme) .corner-box-hover-stripes:hover {
+  --stripe-line: color-mix(in oklab, var(--stripe-color,var(--color-fd-border)) var(--stripe-mix), var(--stripe-base));
+}
+
+:where(.langfuse-theme.dark) .callout-stripe-fade {
+  background: linear-gradient(to right, var(--stripe-base) 0%, #0006 10%, #0000004d 85%, #0000 100%), repeating-linear-gradient(315deg, var(--stripe-base), var(--stripe-base) 2px, var(--stripe-line) 4px, var(--stripe-base) 4px);
+}
+
+:where(.langfuse-theme) .button-wrapper,:where(.langfuse-theme) .box-custom-hover {
+  position: relative;
+}
+
+:where(.langfuse-theme) .box-custom-hover:after {
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  z-index: -1;
+  transition: opacity .12s,inset .12s;
+  position: absolute;
+  inset: 0;
+}
+
+:where(.langfuse-theme) .box-custom-hover:hover:after {
+  opacity: 1;
+  inset: -6px;
+}
+
+:where(.langfuse-theme) .card-hover-stripes {
+  position: relative;
+}
+
+:where(.langfuse-theme) .card-hover-stripes:after {
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  z-index: -1;
+  transition: opacity .22s;
+  position: absolute;
+  inset: -4px;
+}
+
+:where(.langfuse-theme) .card-hover-stripes:hover:after {
+  opacity: 1;
+}
+
+:where(.langfuse-theme) .hero-bg {
+  background-image: url(https://langfuse.com/images/patterns/hero-bg.png);
+  background-position: top;
+  background-repeat: no-repeat;
+}
+
+:where(.langfuse-theme) .corner-box-corners,:where(.langfuse-theme) .corner-box-corners-flush,:where(.langfuse-theme) .corner-box-corners--hover {
+  --cx-mask-tl: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8' fill='none'%3E%3Cpath d='M8 0V1H3C1.89543 1 1 1.89543 1 3V8H0V0H8Z' fill='black'/%3E%3C/svg%3E");
+  --cx-mask-bl: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8' fill='none'%3E%3Cpath d='M8 8V7H3C1.89543 7 1 6.10457 1 5V0H0V8H8Z' fill='black'/%3E%3C/svg%3E");
+  --cx-mask-br: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8' fill='none'%3E%3Cpath d='M0 8V7H5C6.10457 7 7 6.10457 7 5V0H8V8H0Z' fill='black'/%3E%3C/svg%3E");
+  --cx-mask-tr: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8' fill='none'%3E%3Cpath d='M0 0V1H5C6.10457 1 7 1.89543 7 3V8H8V0H0Z' fill='black'/%3E%3C/svg%3E");
+}
+
+:where(.langfuse-theme) .corner-box-corners:before,:where(.langfuse-theme) .corner-box-corners--hover:before {
+  content: "";
+  pointer-events: none;
+  z-index: 10;
+  background-color: var(--color-line-cta);
+  -webkit-mask-image: var(--cx-mask-tl), var(--cx-mask-bl), var(--cx-mask-br), var(--cx-mask-tr);
+  mask-image: var(--cx-mask-tl), var(--cx-mask-bl), var(--cx-mask-br), var(--cx-mask-tr);
+  position: absolute;
+  inset: -1px;
+  -webkit-mask-position: 0 0,0 100%,100% 100%,100% 0;
+  mask-position: 0 0,0 100%,100% 100%,100% 0;
+  -webkit-mask-size: 8px 8px;
+  mask-size: 8px 8px;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+:where(.langfuse-theme) .corner-box-corners--hover:before {
+  opacity: 0;
+  z-index: 20;
+  transition: opacity .2s;
+}
+
+:where(.langfuse-theme) .corner-box-corners--hover:hover:before {
+  opacity: 1;
+}
+
+:where(.langfuse-theme) .corner-box-corners-flush:before {
+  content: "";
+  pointer-events: none;
+  z-index: 10;
+  background-color: var(--color-line-cta);
+  -webkit-mask-image: var(--cx-mask-tl), var(--cx-mask-bl), var(--cx-mask-br), var(--cx-mask-tr);
+  mask-image: var(--cx-mask-tl), var(--cx-mask-bl), var(--cx-mask-br), var(--cx-mask-tr);
+  position: absolute;
+  inset: 0;
+  -webkit-mask-position: 0 0,0 100%,100% 100%,100% 0;
+  mask-position: 0 0,0 100%,100% 100%,100% 0;
+  -webkit-mask-size: 8px 8px;
+  mask-size: 8px 8px;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+:where(.langfuse-theme) .corner-box-hover-child {
+  pointer-events: none;
+  z-index: 10;
+  position: absolute;
+  inset: 0;
+}
+
+:where(.langfuse-theme) .corner-box-hover-child:before {
+  content: "";
+  background-color: var(--color-line-cta);
+  opacity: 0;
+  transition: opacity .12s;
+  position: absolute;
+  inset: 0;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8' fill='none'%3E%3Cpath d='M8 0V1H3C1.89543 1 1 1.89543 1 3V8H0V0H8Z' fill='black'/%3E%3C/svg%3E"),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8' fill='none'%3E%3Cpath d='M8 8V7H3C1.89543 7 1 6.10457 1 5V0H0V8H8Z' fill='black'/%3E%3C/svg%3E"),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8' fill='none'%3E%3Cpath d='M0 8V7H5C6.10457 7 7 6.10457 7 5V0H8V8H0Z' fill='black'/%3E%3C/svg%3E"),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8' fill='none'%3E%3Cpath d='M0 0V1H5C6.10457 1 7 1.89543 7 3V8H8V0H0Z' fill='black'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8' fill='none'%3E%3Cpath d='M8 0V1H3C1.89543 1 1 1.89543 1 3V8H0V0H8Z' fill='black'/%3E%3C/svg%3E"),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8' fill='none'%3E%3Cpath d='M8 8V7H3C1.89543 7 1 6.10457 1 5V0H0V8H8Z' fill='black'/%3E%3C/svg%3E"),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8' fill='none'%3E%3Cpath d='M0 8V7H5C6.10457 7 7 6.10457 7 5V0H8V8H0Z' fill='black'/%3E%3C/svg%3E"),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8' fill='none'%3E%3Cpath d='M0 0V1H5C6.10457 1 7 1.89543 7 3V8H8V0H0Z' fill='black'/%3E%3C/svg%3E");
+  -webkit-mask-position: 0 0,0 100%,100% 100%,100% 0;
+  mask-position: 0 0,0 100%,100% 100%,100% 0;
+  -webkit-mask-size: 8px 8px;
+  mask-size: 8px 8px;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+:where(.langfuse-theme) .link-box:hover>.corner-box-hover-child:before,:where(.langfuse-theme) .button-wrapper:hover>.corner-box-hover-child:before,:where(.langfuse-theme) .card-hover-stripes:hover .corner-box-hover-child:before {
+  opacity: 1;
+}
+
+:where(.langfuse-theme) .bg-left-corner {
+  background-image: url(https://langfuse.com/images/patterns/left-corner.svg);
+  background-position: 0 0;
+  background-repeat: no-repeat;
+  background-size: 3px;
+}
+
+:where(.langfuse-theme.dark) .bg-left-corner {
+  background-image: url(https://langfuse.com/images/patterns/left-corner-dark.svg);
+}
+
+:where(.langfuse-theme) .bg-right-corner {
+  background-image: url(https://langfuse.com/images/patterns/right-corner.svg);
+  background-position: 100% 0;
+  background-repeat: no-repeat;
+  background-size: 3px;
+}
+
+:where(.langfuse-theme.dark) .bg-right-corner {
+  background-image: url(https://langfuse.com/images/patterns/right-corner-dark.svg);
+}
+
+
+/* B. MASTER-SITE REPRODUCTION RECIPES.
+   lf-* names and --lf-* aliases below are new documentation conveniences.
+   Values come from the inspected homepage / guides DOM, not invented brand tokens.
+   Breakpoint values are compiled site CSS. px values remain px where source does.
+   Box-sizing belongs to Tailwind preflight on the live site; included here. */
+.langfuse-theme, .langfuse-theme *, .langfuse-theme *::before,
+.langfuse-theme *::after { box-sizing: border-box; }
+.langfuse-theme {
+  --lf-corner-size: 8px;
+  --lf-corner-stroke: 1px;
+  --lf-radius-button: 2px;
+  --lf-radius-keycap: 1px;
+  --lf-border-width: 1px;
+  --lf-stripe-period: 4px;
+  --lf-hero-marker: #fbff7a; /* Actual homepage override, not #fbff81 token. */
+  --lf-button-shadow: 0 4px 8px 0 rgb(0 0 0 / 5%), 0 4px 4px 0 rgb(0 0 0 / 3%);
+  --lf-space-unit: 0.25rem;
+  --lf-sidebar-width: 240px;
+  --lf-section-gap: 120px;
+}
+/* The outer page / chrome is surface-1. Content panels are surface-bg. */
+:where(.langfuse-theme) .lf-chrome { background: var(--surface-1); }
+:where(.langfuse-theme) .lf-frame {
+  position: relative;
+  border: 1px solid var(--line-structure);
+  border-radius: 0;
+  background: var(--surface-bg);
+  color: var(--text-primary);
+}
+/* Combine .lf-frame + .corner-box-corners; -1px overlaps shared borders. */
+:where(.langfuse-theme) .lf-frame + .lf-frame { margin-top: -1px; }
+:where(.langfuse-theme) .lf-guide-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 140px;
+  gap: 12px;
+  padding: 16px;
+}
+:where(.langfuse-theme) .lf-feature-card {
+  border: 1px solid var(--line-structure);
+  border-radius: 2px;
+  background: var(--surface-bg);
+  position: relative;
+  transition: background 180ms ease-out;
+}
+:where(.langfuse-theme) .lf-hero-type,
+:where(.langfuse-theme) .lf-heading,
+:where(.langfuse-theme) .lf-card-title {
+  font-family: var(--font-analog);
+  font-weight: 500;
+  font-style: normal;
+  font-variant-numeric: ordinal;
+  font-feature-settings: "dlig" on;
+  letter-spacing: normal;
+  color: var(--text-primary);
+}
+:where(.langfuse-theme) .lf-hero-type { font-size: 44px; line-height: 1.05; }
+@media (max-width: 390px) { :where(.langfuse-theme) .lf-hero-type { font-size: 35px; } }
+@media (min-width: 768px) { :where(.langfuse-theme) .lf-hero-type { font-size: 54px; } }
+@media (min-width: 1280px) { :where(.langfuse-theme) .lf-hero-type { font-size: 68px; } }
+:where(.langfuse-theme) .lf-heading { font-size: 32px; line-height: 1.15; }
+:where(.langfuse-theme) .lf-card-title { font-size: 15px; line-height: 1.15; }
+:where(.langfuse-theme) .lf-body {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: -0.075px;
+  font-variant-numeric: ordinal;
+  color: var(--text-tertiary);
+}
+:where(.langfuse-theme) .lf-compact {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 430;
+  line-height: 1.5;
+  letter-spacing: -0.26px;
+  font-variant-numeric: ordinal;
+  color: var(--text-tertiary);
+  transition: color 220ms;
+}
+@media (min-width: 1024px) { :where(.langfuse-theme) .lf-compact { line-height: 1.2; } }
+:where(.langfuse-theme) .lf-frame:hover .lf-compact { color: var(--text-secondary); }
+/* Homepage marker: separate absolutely positioned band, not a full text box fill.
+   Wrap the actual words in .lf-marker__text so they paint above the band.
+   No dark override for this literal colour was present in the inspected DOM. */
+:where(.langfuse-theme) .lf-marker { display: inline-flex; position: relative; align-items: center; white-space: nowrap; }
+:where(.langfuse-theme) .lf-marker::before {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; top: 50%;
+  height: 0.76em;
+  transform: translateY(-52%);
+  background: var(--lf-hero-marker);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+:where(.langfuse-theme) .lf-marker__text { position: relative; }
+/* Master-site button: ink primary; light secondary; both shallow rectangles.
+   The visible label is 12px / 450 even though the outer anchor inherits 16px. */
+:where(.langfuse-theme) .lf-button {
+  display: inline-flex; align-items: center; justify-content: flex-start;
+  min-width: 0; max-width: 100%; height: 32px; gap: 6px;
+  padding: 3px 10px;
+  border: 1px solid var(--text-secondary); border-radius: 2px;
+  background: var(--text-primary); color: var(--surface-bg);
+  box-shadow: var(--lf-button-shadow);
+  text-decoration: none; overflow: hidden; cursor: pointer;
+  transition: color 150ms cubic-bezier(.4,0,.2,1), background-color 150ms cubic-bezier(.4,0,.2,1), border-color 150ms cubic-bezier(.4,0,.2,1);
+}
+:where(.langfuse-theme) .lf-button__label,
+:where(.langfuse-theme) .lf-keycap {
+  font-family: var(--font-sans); font-size: 12px; font-weight: 450;
+  line-height: 1.5; letter-spacing: -0.06px; font-variant-numeric: ordinal;
+  padding: 0; font-style: normal;
+}
+:where(.langfuse-theme) .lf-button__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:where(.langfuse-theme) .lf-keycap {
+  display: none; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 20px; height: 20px; border-radius: 1px;
+  border: 1px solid rgb(64 61 57 / 30%); background: rgb(64 61 57 / 40%);
+}
+@media (min-width: 1024px) {
+  :where(.langfuse-theme) .lf-button { padding-right: 3px; }
+  :where(.langfuse-theme) .lf-keycap { display: flex; }
+}
+:where(.langfuse-theme) .lf-button--secondary { border-color: var(--line-structure); background: var(--surface-bg); color: var(--text-secondary); }
+:where(.langfuse-theme.dark) .lf-button--secondary { border-color: var(--line-cta); }
+:where(.langfuse-theme) .lf-button--secondary .lf-keycap { border-color: rgb(64 61 57 / 20%); background: rgb(64 61 57 / 10%); }
+:where(.langfuse-theme.dark) .lf-button--secondary .lf-keycap { border-color: rgb(184 182 160 / 30%); background: rgb(184 182 160 / 12%); }
+:where(.langfuse-theme) .lf-button:disabled { pointer-events: none; opacity: .5; }
+/* Equivalent to the observed two-pixel Tailwind ring + two-pixel offset.
+   This reproduces the site's neutral --ring. */
+:where(.langfuse-theme) .lf-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring)), var(--lf-button-shadow);
+}
+:where(.langfuse-theme) .lf-section { margin-inline: auto; width: 100%; padding-inline: 16px; padding-top: 120px; }
+:where(.langfuse-theme) .lf-section--first { padding-top: 20px; }
+@media (min-width: 640px) {
+  :where(.langfuse-theme) .lf-section { padding-inline: 32px; }
+  :where(.langfuse-theme) .lf-section--first { padding-top: 32px; }
+}
+@media (min-width: 768px) {
+  :where(.langfuse-theme) .lf-section { padding-inline: 0; max-width: 680px; }
+  :where(.langfuse-theme) .lf-section--first { padding-top: 60px; }
+}
+@media (min-width: 1280px) { :where(.langfuse-theme) .lf-section { max-width: 840px; } }
+/* Exact observed hero interior dimensions; combine with .lf-frame. */
+:where(.langfuse-theme) .lf-hero-panel { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 32px 16px; }
+@media (min-width: 640px) { :where(.langfuse-theme) .lf-hero-panel { gap: 32px; padding: 40px 32px; } }
+@media (min-width: 768px) { :where(.langfuse-theme) .lf-hero-panel { gap: 40px; } }
+/* Icon details from guides card: 24-unit Lucide geometry, stroke 2,
+   round caps / joins, 20px rendered SVG inside a 16px flex slot. */
+:where(.langfuse-theme) .lf-icon-slot { display: flex; width: 16px; height: 16px; flex-shrink: 0; align-items: center; justify-content: center; color: var(--text-tertiary); }
+:where(.langfuse-theme) .lf-icon-slot > svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+
