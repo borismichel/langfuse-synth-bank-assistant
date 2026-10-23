@@ -152,13 +152,12 @@ def run_prepare_cohorts(cfg, *, timeout_seconds=60):
 
 
 def add_runbook(cfg, identity, receipt):
-    from pathlib import Path
-    path = Path(os.environ.get('SYNTH_OUT_DIR', '/app/out')) / 'DEMO_SCRIPT.md'
-    source = path.read_text().split('\n\n## Prepared evaluation assets\n', 1)[0]
+    from .runbook import read_runbook, write_runbook
+    source = read_runbook().split('\n\n## Prepared evaluation assets\n', 1)[0]
     links = '\n'.join(f'- [{key}]({ds["url"]}): {len(ds["item_ids"])} fixed items; snapshot `{ds["snapshot_at"]}`; cohort `{ds["cohort_hash"]}`.'
                       for key,ds in receipt['datasets'].items())
     prompts = '\n'.join(f'- [{key}]({p["url"]}): version {p["version"]}.' for key,p in identity['prompts'].items())
-    path.write_text(source + '\n\n## Prepared evaluation assets\n\n'
+    write_runbook(source + '\n\n## Prepared evaluation assets\n\n'
         + f'History run: `{receipt["history_run_id"]}`. Prepared: {receipt["prepared_at"]}. '
         + 'Reference labels are constructed fixtures. No evaluator was activated and no model ran during preparation.\n\n'
         + links + '\n\n### Prepared rubric prompt versions\n\n' + prompts + '\n')
