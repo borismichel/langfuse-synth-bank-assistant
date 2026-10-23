@@ -116,8 +116,8 @@ artifacts:
 assets:
   screenshots:
   - docs/screenshots/spanish-voice-fixture.png
-  - docs/screenshots/provider-comparison-fixture.png
-  - docs/screenshots/prompt-release-fixture.png
+  - docs/screenshots/provider-comparison-fixture.jpg
+  - docs/screenshots/prompt-release-fixture.jpg
   docs:
   - path: docs/DEPOT_KIT.md
     title: Overview

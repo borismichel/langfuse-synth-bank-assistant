@@ -30,21 +30,21 @@ These captures show the delivered browser controls against model-free local API 
 
 ### Spanish voice interface after an explicitly confirmed synthetic card block
 
-![Local fixture: Spanish voice interface after an explicitly confirmed synthetic card block](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/3323283acac8a1edbd4cbfddf10eb868597fb7ab/docs/screenshots/spanish-voice-fixture.png)
+![Local fixture: Spanish voice interface after an explicitly confirmed synthetic card block](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/4e718b3bf18bb77752b8e43de6122c1695552796/docs/screenshots/spanish-voice-fixture.png)
 
-[Open full-size fixture capture](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/3323283acac8a1edbd4cbfddf10eb868597fb7ab/docs/screenshots/spanish-voice-fixture.png)
+[Open full-size fixture capture](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/4e718b3bf18bb77752b8e43de6122c1695552796/docs/screenshots/spanish-voice-fixture.png)
 
 ### Provider comparison with separately displayed application and judge accounting
 
-![Local fixture: Provider comparison with separately displayed application and judge accounting](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/3323283acac8a1edbd4cbfddf10eb868597fb7ab/docs/screenshots/provider-comparison-fixture.png)
+![Local fixture: Provider comparison with separately displayed application and judge accounting](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/4e718b3bf18bb77752b8e43de6122c1695552796/docs/screenshots/provider-comparison-fixture.jpg)
 
-[Open full-size fixture capture](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/3323283acac8a1edbd4cbfddf10eb868597fb7ab/docs/screenshots/provider-comparison-fixture.png)
+[Open full-size fixture capture](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/4e718b3bf18bb77752b8e43de6122c1695552796/docs/screenshots/provider-comparison-fixture.jpg)
 
 ### Prompt release controls after promotion and recorded-version rollback
 
-![Local fixture: Prompt release controls after promotion and recorded-version rollback](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/3323283acac8a1edbd4cbfddf10eb868597fb7ab/docs/screenshots/prompt-release-fixture.png)
+![Local fixture: Prompt release controls after promotion and recorded-version rollback](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/4e718b3bf18bb77752b8e43de6122c1695552796/docs/screenshots/prompt-release-fixture.jpg)
 
-[Open full-size fixture capture](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/3323283acac8a1edbd4cbfddf10eb868597fb7ab/docs/screenshots/prompt-release-fixture.png)
+[Open full-size fixture capture](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/4e718b3bf18bb77752b8e43de6122c1695552796/docs/screenshots/prompt-release-fixture.jpg)
 
 ## Historical walkthrough
 
