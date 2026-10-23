@@ -29,6 +29,8 @@ class API(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(payload).encode())
     def do_POST(self):
         body = self.rfile.read(int(self.headers['Content-Length']))
+        from operation_fixture import respond
+        if respond(self,body): return
         if self.headers.get('Content-Encoding') == 'gzip':
             body = gzip.decompress(body)
         if urlparse(self.path).path.endswith('/otel/v1/traces') and body:
@@ -62,6 +64,8 @@ server = ThreadingHTTPServer(('127.0.0.1', 0), API)
 thread = Thread(target=server.serve_forever, daemon=True); thread.start()
 base = f'http://127.0.0.1:{server.server_port}'
 os.environ.update(NORTHWIND_PROFILE='nonexistent-workstation-profile', LANGFUSE_HOST='http://unreachable.invalid', LANGFUSE_BASE_URL=base, LANGFUSE_PUBLIC_KEY='pk-fixture', LANGFUSE_SECRET_KEY='sk-fixture', ANTHROPIC_API_KEY='fixture-key', OPENAI_API_KEY='fixture-openai-key', LLM_PROVIDER=os.environ.get('BANK_TEST_PROVIDER', 'anthropic'))
+from operation_fixture import configure
+configure(server.server_port)
 from langfuse_synth_core.companion import CompanionAdapter
 from synth.config import load_config
 from synth.companion.app import create_app, REQUIRES_SECRETS
