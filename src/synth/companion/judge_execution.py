@@ -1,9 +1,10 @@
 """One bounded primary-provider call with an observed generation and fresh cap check."""
+import json
 import time
 
 
-def call_judge(adapter,*,model,prompt,inputs,name='faithfulness-judge',check=lambda:None,on_dispatch=lambda:None):
-    """Expected labels must never be included in inputs; parsing belongs to the rubric."""
+def call_judge(adapter,*,model,prompt,inputs,name='faithfulness-judge',check=lambda:None,on_dispatch=lambda:None,categories=None,score_values=None):
+    """Expected labels never enter inputs; the rubric chooses the allowed result values."""
     if set(inputs)!={'query','context','generation'}:
         raise ValueError('Judge inputs must contain only query, context and generation')
     if not callable(getattr(adapter,'check_spending',None)):
@@ -12,6 +13,20 @@ def call_judge(adapter,*,model,prompt,inputs,name='faithfulness-judge',check=lam
     client=llm.bind().with_options(max_retries=0,timeout=30,
         **({'open_telemetry':False} if provider=='anthropic' else {}))
     text=prompt.compile(**inputs)
+    if (categories is None)==(score_values is None):
+        raise ValueError('Exactly one judge result schema is required')
+    if categories is not None:
+        if not categories or any(type(v) is not str for v in categories) or len(set(categories))!=len(categories):
+            raise ValueError('Judge categories must be distinct strings')
+        field,reason,values='verdict','reasoning',list(categories)
+        kind='string'
+    else:
+        if not score_values or any(v is not None and (type(v) not in (int,float) or v not in (0,0.5,1)) for v in score_values):
+            raise ValueError('Judge scores must be explicit rubric values')
+        field,reason,values='score','reason',list(score_values)
+        kind=['number','null'] if None in values else 'number'
+    schema={'type':'object','properties':{reason:{'type':'string'},field:{'type':kind,'enum':values}},
+            'required':[reason,field],'additionalProperties':False}
     check()
     adapter.check_spending(provider)
     check()
@@ -20,14 +35,32 @@ def call_judge(adapter,*,model,prompt,inputs,name='faithfulness-judge',check=lam
     with adapter.langfuse().start_as_current_observation(as_type='generation',name=name,
             model=model,input=text,prompt=prompt,metadata={'judge_provider':provider}) as generation:
         if provider=='anthropic':
-            response=client.messages.create(model=model,max_tokens=500,messages=[{'role':'user','content':text}])
+            response=client.messages.create(model=model,max_tokens=500,messages=[{'role':'user','content':text}],
+                output_config={'format':{'type':'json_schema','schema':schema}})
             output=''.join(block.text for block in response.content if block.type=='text')
+            complete=response.stop_reason=='end_turn'
             usage={'input':getattr(response.usage,'input_tokens',None),'output':getattr(response.usage,'output_tokens',None)}
         elif provider=='openai':
-            response=client.chat.completions.create(model=model,max_tokens=500,messages=[{'role':'user','content':text}])
+            response=client.chat.completions.create(model=model,max_tokens=500,messages=[{'role':'user','content':text}],
+                response_format={'type':'json_schema','json_schema':{'name':'judge_result','strict':True,'schema':schema}})
             output=response.choices[0].message.content or ''
+            complete=response.choices[0].finish_reason=='stop' and not response.choices[0].message.refusal
             usage={'input':getattr(response.usage,'prompt_tokens',None),'output':getattr(response.usage,'completion_tokens',None)}
         else:raise ValueError('Unsupported selected judge provider')
         if any(type(value) is not int or value<0 for value in usage.values()):usage=None
         generation.update(output=output,usage_details=usage,metadata={'judge_provider':provider,'provider_usage_reported':usage is not None})
-    return {'text':output,'usage':usage,'generation_id':generation.id,'generation_trace_id':generation.trace_id,'latency_ms':round((time.monotonic()-started)*1000,2)}
+    try:
+        def unique_fields(pairs):
+            value={}
+            for key,item in pairs:
+                if key in value:raise ValueError('Duplicate judge output field')
+                value[key]=item
+            return value
+        decoded=json.loads(output,object_pairs_hook=unique_fields)
+    except (ValueError,TypeError):decoded=None
+    # Never infer a result from prose, unknown labels, or partial JSON. bool is not a numeric score.
+    valid=(complete and isinstance(decoded,dict) and set(decoded)=={reason,field} and
+        type(decoded[reason]) is str and type(decoded[field]) in ((str,) if categories is not None else (int,float,type(None))) and
+        decoded[field] in values)
+    result={field:decoded[field] if valid else None,'output_valid':valid}
+    return {**result,'text':output,'usage':usage,'generation_id':generation.id,'generation_trace_id':generation.trace_id,'latency_ms':round((time.monotonic()-started)*1000,2)}

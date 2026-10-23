@@ -196,7 +196,25 @@ def provider_fixture(env,data,monkeypatch):
             if data.get('hold'):
                 entered,release=data['hold'];entered.set();release.wait(10)
             if body['model']=='fixture-judge':
-                content=[{'type':'text','text':data.get('judge_response','pass')}]
+                # The live Haiku judge answered with formatted evidence, not a bare label.
+                # Constrained decoding is honoured only when the real HTTP request asks for it.
+                fmt=body.get('output_config',{}).get('format',{})
+                if fmt.get('type')=='json_schema':
+                    schema=fmt['schema']
+                    assert schema['additionalProperties'] is False
+                    if 'verdict' in schema['properties']:
+                        assert set(schema['required'])=={'reasoning','verdict'}
+                        assert schema['properties']['verdict']['enum'] in (
+                            ['pass','fail','unknown'],['pass','fail','minor','unknown'])
+                        answer=json.dumps({'reasoning':'The supplied evidence supports this verdict.',
+                                           'verdict':data.get('judge_response','pass')})
+                    else:
+                        assert set(schema['required'])=={'reason','score'}
+                        assert schema['properties']['score']['enum'] in ([0,0.5,1],[0,0.5,1,None])
+                        answer=json.dumps({'reason':'The supplied evidence supports this score.','score':1})
+                else:
+                    answer='**Evidence:** The answer cites the approved policy.\n\n**Verdict: pass**'
+                content=[{'type':'text','text':answer}]
             else:
                 question=body['messages'][0]['content']
                 if isinstance(question,list):question=''.join(block.get('text','') for block in question)

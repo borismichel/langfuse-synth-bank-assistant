@@ -196,6 +196,13 @@ def spending_fixture(env,target,monkeypatch):
             target['model_calls'].append(body)
             raw=target.get('responses',['{"score":1,"reason":"Fixture"}'])
             text=raw[(len(target['model_calls'])-1)%len(raw)]
+            fmt=body.get('output_config',{}).get('format',{})
+            if fmt.get('type')!='json_schema':
+                text='**Evidence:** The answer is supported.\n\n**Score: 1**'
+            else:
+                assert fmt['schema']=={'type':'object','properties':{'reason':{'type':'string'},
+                    'score':{'type':'number','enum':[0,0.5,1]}},
+                    'required':['reason','score'],'additionalProperties':False}
             return 200,dict(id='message-fixture',type='message',role='assistant',model=body['model'],
                 content=[{'type':'text','text':text}],stop_reason='end_turn',stop_sequence=None,usage={'input_tokens':30,'output_tokens':12})
         if method=='POST' and path.endswith('/scores') and isinstance(body,list) and any(x.get('name','').startswith('judge-') for x in body):

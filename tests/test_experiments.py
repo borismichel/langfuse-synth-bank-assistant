@@ -28,3 +28,21 @@ def test_actual_agent_exact_prompt_policy_usage_and_per_call_permission(provider
     result = subprocess.run([sys.executable, 'tests/sdk_experiment_agent_case.py'], env=env,
         capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize('provider',['anthropic','openai'])
+def test_categorical_judge_output_contract_and_invalid_results(provider):
+    env = {k: v for k, v in os.environ.items() if k in ('PATH', 'HOME', 'TMPDIR', 'LANG')}
+    env['PYTHONPATH'] = os.pathsep.join(['src', 'tests', 'demos/bank-assistant'])
+    env['BANK_TEST_PROVIDER'] = provider
+    result = subprocess.run([sys.executable, 'tests/sdk_judge_format_case.py'], env=env,
+        capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_invalid_judge_stops_delivered_comparison_without_retry():
+    env = {k: v for k, v in os.environ.items() if k in ('PATH', 'HOME', 'TMPDIR', 'LANG')}
+    env['PYTHONPATH'] = os.pathsep.join(['src', 'tests', 'demos/bank-assistant'])
+    result = subprocess.run([sys.executable, '-m', 'pytest', 'tests/sdk_invalid_judge_case.py', '-q'], env=env,
+        capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
