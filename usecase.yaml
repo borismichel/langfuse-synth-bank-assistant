@@ -25,6 +25,7 @@ config_schema:
       type: integer
       default: 42
       minimum: 0
+      maximum: 2147483647
       title: Generation seed
       description: Deterministic RNG seed for the whole dataset. Vary it to mint a
         distinct trace/id set per deployment; the same seed always materializes the
@@ -35,10 +36,36 @@ config_schema:
       minimum: 58
       maximum: 256
       default: 64
-      title: Target traces
+      title: Turn traces
       description: Includes 58 mandatory banking turns. Additional traces add background
         conversations without removing required cases.
+    generation.history_days:
+      type: integer
+      enum: [1, 2, 7, 30, 90]
+      default: 7
+      title: History window (days)
+      description: Inclusive UTC history window ending on the selected run date.
   required: []
+setup:
+  version: 1
+  fields:
+    runtime.apm_enabled: {group: scenario}
+    generation.target_traces: {group: volume}
+    generation.history_days: {group: volume}
+    generation.seed: {group: advanced}
+  schedule:
+    timezone: UTC
+    end: inclusive
+    history: {field: generation.history_days}
+  presets:
+    quick_rehearsal:
+      label: Quick rehearsal
+      values:
+        generation.target_traces: 58
+  host_defaults:
+    cloud_eu: {generation.target_traces: 64}
+    cloud_us: {generation.target_traces: 64}
+    self_hosted: {generation.target_traces: 64}
 pipeline:
 - id: probe
   run: synth probe --config {config}

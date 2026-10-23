@@ -1,12 +1,4 @@
-"""Kit config model + loader, and the canonical `target_traces` derivation hook.
-
-The load-and-override *mechanism* lives in the shared library
-(`langfuse_synth_core.config.load_config`); this module supplies only the kit's config
-*shape* (the `model_factory`) and the derivation hook — pre-wired to the library's trivial
-identity derivation (direct count). Replace the identity hook with a bespoke deterministic
-mapping when the kit grows a real internal volume model (keep it deterministic so the
-golden gate holds).
-"""
+"""Validated banking generation values; core owns loading and canonical volume overrides."""
 from __future__ import annotations
 
 import os
@@ -42,6 +34,7 @@ class Target:
 class Generation:
     seed: int = 42
     target_traces: int = 64
+    history_days: int = 7
     # The operator's as-of date: the portal sends `--set generation.as_of_date=YYYY-MM-DD`
     # on every forward generate (portal #72), and the seeded window ends on that day. None
     # means "no tether set" — the CLI path and the no-tether portal path both omit the key —
@@ -67,8 +60,16 @@ def _model_factory(raw: dict) -> Config:
     raw = raw or {}
     target = raw.get("target") or {}
     generation = raw.get("generation") or {}
-    if not 58 <= int(generation.get("target_traces", 64)) <= 256:
-        raise ValueError("Banking history requires 58–256 traces")
+    unknown = set(generation) - {'seed', 'target_traces', 'history_days', 'as_of_date'}
+    if unknown:
+        raise ValueError('Unknown generation fields: ' + ', '.join(sorted(unknown)))
+    for key, default, minimum, maximum in [('target_traces', 64, 58, 256),
+                                           ('history_days', 7, 1, 90), ('seed', 42, 0, 2147483647)]:
+        value = generation.get(key, default)
+        if type(value) is not int or not minimum <= value <= maximum:
+            raise ValueError(f'generation.{key} must be an integer from {minimum} to {maximum}')
+    if generation.get('history_days', 7) not in (1, 2, 7, 30, 90):
+        raise ValueError('generation.history_days must be 1, 2, 7, 30 or 90')
     enabled = (raw.get('runtime') or {}).get('apm_enabled', False)
     if type(enabled) is not bool:
         raise ValueError('runtime.apm_enabled must be a boolean')
@@ -81,6 +82,7 @@ def _model_factory(raw: dict) -> Config:
         generation=Generation(
             seed=int(generation.get("seed", 42)),
             target_traces=int(generation.get("target_traces", 64)),
+            history_days=generation.get("history_days", 7),
             as_of_date=parse_as_of_date(generation.get("as_of_date")),
         ),
     )
@@ -91,8 +93,5 @@ def load_config(path: str | Path, overrides: list[str] | None = None) -> Config:
     return _load_config(path, _model_factory, overrides)
 
 
-# The canonical `generation.target_traces` derivation hook (Spec A §4), pre-wired to the
-# library's trivial identity derivation (direct count: target_traces -> target_traces).
-# Deterministic by contract — identical inputs yield identical internal params — so the
-# determinism golden gate holds. Swap for a bespoke mapping in the kit's own migration.
+# A turn is one trace; background growth never changes the fixed 58 required turns.
 DERIVATION_HOOK = identity_derivation

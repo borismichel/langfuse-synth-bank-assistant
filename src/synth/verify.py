@@ -55,6 +55,7 @@ def run_verify(
         validate_anchors(receipt.history_anchors, receipt.history_run_id)
         if (receipt.base_url != cfg.target.base_url
                 or receipt.public_key != os.environ.get("LANGFUSE_PUBLIC_KEY", "")
+                or receipt.history_days != cfg.generation.history_days
                 or receipt.seed != cfg.generation.seed
                 or receipt.target_traces != cfg.generation.target_traces
                 or receipt.as_of_date != str(cfg.generation.as_of_date or "")):
@@ -64,13 +65,16 @@ def run_verify(
     else:
         profile = TargetProfile.detect(cfg.target.base_url)
         reader = profile.reader(attempts=1)
-        log(f"· verifying against {profile.label} ({profile.base_url})")
+        log(f"· verifying against {profile.label} ({profile.base_url})", flush=True)
         deadline = clock() + timeout_seconds
         while True:
             try:
                 report = VerifyReport()
-                for case in receipt.history_anchors['cases']:
+                total = len(receipt.history_anchors['cases'])
+                for index, case in enumerate(receipt.history_anchors['cases'], 1):
+                    log(f'Checking historical turn {index}/{total}: {case["case_id"]}', flush=True)
                     report.add(case['case_id'], *check_case(reader, case))
+                    log(f'Checked historical turn {index}/{total}: ' + ('visible' if report.checks[-1].ok else 'incomplete'), flush=True)
             except (ReadError, requests.RequestException) as exc:
                 report = VerifyReport()
                 report.add("target_read", False, f"Cannot read expected records: {exc}")
@@ -85,5 +89,5 @@ def run_verify(
             log("Waiting for current-run records to become visible", flush=True)
             sleep(min(poll_interval, remaining))
     for check in report.checks:
-        log(f"{'✓' if check.ok else '✗'} {check.name}: {check.detail}")
+        log(f"{'✓' if check.ok else '✗'} {check.name}: {check.detail}", flush=True)
     return report

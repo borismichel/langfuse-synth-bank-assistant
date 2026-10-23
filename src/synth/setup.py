@@ -1,13 +1,13 @@
 """Model-free prompt setup, after the standard estimate confirmation."""
 from langfuse.api import NotFoundError
 from langfuse_synth_core.lfclient import get_langfuse
-from .pipeline import run_probe
+from .pipeline import check_target
 
 
 def run_setup_prompts(cfg):
     from northwind.prompts import PROMPT_NAME, V5_RELEASE
     print('Checking the banking production prompt', flush=True)
-    run_probe(cfg)
+    check_target(cfg)
     client = get_langfuse(cfg)
     try:
         try:

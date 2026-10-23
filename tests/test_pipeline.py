@@ -69,14 +69,18 @@ from threading import Thread
 
 
 @contextmanager
-def target_server(version='4.59.0', reject_import=False, evidence=None):
+def target_server(version='4.59.0', reject_import=False, evidence=None, barrier=None):
     """The external API seam: no kit implementation collaborators are replaced."""
     posts = []
+    probe_rows = []
     class TargetHandler(BaseHTTPRequestHandler):
         def log_message(self, *args):
             pass
 
         def do_GET(self):
+            if barrier and barrier[0] in self.path and not barrier[1].is_set():
+                barrier[1].set()
+                assert barrier[2].wait(10), 'public API barrier was not released'
             if self.path.startswith('/api/public/health'):
                 body = {'version': version}
             elif self.path.startswith('/api/public/projects'):
@@ -85,7 +89,7 @@ def target_server(version='4.59.0', reject_import=False, evidence=None):
                 from urllib.parse import urlparse, parse_qs
                 url = urlparse(self.path)
                 params = parse_qs(url.query)
-                rows = evidence['scores' if url.path.endswith('/scores') else 'observations']
+                rows = evidence['scores' if url.path.endswith('/scores') else 'observations'] + (probe_rows if url.path.endswith('/observations') else [])
                 trace_id = params.get('traceId', [None])[0]
                 body = {'data': [row for row in rows if trace_id is None or
                     (row.get('traceId') or row.get('subject', {}).get('traceId')) == trace_id], 'meta': {}}
@@ -108,7 +112,21 @@ def target_server(version='4.59.0', reject_import=False, evidence=None):
 
         def do_POST(self):
             posts.append(self.path)
-            self.rfile.read(int(self.headers['Content-Length']))
+            raw = self.rfile.read(int(self.headers['Content-Length']))
+            if self.path.endswith('/otel/v1/traces') and not reject_import:
+                import gzip
+                from datetime import datetime, timezone
+                if self.headers.get('Content-Encoding') == 'gzip':
+                    raw = gzip.decompress(raw)
+                batch = json.loads(raw)
+                for resource in batch['resourceSpans']:
+                    for scope in resource['scopeSpans']:
+                        for span in scope['spans']:
+                            if span['name'] in ('northwind.probe.backdate_check', 'probe.marker'):
+                                probe_rows.append(dict(id=span['spanId'], traceId=span['traceId'],
+                                    parentObservationId=span.get('parentSpanId'), type='SPAN', name=span['name'],
+                                    startTime=datetime.fromtimestamp(int(span['startTimeUnixNano'])/1e9, timezone.utc).isoformat(),
+                                    environment='staging', metadata={}, input=None, output=None))
             self.send_response(400 if reject_import else 200)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
@@ -158,3 +176,112 @@ def test_successful_import_delivers_links_but_empty_target_does_not_verify(tmp_p
         result = invoke(tmp_path, 'verify', '--timeout-seconds', '0', '--set', 'generation.seed=17', extra_env=env)
         assert result.returncode == 1
         assert 'missing trace' in result.stdout
+
+
+def test_configured_history_window_and_exact_volume_plan(tmp_path):
+    from datetime import datetime, timezone
+    from langfuse_synth_core.seed.count import count_spool
+    args = ('--set', 'generation.target_traces=58', '--set', 'generation.history_days=2',
+            '--set', 'generation.as_of_date=2026-10-20')
+    generated = invoke(tmp_path, 'generate-spool', *args)
+    assert generated.returncode == 0, generated.stderr
+    rows = [json.loads(line) for line in (tmp_path / 'state/events.ndjson').read_text().splitlines()]
+    dates = {datetime.fromtimestamp(int(row['startTimeUnixNano']) / 1e9, timezone.utc).date().isoformat()
+             for row in rows if row.get('name') == 'northwind-assistant'}
+    assert dates == {'2026-10-19', '2026-10-20'}, dates
+    before = (tmp_path / 'state/pending-run.json').read_bytes()
+    planned = invoke(tmp_path, 'plan', *args)
+    assert planned.returncode == 0, planned.stderr
+    counts = json.loads(next(line.split('=', 1)[1] for line in planned.stdout.splitlines() if line.startswith('PLAN_COUNTS=')))
+    measured = count_spool(tmp_path / 'state/events.ndjson')
+    assert counts == {'version':1, **{k: measured[k] for k in ('traces', 'observations', 'scores')}}
+    assert counts == {'version': 1, 'traces': 58, 'observations': 396, 'scores': 480}
+    assert (tmp_path / 'state/pending-run.json').read_bytes() == before
+    assert 'Seed model calls: 0' in planned.stdout
+
+
+def test_configuration_rejects_invalid_types_ranges_and_unknown_generation_fields(tmp_path):
+    for value in ('generation.target_traces=true', 'generation.target_traces=58.5',
+                  'generation.history_days=0', 'generation.history_days=91',
+                  'generation.seed=-1', 'generation.seed=0.5', 'generation.unknown=1'):
+        result = invoke(tmp_path, 'generate-spool', '--set', value)
+        assert result.returncode != 0, value
+        assert not (tmp_path / 'state/events.ndjson').exists()
+
+
+def test_probe_verifies_backdated_ingestion_before_bulk_setup(tmp_path):
+    with target_server(evidence={'observations': [], 'scores': []}) as (env, posts):
+        result = invoke(tmp_path, 'probe', extra_env=env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert any(path.endswith('/otel/v1/traces') for path in posts)
+    assert 'PROBE PASSED' in result.stdout
+
+
+def test_setup_reports_progress_through_a_pipe_while_target_work_is_blocked(tmp_path):
+    from threading import Event
+    entered, release = Event(), Event()
+    with target_server(barrier=('/api/public/v2/prompts/', entered, release)) as (env, _):
+        runtime = {k: v for k,v in os.environ.items() if not any(key in k for key in ('LANGFUSE','ANTHROPIC','OPENAI','PROXY','proxy'))}
+        runtime.update(env, PYTHONPATH=str(ROOT/'src'), SYNTH_STATE_DIR=str(tmp_path/'state'))
+        process = subprocess.Popen([sys.executable, '-m', 'synth.cli', 'setup-prompts', '--config', 'config/demo.yaml'],
+                                   cwd=ROOT, env=runtime, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            assert entered.wait(8), 'setup never reached the public prompt API'
+            assert process.poll() is None
+            # CLI phase output must already be available while the API call is blocked.
+            import select
+            assert select.select([process.stdout], [], [], 1)[0], 'buffered phase output'
+            first = process.stdout.readline()
+            assert 'Starting setup-prompts' in first
+        finally:
+            release.set()
+        out, err = process.communicate(timeout=10)
+        assert process.returncode == 0, err
+        assert 'Resolved historical prompt 3/3' in out
+
+
+def test_reduced_default_and_maximum_candidate_plans_count_actual_records(tmp_path):
+    from langfuse_synth_core.seed.count import count_spool
+    for volume, observations, scores in [(256, 1980, 2262), (64, 444, 534), (58, 396, 480)]:
+        args = ('--set', f'generation.target_traces={volume}', '--set', 'generation.history_days=90',
+                '--set', 'generation.as_of_date=2027-01-01')
+        plan = invoke(tmp_path, 'plan', *args)
+        assert plan.returncode == 0, plan.stderr
+        counted = json.loads(next(line.split('=',1)[1] for line in plan.stdout.splitlines() if line.startswith('PLAN_COUNTS=')))
+        assert counted == {'version':1, 'traces':volume, 'observations':observations, 'scores':scores}
+        assert 'qualification is pending' in plan.stdout
+        assert invoke(tmp_path, 'generate-spool', *args).returncode == 0
+        measured = count_spool(tmp_path/'state/events.ndjson')
+        assert all(counted[key] == measured[key] for key in ('traces','observations','scores'))
+        pending = json.loads((tmp_path/'state/pending-run.json').read_text())
+        assert len(pending['receipt']['history_anchors']['cases']) == 58
+
+
+def test_verification_names_current_case_through_pipe_before_blocked_read(tmp_path):
+    from threading import Event
+    from test_history import api_evidence
+    entered, release = Event(), Event()
+    entered.set()  # Prepare the target before enabling the read barrier.
+    evidence = {'observations': [], 'scores': []}
+    with target_server(evidence=evidence, barrier=('traceId=', entered, release)) as (env, _):
+        assert invoke(tmp_path, 'setup-prompts', extra_env=env).returncode == 0
+        assert invoke(tmp_path, 'generate-spool', extra_env=env).returncode == 0
+        assert invoke(tmp_path, 'import-spool', extra_env=env).returncode == 0
+        evidence.update(api_evidence(tmp_path/'state/events.bound.ndjson'))
+        entered.clear()
+        runtime = {k:v for k,v in os.environ.items() if not any(key in k for key in ('LANGFUSE','ANTHROPIC','OPENAI','PROXY','proxy'))}
+        runtime.update(env, PYTHONPATH=str(ROOT/'src'), SYNTH_STATE_DIR=str(tmp_path/'state'))
+        process = subprocess.Popen([sys.executable, '-m', 'synth.cli', 'verify', '--timeout-seconds', '0', '--config', 'config/demo.yaml'],
+                                   cwd=ROOT, env=runtime, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            assert entered.wait(8), 'verification never reached current-run read'
+            assert process.poll() is None
+            import select
+            assert select.select([process.stdout], [], [], 1)[0], 'buffered verification phase'
+            before = os.read(process.stdout.fileno(), 65536).decode()
+            assert 'Checking historical turn 1/58:' in before
+        finally:
+            release.set()
+        out, err = process.communicate(timeout=10)
+        assert process.returncode == 0, err.decode()
+        assert 'Checked historical turn 58/58: visible' in out.decode()

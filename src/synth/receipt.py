@@ -15,6 +15,7 @@ class RunReceipt(AnchorsIO):
     as_of_date: str
     history_run_id: str
     history_anchors: dict
+    history_days: int
 
     @classmethod
     def state_path(cls) -> str:

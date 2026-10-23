@@ -75,3 +75,13 @@ If **APM** was enabled during configuration, submit a banking turn and open its
 operational structure and removes customer payloads; Langfuse retains the masked
 AI context. Public participants cannot open the APM view. Stopping the live
 instance clears its APM history. See [APM configuration and troubleshooting](docs/APM.md).
+
+## Configuration and preparation
+
+Volume means turn traces. Quick rehearsal selects 58 required turns; Presentation defaults to 64. The candidate range is 58–256 traces and a 1, 2, 7, 30 or 90-day inclusive UTC history window. These are validated candidate limits; full minimum/default/maximum resource-limit qualification remains pending. Every volume retains all 58 required turns and fixed evaluation cohorts. Background traffic only adds turns. Choose the run date through Depot's schedule controls; a future presentation date is valid. Changing the seed, run date or history window creates different history identities.
+
+The probe checks version/access, then imports one tagged historical test trace with two observations and checks its timestamp. It makes no model calls. This small probe remains on the target and is separate from the confirmed history estimate. Plan measures the actual generated observations (including trace roots) and scores without target mutation. The standard confirmation gate precedes asset setup; the split Spool path applies Depot's measured cap before import. Reducing volume requires a fresh plan and generation so the cap uses actual recomputed counts. No seed/import/verify stage receives provider credentials.
+
+Historical token/cost values are simulated story data. Model-free generation does not mean free hosted ingestion: monetary ingestion pricing is unavailable without the target contract. Later live chat, voice or evaluator calls have separate provider charges when enabled. Preparation logs report phase starts and completed asset/turn counts; Depot Overview identifies the current custom step outside logs.
+
+If import fails or is interrupted, do not resume it or import the same Spool again. Use a genuinely fresh target/deployment or an explicitly authorised remote data reset. Local participant Reset demo state does not clear imported Langfuse history or make an import retry safe.

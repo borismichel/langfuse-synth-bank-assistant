@@ -29,9 +29,11 @@ def run_seed(cfg: Config, *, dry_run=False, do_import=True, spool_path=None,
         raise RuntimeError('This deployment has attempted import. Use a fresh target and deployment, or an authorised reset; do not regenerate and retry.')
     Path(RunReceipt.state_path()).unlink(missing_ok=True)
     run_date = resolve_run_date(cfg.generation.as_of_date)
-    events = build_events(cfg.generation.target_traces, {'seed': cfg.generation.seed}, run_date=run_date)
+    events = build_events(cfg.generation.target_traces, {'seed': cfg.generation.seed, 'history_days': cfg.generation.history_days}, run_date=run_date,
+                          progress=lambda line: log(line, flush=True))
     ingestor = Ingestor.from_env(cfg.target.base_url, dry_run=True, spool_path=spool)
     ingestor.open_spool()
+    log(f'Writing {len(events)} generated records to the Spool', flush=True)
     ingestor.extend(events)
     ingestor.close_spool()
     # Nonsecret runtime options use the existing read-only live spool mount.
@@ -39,8 +41,8 @@ def run_seed(cfg: Config, *, dry_run=False, do_import=True, spool_path=None,
         {'apm_enabled': cfg.runtime.apm_enabled}, sort_keys=True))
     pending = dict(base_url=cfg.target.base_url, public_key=os.environ.get('LANGFUSE_PUBLIC_KEY', ''),
                    seed=cfg.generation.seed, target_traces=cfg.generation.target_traces,
-                   as_of_date=str(cfg.generation.as_of_date or ''),
-                   history_run_id=run_identity(cfg.generation.seed, run_date),
+                   as_of_date=str(cfg.generation.as_of_date or ''), history_days=cfg.generation.history_days,
+                   history_run_id=run_identity(cfg.generation.seed, run_date, cfg.generation.history_days),
                    history_anchors=history_anchors(events))
     (spool.parent / 'pending-run.json').write_text(json.dumps({
         'receipt': pending, 'spool_sha256': hashlib.sha256(spool.read_bytes()).hexdigest(),

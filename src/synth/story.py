@@ -87,7 +87,11 @@ def check_case(reader, case):
         if observation is None:
             return False, f'missing current-run observation {expected["name"]}'
         for key in ('parent_id', 'name', 'type', 'input', 'output', 'prompt_name', 'prompt_version', 'model', 'usage_details'):
-            if getattr(observation, key) != expected[key]:
+            actual, wanted = getattr(observation, key), expected[key]
+            # Target4.68 returns {} when no usage was supplied. Nonempty usage stays exact.
+            if key == 'usage_details' and actual == {} and wanted is None:
+                continue
+            if actual != wanted:
                 return False, f'mismatched {expected["name"]} {key}'
         if expected['total_cost'] is not None and (observation.total_cost is None or
                 abs(observation.total_cost - expected['total_cost']) > 1e-9):

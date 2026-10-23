@@ -187,3 +187,27 @@ def test_regression_and_control_evidence_keeps_real_tool_outcomes(tmp_path):
         assert sum(m['role']=='user' for m in messages)==2
         call_ids = {c['id'] for m in messages for c in m.get('tool_calls',[])}
         assert call_ids == {m['tool_call_id'] for m in messages if m['role']=='tool'}
+
+
+def test_verify_accepts_target_empty_usage_but_rejects_wrong_nonempty_usage(tmp_path):
+    from test_pipeline import target_server
+    evidence = {'observations': [], 'scores': []}
+    with target_server(evidence=evidence) as (env, _):
+        assert invoke(tmp_path, 'setup-prompts', extra_env=env).returncode == 0
+        assert invoke(tmp_path, 'generate-spool', extra_env=env).returncode == 0
+        assert invoke(tmp_path, 'import-spool', extra_env=env).returncode == 0
+        evidence.update(api_evidence(tmp_path/'state/events.bound.ndjson'))
+        for row in evidence['observations']:
+            if row['usageDetails'] is None:
+                row['usageDetails'] = {}  # Exact target4.68 response for observations without usage.
+        result = invoke(tmp_path, 'verify', '--timeout-seconds', '0', extra_env=env)
+        assert result.returncode == 0, result.stdout + result.stderr
+        root = next(row for row in evidence['observations'] if row['name'] == 'northwind-assistant')
+        root['usageDetails'] = {'input': 1}
+        result = invoke(tmp_path, 'verify', '--timeout-seconds', '0', extra_env=env)
+        assert result.returncode == 1 and 'northwind-assistant usage_details' in result.stdout
+        root['usageDetails'] = {}
+        generation = next(row for row in evidence['observations'] if row['type'] == 'GENERATION')
+        generation['usageDetails']['input'] += 1
+        result = invoke(tmp_path, 'verify', '--timeout-seconds', '0', extra_env=env)
+        assert result.returncode == 1 and 'generate-response usage_details' in result.stdout
