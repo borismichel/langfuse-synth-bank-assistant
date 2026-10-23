@@ -69,10 +69,10 @@ def get_adapter():
 def native_llm_factory(*, provider, model, api_key):
     if provider == "openai":
         from langchain_openai import ChatOpenAI
-        return ChatOpenAI(model=model, api_key=api_key, temperature=0.2, max_retries=1, timeout=60)
+        return ChatOpenAI(model=model, api_key=api_key, temperature=0.2, max_tokens=1024, max_retries=0, timeout=30)
     if provider == "anthropic":
         from langchain_anthropic import ChatAnthropic
-        return ChatAnthropic(model=model, api_key=api_key, temperature=0.2, max_tokens=1024, max_retries=1, timeout=60)
+        return ChatAnthropic(model=model, api_key=api_key, temperature=0.2, max_tokens=1024, max_retries=0, timeout=30)
     raise ValueError("Unsupported banking model provider")
 
 def configure_apm(endpoint: str, trace_path: str = ''):
