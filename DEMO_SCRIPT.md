@@ -334,9 +334,24 @@ Open **Presenter actions** in the assistant footer, then **Review and calibratio
 
 Open **Application experiments** with Depot management access. Select **Prepare
 control and regression prompt versions** and record the returned **Control v…**
-and **regression v…**, content hashes and native links. Preparation creates
-unlabelled versions; it does not move production. Use these actual target versions,
-not the retained upstream examples' v1/v3/v5 numbers, URLs or measured results.
+and **regression v…**, content hashes and native links. Preparation creates or
+reuses matching versions; it does not move production. Fresh setup already uses
+the shipped control content for production, so preparation can return that same
+version. It does not automatically provide a distinct candidate suitable for
+promotion. Use actual target versions, not the retained upstream examples'
+v1/v3/v5 numbers, URLs or measured results.
+
+For a meaningful promotion and rollback, if the control already equals
+production, open that prompt in native Langfuse and create and review a new
+**unlabelled candidate version**. Leave production unchanged. Record distinct
+previous-production and candidate version IDs and their exact content. In
+**Application experiments**, set **Baseline prompt version** to current production,
+**Candidate prompt version** to the reviewed candidate, and **Candidate policy**
+to **Current: 60 days, 3 retrieved articles**. Only a complete, natively verified
+comparison that passes the gate below permits moving that tested candidate.
+Creating or reviewing a version is not proof that it passes. Preserve the
+previous version for **Restore previous prompt**; a passing control-versus-itself
+comparison cannot demonstrate an actual promotion or rollback.
 
 For each comparison, select **Cohort**, enter **Baseline prompt version** and
 **Candidate prompt version**, select **Candidate policy**, and enter the exact
