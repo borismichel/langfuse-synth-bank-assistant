@@ -243,8 +243,10 @@ def make_llm(model: Optional[str] = None, *, role: str | None = None):
         binding = adapter.role_binding(role)
         if model is not None and model != binding.model:
             raise ValueError('A role model cannot be overridden')
-        return adapter.native_llm_for(role)
-    return adapter.native_llm(model=model)
+        native = adapter.native_llm_for(role)
+        return native.chat if isinstance(native, config.BankingModels) else native
+    native = adapter.native_llm(model=model)
+    return native.chat if isinstance(native, config.BankingModels) else native
 
 
 class State(TypedDict):

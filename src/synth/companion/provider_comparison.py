@@ -57,7 +57,7 @@ class ProviderReplay(Replay):
     @staticmethod
     def initial(body):
         return dict(arms=('baseline','candidate'),limits={'cases_per_arm':16,'arms':2,'application_dispatches_per_case':10,
-            'judge_calls_per_case':5,'total_dispatches':480,'deadline_seconds':600,'concurrency':1},
+            'judge_calls_per_case':5,'total_dispatches':480,'deadline_seconds':600,'concurrency':1,'judge_concurrency':2,'scheduler':'serial-application-two-judges-v1'},
             gate={'status':'incomplete','expected':0,'scored':0,'missing':0,'errors':0,'failed':0,'promotion_eligible':False})
     def prepare(self):
         selected=bindings(self.adapter)
