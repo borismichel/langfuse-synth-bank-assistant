@@ -76,10 +76,8 @@ def save_history_evidence(history, identity, assets, reader):
         coverage_note='Scored means at least one policy verdict. Pending means a missing historical verdict, not a queued job. Unknown and invalid are overlapping subsets. Errors count failed verification reads; no live evaluator error count is inferred.',
         dates=dates, native_views=dict(traces=project_url + '/traces?dateRange=' + dates['date_range']))
     save('history-evidence.json', snapshot)
-    from pathlib import Path
-    import os
-    runbook = Path(os.environ.get('SYNTH_OUT_DIR', '/app/out')) / 'DEMO_SCRIPT.md'
-    text = runbook.read_text().split('\n\n## Verified history view\n', 1)[0]
-    runbook.write_text(text + '\n\n## Verified history view\n\n' +
+    from .runbook import read_runbook, write_runbook
+    text = read_runbook().split('\n\n## Verified history view\n', 1)[0]
+    write_runbook(text + '\n\n## Verified history view\n\n' +
         f"[Native traces for the full imported time window]({snapshot['native_views']['traces']}) — {dates['trace_count']} imported roots from {dates['first']} to {dates['last']}. The time filter can include unrelated records in that interval; use the exact case links above for mandatory-run subjects.\n")
     return snapshot
