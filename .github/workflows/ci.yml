@@ -27,6 +27,11 @@ jobs:
         run: .venv/bin/synth-authoring check . --python .venv/bin/python --timeout 600 --json
       - name: Install browser for voice rehearsal
         run: .venv/bin/python -m playwright install --with-deps chromium
+      - name: Verify review controls handle proxy errors
+        timeout-minutes: 1
+        env:
+          PYTHONPATH: src:demos/bank-assistant
+        run: .venv/bin/python tests/browser_review_transport_case.py
       - name: Rehearse recording, upload, confirmation and playback
         timeout-minutes: 3
         env:
