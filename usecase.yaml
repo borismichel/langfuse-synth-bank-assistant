@@ -1,6 +1,17 @@
 schema_version: 1
 slug: northwind-bank-assistant
 name: Northwind Bank Assistant
+vertical: Financial Services / Banking
+langfuse_features:
+- tracing
+- prompt-management
+- datasets
+- experiments
+- evaluators
+- scores
+- annotation-queues
+- sessions
+- multimodality
 tagline: Inspect bilingual banking actions, regressions and conduct evidence.
 story: 'Compare frozen banking actions, dispute and retrieval-cost regressions, and
   conduct policy cases in Langfuse, then use the bilingual live assistant,
