@@ -13,6 +13,7 @@ provider = os.environ.get("BANK_TEST_PROVIDER", "anthropic")
 exports = []
 resource_attributes = []
 model_calls = []
+omit_intermediate_usage = False
 
 class API(BaseHTTPRequestHandler):
     def log_message(self, *args):
@@ -40,6 +41,7 @@ class API(BaseHTTPRequestHandler):
             payload = {'id': 'chat-' + str(len(model_calls)), 'object': 'chat.completion', 'created': 123456,
                        'model': request['model'], 'choices': [{'index': 0, 'message': message, 'finish_reason': 'stop' if answered else 'tool_calls'}],
                        'usage': {'prompt_tokens': 20 if answered else 10, 'completion_tokens': 12 if answered else 8, 'total_tokens': 32 if answered else 18}}
+            if omit_intermediate_usage and not answered: payload.pop('usage')
             self.send_response(200); self.send_header('Content-Type', 'application/json'); self.end_headers()
             self.wfile.write(json.dumps(payload).encode())
             return
@@ -86,6 +88,7 @@ from northwind.prompts import V5_RELEASE
 from langfuse.model import TextPromptClient
 import asyncio
 async def exercise():
+    global omit_intermediate_usage
     permits=[]
     async def allow(): permits.append(True)
     exact=adapter.langfuse().get_prompt('northwind-assistant-system',version=23,cache_ttl_seconds=0)
@@ -94,6 +97,11 @@ async def exercise():
     assert result['prompt_version']==23 and result['context'].startswith('APPROVED POLICY')
     assert len(permits)==2 and result['usage']=={'input':30,'output':20}
     assert len(result['retrieved'])==8
+    if provider=='openai':
+        omit_intermediate_usage=True
+        partial=await agent.run_turn('International wire fees?',channel='experiment',exact_prompt=exact,before_model_call=allow)
+        assert not partial['error'] and partial['usage'] is None, partial['usage']
+        omit_intermediate_usage=False
     async def denied(): raise ValueError('spending_denied')
     before=len(model_calls)
     result=await agent.run_turn('International wire fees?',channel='experiment',exact_prompt=exact,before_model_call=denied)

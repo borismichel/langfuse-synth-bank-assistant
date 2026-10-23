@@ -5,11 +5,11 @@ VERSION='northwind-application-gate-v1'
 TOKEN_RATIO=1.25
 
 
-def assess(expected, baseline, candidate):
+def assess(expected, baseline, candidate, *, required=None):
     """Both arms need exact membership, mandatory scores and measured usage."""
     ids=set(expected)
     counts={'expected':len(ids),'scored':0,'missing':0,'errors':0,'failed':0}
-    if not ids:return {**counts,'status':'incomplete','gate_version':VERSION}
+    if not ids or not required or set(required)!=ids:return {**counts,'status':'incomplete','gate_version':VERSION}
     arms=[]
     for rows in (baseline,candidate):
         mapped={r['case_id']:r for r in rows}
@@ -22,6 +22,7 @@ def assess(expected, baseline, candidate):
             counts['errors']+=1;continue
         def complete(r):
             return (r and r.get('verified') and r.get('checks') and
+                set(r['checks'])==set(required[case]) and
                 all(type(v) in (int,float) and math.isfinite(v) and 0<=v<=1 for v in r['checks'].values()) and
                 isinstance(r.get('usage'),dict) and set(r['usage'])=={'input','output'} and
                 all(type(v) is int and v>=0 for v in r['usage'].values()))

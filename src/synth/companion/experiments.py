@@ -108,7 +108,12 @@ class ExperimentControls:
                 gate={'status':'incomplete','expected':0,'scored':0,'missing':0,'errors':0,'failed':0})
             self.runs.append(run);self.persist();self.cancelled=threading.Event()
             replay=Replay(self,run,body,self.cancelled)
-            self.job=asyncio.create_task(asyncio.to_thread(replay.execute))
+            async def execute():
+                # Publish a terminal status only after the worker has flushed and stopped.
+                status=await asyncio.to_thread(replay.execute)
+                run['status']=status
+                self.persist()
+            self.job=asyncio.create_task(execute())
             return JSONResponse(run,status_code=202)
 
     async def prepare(self):
@@ -129,7 +134,7 @@ class ExperimentControls:
             from .experiment_gate import assess
             for arm in run['arms'].values():
                 for row in arm['rows']:row['verified']=False
-            run['gate']=assess(run['expected'],run['arms']['baseline']['rows'],run['arms']['candidate']['rows'])
+            run['gate']=assess(run['expected'],run['arms']['baseline']['rows'],run['arms']['candidate']['rows'],required=run['scope'].get('required_checks'))
             self.persist()
             try:
                 result=await asyncio.to_thread(readback,self.adapter,run)

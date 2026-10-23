@@ -3,6 +3,7 @@ import os
 import signal
 import subprocess
 import sys
+import pytest
 
 
 def test_delivered_experiment_controls():
@@ -19,9 +20,11 @@ def test_delivered_experiment_controls():
     assert process.returncode == 0, output + errors
 
 
-def test_actual_agent_exact_prompt_policy_usage_and_per_call_permission():
+@pytest.mark.parametrize('provider',['anthropic','openai'])
+def test_actual_agent_exact_prompt_policy_usage_and_per_call_permission(provider):
     env = {k: v for k, v in os.environ.items() if k in ('PATH', 'HOME', 'TMPDIR', 'LANG')}
     env['PYTHONPATH'] = os.pathsep.join(['src', 'tests', 'demos/bank-assistant'])
+    env['BANK_TEST_PROVIDER']=provider
     result = subprocess.run([sys.executable, 'tests/sdk_experiment_agent_case.py'], env=env,
         capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stdout + result.stderr

@@ -359,6 +359,7 @@ def _graph(langfuse, llm, tools, system_text: str, customer_id: str, check: dict
         # LangChain owns generation, prompt and usage accounting for this call.
         with propagate_attributes(metadata={"generation_owner": "langchain"}):
             ai = await llm_with_tools.ainvoke(msgs, config)
+        outcome.setdefault('generation_usage', []).append(getattr(ai,'usage_metadata',None))
         return {"messages": [ai]}
 
     async def output_guardrail(state: State, config: RunnableConfig) -> dict:
@@ -566,9 +567,12 @@ async def run_turn(message: str, *, customer_id: str = "C-1001", session_id: Opt
                        business.evidence_tool_results(evidence), check["blocked"], answer)
     if error is not None:
         config.flush()
-    generations = [m for m in state['messages'] if isinstance(m, AIMessage) and getattr(m,'usage_metadata',None)]
-    usage = ({key: sum(m.usage_metadata[source] for m in generations) for key,source in
-              (('input','input_tokens'),('output','output_tokens'))} if generations else
+    generations = outcome.get('generation_usage', [])
+    complete_usage = generations and all(isinstance(usage,dict) and all(
+        type(usage.get(key)) is int and usage[key]>=0 for key in ('input_tokens','output_tokens'))
+        for usage in generations)
+    usage = ({key: sum(usage[source] for usage in generations) for key,source in
+              (('input','input_tokens'),('output','output_tokens'))} if complete_usage else
              {'input':0,'output':0} if check['blocked'] else None)
     return {"context": context, "query": message, "usage": usage, "latency_ms": round(_now_ms()-t0),
             "answer": answer, "observation_id": obs_id, "trace_id": trace_id, "trace_url": config.trace_url(trace_id),

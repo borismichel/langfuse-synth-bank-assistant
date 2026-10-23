@@ -78,7 +78,7 @@ def freeze(adapter,body):
         rubrics[policy.id]=row
     return dataset,frozen,rubrics,dict(dataset=bound,history_run_id=history.history_run_id,
         project_id=identity['project_id'],corpus_hash=identity['corpus_hash'],rubric_version=RUBRIC_VERSION,
-        gate_version=VERSION,production_at_start={'name':production.name,'version':production.version,'content_hash':fingerprint(production.prompt)},primary_provider=adapter.llm().provider,primary_model=adapter.llm().model,
+        gate_version=VERSION,required_checks={i.metadata['case_id']:sorted([*checks(i,{'answer':'','banking_actions':[]}), 'conduct']) for i in dataset.items},production_at_start={'name':production.name,'version':production.version,'content_hash':fingerprint(production.prompt)},primary_provider=adapter.llm().provider,primary_model=adapter.llm().model,
         prompts={arm:dict(name=p.name,version=p.version,content_hash=fingerprint(p.prompt)) for arm,p in frozen.items()},
         rubrics={key:dict(name=p.name,version=p.version,content_hash=fingerprint(p.prompt)) for key,p in rubrics.items()})
 
@@ -214,14 +214,15 @@ class Replay:
                 # SDK5.0.4 leaves experiment_url unset; use the target4.68 results route.
                 self.run['arms'][arm]['url']=self.adapter.base_url+'/project/'+quote(scope['project_id'],safe='')+'/experiments/results?'+urlencode({'baseline':eid})
                 self.check()
-            self.run['status']='awaiting_readback'
+            status='awaiting_readback'
         except Exception as exc:
-            self.run['status']='cancelled' if self.cancel.is_set() and not any(r.get('error') not in (None,'cancelled') for a in self.run['arms'].values() for r in a['rows']) else 'runner_failed'
+            status='cancelled' if self.cancel.is_set() and not any(r.get('error') not in (None,'cancelled') for a in self.run['arms'].values() for r in a['rows']) else 'runner_failed'
             self.run['error']=str(exc) if isinstance(exc,ValueError) else type(exc).__name__
         finally:
             self.adapter.langfuse().flush()
-            self.run['gate']=assess(self.run.get('expected',[]),self.run['arms']['baseline']['rows'],self.run['arms']['candidate']['rows'])
+            self.run['gate']=assess(self.run.get('expected',[]),self.run['arms']['baseline']['rows'],self.run['arms']['candidate']['rows'],required=self.run.get('scope',{}).get('required_checks'))
             self.control.persist()
+        return status
 
 
 def readback(adapter,run):
@@ -256,7 +257,7 @@ def readback(adapter,run):
                     score.get('value')==expected['value'] and subject.get('kind')=='observation' and
                     subject.get('id')==row['observation_id'] and subject.get('traceId')==row['trace_id'])
             row['verified']=bool(row.get('scores')) and all(matches_score(s) for s in row['scores'])
-    run['gate']=assess(run['expected'],run['arms']['baseline']['rows'],run['arms']['candidate']['rows'])
+    run['gate']=assess(run['expected'],run['arms']['baseline']['rows'],run['arms']['candidate']['rows'],required=scope.get('required_checks'))
     run['readback_at']=datetime.now(timezone.utc).isoformat()
     if run['status']=='awaiting_readback' and run['gate']['status']!='incomplete':run['status']='completed'
     return run
