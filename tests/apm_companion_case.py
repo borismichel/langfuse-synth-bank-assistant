@@ -17,7 +17,7 @@ class TargetHandler(BaseHTTPRequestHandler):
 
 target = ThreadingHTTPServer(('127.0.0.1', 0), TargetHandler)
 Thread(target=target.serve_forever, daemon=True).start()
-os.environ['LANGFUSE_BASE_URL'] = f'http://127.0.0.1:{target.server_port}' 
+os.environ['LANGFUSE_BASE_URL'] = f'http://127.0.0.1:{target.server_port}'
 from fastapi.testclient import TestClient
 from langfuse_synth_core.companion import CompanionAdapter
 from synth.companion.app import create_app, HEALTH_PATH

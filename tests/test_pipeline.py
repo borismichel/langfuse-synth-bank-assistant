@@ -260,17 +260,18 @@ def test_reduced_default_and_maximum_candidate_plans_count_actual_records(tmp_pa
 def test_verification_names_current_case_through_pipe_before_blocked_read(tmp_path):
     from threading import Event
     from test_history import api_evidence
+    from asset_target import asset_target
     entered, release = Event(), Event()
     entered.set()  # Prepare the target before enabling the read barrier.
-    evidence = {'observations': [], 'scores': []}
-    with target_server(evidence=evidence, barrier=('traceId=', entered, release)) as (env, _):
-        assert invoke(tmp_path, 'setup-prompts', extra_env=env).returncode == 0
+    with asset_target(barrier=('traceId=', entered, release)) as (env, evidence):
+        assert invoke(tmp_path, 'setup-assets', extra_env=env).returncode == 0
         assert invoke(tmp_path, 'generate-spool', extra_env=env).returncode == 0
         assert invoke(tmp_path, 'import-spool', extra_env=env).returncode == 0
         evidence.update(api_evidence(tmp_path/'state/events.bound.ndjson'))
+        assert invoke(tmp_path, 'prepare-cohorts', extra_env=env).returncode == 0
         entered.clear()
         runtime = {k:v for k,v in os.environ.items() if not any(key in k for key in ('LANGFUSE','ANTHROPIC','OPENAI','PROXY','proxy'))}
-        runtime.update(env, PYTHONPATH=str(ROOT/'src'), SYNTH_STATE_DIR=str(tmp_path/'state'))
+        runtime.update(env, PYTHONPATH=str(ROOT/'src'), SYNTH_STATE_DIR=str(tmp_path/'state'), SYNTH_OUT_DIR=str(tmp_path/'out'))
         process = subprocess.Popen([sys.executable, '-m', 'synth.cli', 'verify', '--timeout-seconds', '0', '--config', 'config/demo.yaml'],
                                    cwd=ROOT, env=runtime, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         try:
@@ -283,5 +284,5 @@ def test_verification_names_current_case_through_pipe_before_blocked_read(tmp_pa
         finally:
             release.set()
         out, err = process.communicate(timeout=10)
-        assert process.returncode == 0, err.decode()
+        assert process.returncode == 0, out.decode() + err.decode()
         assert 'Checked historical turn 58/58: visible' in out.decode()
