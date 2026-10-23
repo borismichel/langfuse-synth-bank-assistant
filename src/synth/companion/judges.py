@@ -7,6 +7,7 @@ from threading import Event
 from langfuse_synth_core.companion.llm import API_KEY_ENV
 from northwind.compliance import POLICIES, RUBRIC_VERSION
 from synth.assets import fingerprint, REQUEST
+from .reconciliation import newest, summarize
 
 MAPPING=[{'variable':'query','source':'input'},
          {'variable':'context','source':'metadata','jsonPath':'$.context'},
@@ -89,7 +90,7 @@ class PolicyJudges:
         def read(filters):
             return self.pages(self.api.observations.get_many,filter=json.dumps(filters+window),
                 fields='basic,io,metadata,trace_context',
-                expand_metadata='context,judge_eligible,judge_evidence_version,live_instance_id')
+                expand_metadata='context,judge_eligible,judge_evidence_version,live_instance_id,live_run_id')
         selected=read(self.filters());seen=set();eligible=[]
         for row in selected:
             d=plain(row);meta={k:scalar(v) for k,v in (d.get('metadata') or {}).items()}
@@ -106,7 +107,10 @@ class PolicyJudges:
                 raise ValueError('Judge variables do not resolve to the selected delivered answer')
             if not context.startswith('APPROVED POLICY AND BANKING TOOL RESULTS'):
                 raise ValueError('Authoritative judge evidence is not marked')
+            # Score upserts preserve ID and the server's millisecond timestamp.
+            timestamp=d['startTime'].replace(microsecond=d['startTime'].microsecond//1000*1000)
             eligible.append(dict(trace_id=d['traceId'],observation_id=d['id'],query=query,
+                timestamp=timestamp,live_run_id=meta.get('live_run_id'),
                 context=context,generation=answer,url=self.project_url+'/traces/'+quote(d['traceId'],safe='')))
         scope=[{'type':'stringOptions','column':'name','operator':'any of','value':['northwind-assistant']},
             {'type':'stringObject','column':'metadata','key':'live_instance_id','operator':'=','value':self.instance}]
@@ -258,7 +262,7 @@ class PolicyJudges:
         self.last_error=None
         self.recover()
         self.inspect()
-        self.results=[];scored=0;complete=0
+        self.results=[]
         subjects=self.evidence['eligible']
         scores=[]
         if subjects and self.rule:
@@ -276,26 +280,20 @@ class PolicyJudges:
                 if receipt:
                     for score in scores:
                         d=plain(score);ref=d.get('subject') or {};meta=d.get('metadata') or {}
-                        if (d.get('source')=='EVAL' and d.get('dataType')=='CATEGORICAL' and
+                        if (d.get('source')=='EVAL' and
                             d.get('name')==receipt['name'] and d.get('environment')==self.environment and
                             ref=={'kind':'observation','id':subject['observation_id'],'traceId':subject['trace_id']} and
                             meta.get('evaluator_id')==receipt['id'] and meta.get('evaluator_version_id')==receipt['version_id'] and
                             meta.get('evaluation_rule_id')==self.rule['id'] and
-                            meta.get('target_trace_id')==subject['trace_id'] and meta.get('target_observation_id')==subject['observation_id'] and
-                            d.get('value') in policy.categories):matches.append(d)
-                result=dict(policy=policy.id,state='pending' if receipt else 'not_configured',value=None)
+                            meta.get('target_trace_id')==subject['trace_id'] and meta.get('target_observation_id')==subject['observation_id']):matches.append(d)
+                result=dict(policy=policy.id,state='pending' if receipt else 'not_configured',value=None,paused=bool(receipt and receipt['status']!='active'))
                 if receipt and receipt['status']!='active':result['state']='paused'
-                if len(matches)==1:
-                    score=matches[0];result.update(state='scored',value=score['value'],score_id=score['id'],
-                        reasoning=score.get('comment'),evaluator_id=receipt['id'],evaluator_version_id=receipt['version_id'])
-                    scored+=1
-                elif len(matches)>1:result['state']='ambiguous'
+                if matches:
+                    result.update(newest(matches,policy),evaluator_id=receipt['id'],evaluator_version_id=receipt['version_id'])
                 policies.append(result)
-            complete+=all(r['state']=='scored' for r in policies)
             self.results.append(dict(trace_id=subject['trace_id'],observation_id=subject['observation_id'],
                 url=subject['url'],policies=policies))
-        self.coverage=dict(eligible=len(subjects),fully_scored=complete,scored_policy_results=scored,
-            possible_policy_results=len(subjects)*5)
+        self.coverage=summarize(self.results,self.evidence['negative']['blocked'])
         self.checked_at=datetime.now(timezone.utc).isoformat()
         return self.snapshot()
 

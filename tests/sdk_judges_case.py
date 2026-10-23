@@ -103,7 +103,7 @@ def test_readback_recovers_owned_rules_and_accepts_only_exact_managed_subjects(m
             spanish=next(r for r in status['results'] if r['observation_id']=='spanish')
             assert [r['value'] for r in english['policies']]==['pass']*5
             assert all(r['state']=='pending' for r in spanish['policies'])
-            assert status['coverage']=={'eligible':2,'fully_scored':1,'scored_policy_results':5,'possible_policy_results':10}
+            assert {k:status['coverage'][k] for k in ('eligible','fully_scored','scored_policy_results','possible_policy_results')}=={'eligible':2,'fully_scored':1,'scored_policy_results':5,'possible_policy_results':10}
             assert browser.post('/manage/judges/pause',json={'request_id':'restart-pause'}).json()['enabled'] is False
 
 

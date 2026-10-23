@@ -11,6 +11,7 @@ from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTrace
 
 provider = os.environ.get("BANK_TEST_PROVIDER", "anthropic")
 exports = []
+resource_attributes = []
 model_calls = []
 
 class API(BaseHTTPRequestHandler):
@@ -61,6 +62,7 @@ class API(BaseHTTPRequestHandler):
                 batch = Parse(body.decode(), ExportTraceServiceRequest())
             else:
                 batch = ExportTraceServiceRequest.FromString(body)
+            resource_attributes.extend({a.key:a.value.string_value for a in resource.resource.attributes} for resource in batch.resource_spans)
             exports.extend(span for resource in batch.resource_spans for scope in resource.scope_spans for span in scope.spans)
         self.send_response(200); self.send_header('Content-Type', 'application/json'); self.end_headers()
         self.wfile.write(b'{"successes":[],"errors":[]}')
@@ -107,6 +109,9 @@ assert len(model_calls) == (7 if provider == 'anthropic' else 6), len(model_call
 
 def attrs(span):
     return {a.key: a.value.string_value for a in span.attributes}
+from importlib.metadata import version
+expected_release='bank-depot-'+version('northwind-bank-assistant')
+assert resource_attributes and all(r.get('service.version')==expected_release for r in resource_attributes),resource_attributes
 roots = [span for span in exports if span.name == 'northwind-assistant']
 native = [span for span in exports if span.name == 'anthropic.messages.create']
 assert len(native) == (1 if provider == 'anthropic' else 0), [span.name for span in native]

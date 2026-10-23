@@ -110,6 +110,7 @@ def create_app(adapter, *, preview=False):
                 config.MCP_ENABLED = True
                 config.MCP_URL = banking.url
             await workflow.start()
+            await judge_controls.start()
             yield
         finally:
             tasks = [r['task'] for s in sessions.values() for group in ('requests', 'resets')

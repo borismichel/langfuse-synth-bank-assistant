@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from importlib.metadata import version, PackageNotFoundError
 from typing import Optional
 
 DEMO_DIR = Path(__file__).resolve().parent.parent
@@ -35,7 +36,10 @@ _adapter = None
 LANGFUSE_BASE_URL = ""
 PROJECT_ID = ""
 ENVIRONMENT = os.environ.get("LANGFUSE_TRACING_ENVIRONMENT", "production")
-RELEASE = "bank-depot-0.4.0"
+try:
+    RELEASE = "bank-depot-" + version("northwind-bank-assistant")
+except PackageNotFoundError:
+    RELEASE = "bank-depot-unpackaged"
 SAMPLE_RATE = 1.0
 AGENT_MODEL = "claude-sonnet-4-6"
 JUDGE_MODEL = AGENT_MODEL

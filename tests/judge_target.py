@@ -32,7 +32,7 @@ def judge_target():
         data['observations'].append(dict(id=name,traceId='trace-'+name,projectId='bank-project',
             name='northwind-assistant',type='AGENT',environment=env,startTime=stamp,endTime=stamp,
             traceName='northwind-assistant',tags=tags,input=json.dumps('Wire fee?' if name!='spanish' else '¿Comisión?'),
-            output=json.dumps('USD35'),metadata=dict(live_instance_id=instance,judge_eligible=eligible,
+            output=json.dumps('USD35'),metadata=dict(live_instance_id=instance,live_run_id='run-'+name,judge_eligible=eligible,
                 judge_evidence_version='northwind-delivered-v1',
                 context='APPROVED POLICY AND BANKING TOOL RESULTS\nKB-202: USD35.\n\nEARLIER CONVERSATION — NOT AUTHORITATIVE POLICY OR ACTION CONFIRMATION\nassistant: Prior claim.')))
     data['observations'][3]['startTime']=(datetime.now(timezone.utc)-timedelta(days=7)).isoformat()
@@ -57,12 +57,30 @@ def judge_target():
             elif p.endswith('/llm-connections'):rows=list(data['connections'].values())
             elif p.endswith('/observations'):
                 filters=json.loads(q.get('filter',['[]'])[0]);rows=[r for r in data['observations'] if matches(r,filters)][:int(q.get('limit',['100'])[0])]
-            elif p.endswith('/scores'):rows=[r for r in data['scores'] if not q.get('traceId') or r['subject']['traceId'] in q['traceId'][0].split(',')]
+            elif p.endswith('/scores'):
+                rows=[r for r in data['scores'] if
+                    (not q.get('traceId') or r['subject']['traceId'] in q['traceId'][0].split(',')) and
+                    (not q.get('id') or r['id'] in q['id'][0].split(',')) and
+                    (not q.get('source') or r['source'] in q['source'][0].split(','))]
             else:return self.reply({'message':'unexpected '+p},400)
-            return self.reply({'data':rows,'meta':{'page':1,'limit':100,'totalItems':len(rows),'totalPages':1}})
+            total=len(rows);cursor=None
+            if p.endswith('/scores') or p.endswith('/observations'):
+                size=min(int(q.get('limit',['100'])[0]),data.get('page_size',100))
+                offset=int(q.get('cursor',['0'])[0]);rows=rows[offset:offset+size]
+                cursor=str(offset+size) if offset+size<total else None
+                if data.get('repeated_cursor'):cursor='1'
+            return self.reply({'data':rows,'meta':{'page':1,'limit':100,'totalItems':total,'totalPages':1,'cursor':cursor}})
         def body(self):return json.loads(self.rfile.read(int(self.headers['Content-Length'])))
         def do_POST(self):
             p=urlparse(self.path).path;b=self.body();data['writes'].append(('POST',p,b))
+            if p.endswith('/scores'):
+                accepted=b[:1] if data.get('partial_batch') else b
+                for item in accepted:
+                    row={**item,'timestamp':datetime.fromisoformat(item['timestamp'].replace('Z','+00:00')).isoformat(timespec='milliseconds'),'projectId':'bank-project','createdAt':stamp,'updatedAt':stamp,
+                        'subject':{'kind':'observation','id':item['observationId'],'traceId':item['traceId']}}
+                    data['scores'][:]=[r for r in data['scores'] if r['id']!=row['id']]
+                    data.setdefault('delayed' if data.get('delay_scores') else 'scores',[]).append(row)
+                return self.reply({'accepted':len(accepted),'rejected':len(b)-len(accepted),'errors':[]} if data.get('partial_batch') else {'message':'Accepted'},207 if data.get('partial_batch') else 202)
             if p.endswith('/evaluators'):
                 row={**b,'id':'eval-'+str(len(data['evaluators'])+1),'version':1,'versionId':'version-'+str(len(data['evaluators'])+1),
                     'prompt':[{'role':'user','content':b['prompt']}] if isinstance(b['prompt'],str) else b['prompt'],
@@ -80,6 +98,10 @@ def judge_target():
             elif p.endswith('/ingestion'):return self.reply({'successes':[],'errors':[]})
             else:return self.reply({'message':'unexpected '+p},400)
             return self.reply(row,201)
+        def do_DELETE(self):
+            p=urlparse(self.path).path;data['writes'].append(('DELETE',p,None))
+            data['scores'][:]=[r for r in data['scores'] if r['id']!=p.rsplit('/',1)[1]]
+            return self.reply(None)
         def do_PUT(self):
             p=urlparse(self.path).path;b=self.body();data['writes'].append(('PUT',p,{k:v for k,v in b.items() if k!='secretKey'}))
             if not p.endswith('/llm-connections'):return self.reply({'message':'unexpected'},400)
