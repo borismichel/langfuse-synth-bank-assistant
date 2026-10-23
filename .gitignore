@@ -54,3 +54,4 @@ demos/real-estate/data/photos_preview/
 .synth_spool/
 out/
 *.egg-info/
+.ci-diagnostics/

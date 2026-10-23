@@ -24,7 +24,20 @@ jobs:
         # The combined SDK/HTTP scenarios pass locally in 85 seconds; hosted
         # runners exceeded the default 120-second stage budget. Keep a bounded
         # five-minute gate, matching the reviewed integration check.
-        run: .venv/bin/synth-authoring check . --python .venv/bin/python --timeout 300 --json
+        run: |
+          mkdir -p .ci-diagnostics
+          touch .ci-diagnostics/enabled
+          .venv/bin/synth-authoring check . --python .venv/bin/python --timeout 300 --json
+      - name: Authoring timeout diagnostics
+        if: always()
+        run: |
+          for diagnostic in .ci-diagnostics/progress-*.jsonl .ci-diagnostics/stacks-*.txt; do
+            if test -f "$diagnostic"; then
+              echo "::group::$diagnostic"
+              cat "$diagnostic"
+              echo "::endgroup::"
+            fi
+          done
       - name: Build isolated banking runtime
         run: docker build -t northwind-bank:ci .
       - name: Check non-root banking image
