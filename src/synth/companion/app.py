@@ -120,6 +120,7 @@ def create_app(adapter, *, preview=False):
             if tasks:
                 await asyncio.gather(*tasks, return_exceptions=True)
             await experiment_controls.stop()
+            await review_controls.stop()
             await judge_controls.stop()
             await workflow.stop()
             if banking:
@@ -138,6 +139,8 @@ def create_app(adapter, *, preview=False):
     mount_workflow(app, workflow)
     from .experiments import mount_experiments
     experiment_controls = mount_experiments(app, adapter, banking, preview=preview)
+    from .review_routes import mount_reviews
+    review_controls = mount_reviews(app, adapter, banking, preview=preview)
 
     @app.middleware('http')
     async def same_origin(request, call_next):
@@ -160,6 +163,8 @@ def create_app(adapter, *, preview=False):
         if not preview:
             content = content.replace('<nav class="tabs" role="tablist">', '<nav class="tabs" role="tablist"><a class="history-link" style="padding:12px 16px;color:inherit" href="' + escape(prefix) + '/manage/experiments">Application experiments</a>')
             content = content.replace('<nav class="tabs" role="tablist">', '<nav class="tabs" role="tablist"><a class="history-link" style="padding:12px 16px;color:inherit" href="' + escape(prefix) + '/manage/judges">Policy judges</a>')
+        if not preview:
+            content = content.replace('</main>', '<footer style="padding:16px;color:#64748b"><details><summary>Presenter actions</summary><a href="' + escape(prefix) + '/manage/reviews">Review and calibration</a></details></footer></main>')
         setting = json.dumps(prefix).replace('<', '\\u003c')
         content = content.replace('<head>', '<head><script>window.NORTHWIND_BASE_PATH=' + setting + ';</script>')
         notice = ('Development preview — fixture responses only; no target or provider connection.' if preview

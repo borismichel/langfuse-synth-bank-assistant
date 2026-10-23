@@ -116,7 +116,7 @@ llm:
 live_components:
 - name: companion
   description: Bilingual banking assistant with retrieval, guardrails, confirmed
-    banking actions, participant reset, answer feedback, protected policy judges, model-free conduct reconciliation and optional private APM. Voice
+    banking actions, participant reset, answer feedback, protected policy judges, annotation queues, measured calibration, model-free conduct reconciliation and optional private APM. Voice
     and advanced workshop capabilities remain unavailable in this candidate.
   command: synth companion --config {config} --host 0.0.0.0 --port 8080
   port: 8080
@@ -130,6 +130,8 @@ live_components:
   - path: /manage/experiments
     access: manage
   - path: /manage/judges
+    access: manage
+  - path: /manage/reviews
     access: manage
   - path: /apm
     access: presenter

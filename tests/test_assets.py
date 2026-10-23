@@ -1,5 +1,6 @@
 """Approved delivered-command and browser seams for fixed native banking assets."""
 import json
+import shutil
 from asset_target import asset_target
 from test_pipeline import invoke
 
@@ -31,6 +32,8 @@ def seeded_run(tmp_path, env, target):
 def test_fixed_cohorts_keep_expected_outputs_and_exact_current_source_links(tmp_path):
     with asset_target() as (env,target):
         seeded_run(tmp_path,env,target)
+        # Depot carries state across jobs, but each step gets a fresh artifact output.
+        shutil.rmtree(tmp_path/'out')
         result=invoke(tmp_path,'prepare-cohorts',extra_env=env)
         assert result.returncode==0,result.stdout+result.stderr
         receipt=json.loads((tmp_path/'state/asset-receipt.json').read_text())
@@ -48,6 +51,13 @@ def test_fixed_cohorts_keep_expected_outputs_and_exact_current_source_links(tmp_
         assert result.returncode==0,result.stdout+result.stderr
         assert len(target['writes'])==writes
         assert 'dataset-' in (tmp_path/'out/DEMO_SCRIPT.md').read_text()
+        shutil.rmtree(tmp_path/'out')
+        verified=invoke(tmp_path,'verify','--timeout-seconds','0',extra_env=env)
+        assert verified.returncode==0,verified.stdout+verified.stderr
+        runbook=(tmp_path/'out/DEMO_SCRIPT.md').read_text()
+        assert 'Prepared evaluation assets' in runbook and 'Verified history view' in runbook
+        assert 'dataset-' in runbook and '/traces/' in runbook
+        assert receipt['history_run_id'] in runbook
 
 
 def test_conflicting_human_item_is_preserved_and_missing_current_asset_fails_verify(tmp_path):
