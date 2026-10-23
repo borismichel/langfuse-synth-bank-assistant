@@ -25,6 +25,22 @@ jobs:
         # runners exceeded the default 120-second stage budget. Keep a bounded
         # five-minute gate, matching the reviewed integration check.
         run: .venv/bin/synth-authoring check . --python .venv/bin/python --timeout 300 --json
+      - name: Install browser for voice rehearsal
+        run: .venv/bin/python -m playwright install --with-deps chromium
+      - name: Rehearse recording, upload, confirmation and playback
+        timeout-minutes: 3
+        env:
+          VOICE_BROWSER: '1'
+          VOICE_EVIDENCE_DIR: ${{ runner.temp }}/voice-browser
+          PYTHONPATH: src:demos/bank-assistant
+        run: .venv/bin/python tests/sdk_voice_case.py
+      - name: Upload voice browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voice-browser
+          path: ${{ runner.temp }}/voice-browser
+          if-no-files-found: ignore
       - name: Build isolated banking runtime
         run: docker build -t northwind-bank:ci .
       - name: Check non-root banking image

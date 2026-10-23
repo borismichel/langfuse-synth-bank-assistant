@@ -404,7 +404,7 @@
 
   async function newConversation() {
     if (S.busy || S.resetting) return;
-    setBusy(true); S.session = null; S.messages = [];
+    clearVoice(); setBusy(true); S.session = null; S.messages = [];
     try { S.session = (await postJSON("/api/session", { customer_id: S.customer })).session_id; }
     catch (e) { S.session = null; toast(e.message, true); }
     setBusy(false); renderSessionId();
@@ -417,7 +417,7 @@
   }
   $("#resetState").addEventListener("click", async () => {
     if (!S.session || S.resetting) return;
-    S.resetting = true; $("#resetState").disabled = true;
+    clearVoice(); S.resetting = true; $("#resetState").disabled = true;
     const request = S.resetRequest || {session_id: S.session, request_id: crypto.randomUUID()};
     S.resetRequest = request;
     try {
@@ -551,6 +551,10 @@
             S.messages.push({role: "assistant", content: confirmed.answer, meta: confirmed});
             action.confirmed = true;
             persist(); renderTranscript();
+            if (V.last?.observation_id === r.observation_id) {
+              V.job=null; V.last={...confirmed,speech_status:'not_requested',media_status:'unavailable'};
+              V.index=S.messages.length-1;renderVoiceResult();
+            }
           } catch (e) { toast(e.message); button.disabled = false; }
           finally { S.activeRequest = null; setBusy(false); }
         });
@@ -618,6 +622,7 @@
   function replaceMessage(idx) {
     const el = $("#transcript").children[idx];
     if (el) el.replaceWith(renderMessage(S.messages[idx], idx));
+    if (V.index === idx) renderVoiceResult();
   }
 
   function setBusy(b) {
@@ -677,143 +682,175 @@
   input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } });
   $("#composer").addEventListener("submit", (e) => { e.preventDefault(); send(); });
 
-  /* ── Voice ───────────────────────────────────────────────────────────── */
-  let voiceBusy = false;
-  const V = { data: null, last: null };  // last /api/voice payload; last rendered result (re-rendered on language switch)
+  Object.assign(I18N.en, {'voice.record':'Record','voice.stop':'Stop recording','voice.chooseAudio':'Choose audio','voice.send':'Send audio','voice.cancel':'Cancel','voice.audioLanguage':'Audio language','voice.samples':'Sample recordings'});
+  Object.assign(I18N.es, {'voice.record':'Grabar','voice.stop':'Detener grabación','voice.chooseAudio':'Elegir audio','voice.send':'Enviar audio','voice.cancel':'Cancelar','voice.audioLanguage':'Idioma del audio','voice.samples':'Grabaciones de ejemplo'});
+
+  /* ── Voice: same owned conversation as text ───────────────────────────── */
+  const V = {data:null,last:null,file:null,job:null,recorder:null,stream:null,timer:null,epoch:0,index:null};
+  const vt = (en, es) => LANG === 'es' ? es : en;
   function renderVoiceCustomers() {
-    const sel = $("#voiceCustomer");
-    const cur = store.get("voiceCustomer", "auto");
-    sel.innerHTML = `<option value="auto" ${cur === "auto" ? "selected" : ""}>${esc(t("voice.auto"))}</option>` + S.customers.map((c) => `<option value="${esc(c.id)}" ${c.id === cur ? "selected" : ""}>${esc(c.name)} · ${esc(c.segment)} (${esc(c.id)})</option>`).join("");
+    $('#voiceCustomer').value = `${cust(S.customer).name} · ${S.customer}`;
   }
-  $("#voiceCustomer").addEventListener("change", (e) => store.set("voiceCustomer", e.target.value));
-  $("#voiceRefresh").addEventListener("click", () => loadVoice());
-
-  async function loadVoice() {
-    let v;
-    try { v = await api("/api/voice"); } catch (e) { v = { available: false, error: e.message, samples: [] }; }
-    V.data = v;
-    renderVoiceList();
+  function stopRecording(discard = false) {
+    if (V.recorder) { V.recorder.discard = discard; if (V.recorder.state !== 'inactive') V.recorder.stop(); }
+    V.stream?.getTracks().forEach(track => track.stop()); V.stream = null;
+    clearTimeout(V.timer); V.timer = null;
   }
-
-  function callCard(s) {
-    const title = LANG === "es" ? (s.title_es || s.title) : s.title;
-    const lang = s.lang ? `<span class="lang-badge lang-${esc(s.lang)}" title="${esc(t("voice.langTitle." + s.lang))}">${esc(s.lang.toUpperCase())}</span>` : "";
-    return `
-      <div class="card call${S.selectedCall === s.name ? " selected" : ""}" data-name="${esc(s.name)}">
-        <div class="call-head">
-          <div class="call-icon">${icon("phone")}</div>
-          <div style="min-width:0;flex:1"><div class="call-title">${esc(title)}</div><div class="call-file">${esc(s.name)} · ${esc(s.size_kb)} KB${s.customer_name ? ` · ${esc(t("voice.callerName", { name: s.customer_name }))}` : ""}</div></div>
-          ${lang}
-        </div>
-        ${s.script ? `<details class="call-note"><summary>${esc(t("voice.says"))}</summary>${esc(s.script)}</details>` : ""}
-        <div class="call-actions">
-          <audio controls preload="none" src="${esc(s.url)}"></audio>
-          <button class="btn btn-sm btn-primary" data-process="${esc(s.name)}" ${voiceBusy ? "disabled" : ""}>${icon("play")}${esc(t("voice.process"))}</button>
-        </div>
-      </div>`;
+  function clearVoice() {
+    V.epoch++; stopRecording(true); V.file = null; V.job = null; V.last = null; V.index = null;
+    $('#voiceFile').value = ''; $('#voiceResult').textContent = vt('Record or upload audio.', 'Grabe o suba audio.');
+    renderFileName();
   }
-
-  function renderVoiceList() {
-    const v = V.data; if (!v) return;
-    const list = $("#voiceList");
-    if (!v.available) {
-      list.innerHTML = `<div class="card placeholder">
-        <div class="ph-icon">${icon("mic")}</div>
-        <h3>${esc(t("voice.warmTitle"))}</h3>
-        <p>${esc(t("voice.warmBody"))}</p>
-        <p style="margin-top:10px;font-size:12px">${esc(v.error || "")}</p></div>`;
-      $("#uploadCard").classList.add("hidden");
-      return;
-    }
-    $("#uploadCard").classList.remove("hidden");
-    if (!v.samples.length) {
-      list.innerHTML = `<div class="card placeholder"><div class="ph-icon">${icon("phone")}</div><h3>${esc(t("voice.noneTitle"))}</h3><p>${t("voice.noneBody")}</p></div>`;
-      return;
-    }
-    // Calls in the active UI language first; a header per language when there is more than one.
-    const order = [LANG, ...LANGS.filter((l) => l !== LANG), "other"];
-    const groups = order.map((l) => ({ l, items: v.samples.filter((s) => (LANGS.includes(s.lang) ? s.lang : "other") === l) })).filter((g) => g.items.length);
-    const headed = groups.length > 1;
-    list.innerHTML = groups.map((g) => `${headed ? `<div class="voice-group-h"><span class="lang-badge lang-${g.l}">${g.l === "other" ? "··" : g.l.toUpperCase()}</span>${esc(t("voice.group." + g.l))}<span class="n">${g.items.length}</span></div>` : ""}${g.items.map(callCard).join("")}`).join("");
-    $$("[data-process]", list).forEach((b) => b.addEventListener("click", () => processVoice({ sample: b.dataset.process })));
-  }
-
   function renderFileName() {
-    const f = $("#voiceFile").files[0];
-    const el = $("#voiceFileName");
-    el.textContent = f ? f.name : t("voice.noFile");
-    el.classList.toggle("has-file", !!f);
+    $('#voiceFileName').textContent = V.file?.name || vt('No audio selected', 'Ningún audio seleccionado');
+    $('#voiceUploadBtn').disabled = !V.file || S.busy || !V.data?.available;
+    $('#voiceRecord').disabled = S.busy || !V.data?.available;
+    $('#voiceStop').hidden = !V.recorder || V.recorder.state === 'inactive';
   }
-  $("#voiceFile").addEventListener("change", (e) => { $("#voiceUploadBtn").disabled = !e.target.files.length || voiceBusy; renderFileName(); });
-  $("#voiceUploadBtn").addEventListener("click", () => {
-    const f = $("#voiceFile").files[0]; if (f) processVoice({ file: f });
-  });
-
-  // state: "run" (in flight), "done" (with real timings), "fail"
-  function voiceSteps(state, res = {}) {
-    const steps = [[t("voice.stt"), "stt_ms"], [t("voice.agent"), "agent_ms"], [t("voice.tts"), "tts_ms"]];
-    return `<div class="steps">${steps.map(([n, k], i) => {
-      const cls = state === "done" ? "done" : state === "run" ? "active" : "";
-      const tm = state === "done" && res[k] != null ? ` · ${fmtMs(res[k])}` : "";
-      return `<span class="step ${cls}"><span class="n">${i + 1}</span>${esc(n)}${tm}</span>`;
-    }).join("")}</div>`;
+  $('#voiceRefresh').addEventListener('click', loadVoice);
+  async function loadVoice() {
+    try { V.data = await api('/api/voice'); }
+    catch(e) { V.data = {available:false,error:e.message,samples:[]}; }
+    renderVoiceCustomers(); renderVoiceList(); renderFileName();
   }
-
-  async function processVoice({ sample, file }) {
-    if (voiceBusy) return;
-    voiceBusy = true;
-    S.selectedCall = sample || null;
-    $$(".call").forEach((c) => c.classList.toggle("selected", c.dataset.name === sample));
-    $$("[data-process], #voiceUploadBtn").forEach((b) => (b.disabled = true));
-    const out = $("#voiceResult");
-    const label = sample || (file && file.name);
-    const t0 = performance.now();
-    V.last = null;
-    const draw = () => {
-      out.innerHTML = `${voiceSteps("run")}
-        <div class="turn"><div class="who caller">${icon("user")}</div><div><div class="lbl">${esc(t("voice.processing"))}</div><div class="txt">${esc(label)} <span class="dots" style="margin-left:8px"><i></i><i></i><i></i></span> <span class="tt" style="color:var(--muted);font-size:12.5px">${((performance.now() - t0) / 1000).toFixed(1)} s</span></div></div></div>`;
-    };
-    draw();
-    const tick = setInterval(draw, 200);
-    const fd = new FormData();
-    fd.append("customer_id", $("#voiceCustomer").value || "auto");
-    if (sample) fd.append("sample", sample);
-    if (file) fd.append("file", file, file.name);
-    let res;
-    try { res = await api("/api/voice/process", { method: "POST", body: fd }); }
-    catch (e) { res = { error: e.message }; }
-    finally { clearInterval(tick); voiceBusy = false; $$("[data-process]").forEach((b) => (b.disabled = false)); $("#voiceUploadBtn").disabled = !$("#voiceFile").files.length; }
-
-    V.last = res;
-    renderVoiceResult();
-  }
-
-  function renderVoiceResult() {
-    const res = V.last; if (!res) return;
-    const out = $("#voiceResult");
-    if (res.error && !res.answer) {
-      out.innerHTML = `${voiceSteps("fail")}<div class="turn"><div class="who caller">${icon("alert")}</div><div><div class="lbl">${esc(t("voice.failed"))}</div><div class="txt" style="border-color:var(--coral-100);background:var(--coral-50)">${esc(res.error)}</div></div></div>`;
-      return;
+  function renderVoiceList() {
+    if (!V.data) return;
+    $('#voiceNotice').textContent = V.data.available
+      ? vt('AI-generated voice. Use synthetic audio. Record up to 60 seconds or upload WAV, MP3, WebM or MP4 up to 10 MiB. Audio is stored in Langfuse.', 'Voz generada por IA. Use audio sintético. Grabe hasta 60 segundos o suba WAV, MP3, WebM o MP4 de hasta 10 MiB. El audio se almacena en Langfuse.')
+      : V.data.error;
+    const list = $('#voiceList'); list.replaceChildren();
+    for (const sample of V.data.samples.filter(sample => sample.customer_id === S.customer)) {
+      const card = document.createElement('div'); card.className = 'card call';
+      card.innerHTML = `<div class="call-title">${esc(LANG === 'es' ? sample.title_es : sample.title)}</div><p>${esc(sample.lang.toUpperCase())} · ${esc(vt('Synthetic upstream recording', 'Grabación sintética original'))}</p><audio controls preload="none" src="${esc(sample.url)}"></audio><button class="btn btn-sm" ${S.busy || !V.data.available ? 'disabled' : ''}>${esc(vt('Use recording', 'Usar grabación'))}</button>`;
+      $('button',card).onclick = async () => {
+        if (S.busy) return;
+        try {
+          const response = await fetch(sample.url); if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          V.file = new File([await response.blob()],sample.name,{type:'audio/mpeg'}); V.job = null;
+          $('#voiceLanguage').value = sample.lang; renderFileName();
+        } catch(e) { toast(e.message,true); }
+      };
+      list.appendChild(card);
     }
-    const vb = [];
-    if (res.blocked) vb.push(`<span class="badge badge-blocked">${icon("shield")}${esc(t("badge.blocked"))}</span>`);
-    (res.risks || []).forEach((k) => vb.push(`<span class="badge badge-risk">${icon("alert")}${esc(k.replace(/_/g, " "))}</span>`));
-    [...new Set(res.tools_used || [])].forEach((tn) => vb.push(`<span class="badge badge-tool">${icon("tool")}${esc(tn)}</span>`));
-    // Autoplay only the first time a reply is shown — not when the language toggle re-renders it.
-    const auto = res._played ? "" : "autoplay"; res._played = true;
-    const audio = res.reply_audio_b64 ? `<audio controls ${auto} src="data:${esc(res.reply_mime || "audio/mpeg")};base64,${res.reply_audio_b64}"></audio>` : `<div class="call-note">${esc(t("voice.noAudio"))}</div>`;
-    const langPill = (l) => `<span class="lang-badge lang-${esc(l)}">${esc(String(l).toUpperCase())}</span>`;
-    out.innerHTML = `${voiceSteps("done", res)}
-      <div class="turn"><div class="who caller">${icon("user")}</div><div><div class="lbl">${esc(t("voice.transcript"))}${res.call_language ? ` <span title="${esc(t("voice.hint"))}">${langPill(res.call_language)}</span>` : ""}</div><div class="txt">${esc(res.transcript || t("voice.emptyTranscript"))}</div></div></div>
-      <div class="turn"><div class="who bot"><svg viewBox="0 0 32 32"><use href="#i-logo"/></svg></div><div><div class="lbl">${esc(t("voice.reply"))}${res.reply_language ? ` <span title="${esc(t("voice.replyLang"))}">${langPill(res.reply_language)}</span>` : ""}</div><div class="txt bubble">${md(res.answer || "")}</div><div style="margin-top:10px">${audio}</div>${vb.length ? `<div class="badges" style="margin-top:10px">${vb.join("")}</div>` : ""}</div></div>
-      <div class="msg-foot">
-        <span class="stat" title="${esc(t("voice.e2e"))}">${icon("clock")}${fmtMs(res.latency_ms)}</span>
-        ${res.customer_id ? `<span class="sep"></span><span class="stat">${icon("user")}${esc(cust(res.customer_id).name)}</span>` : ""}
-        ${res.trace_id ? `<span class="sep"></span><span class="trace-id" title="${esc(res.trace_id)}">${esc(res.trace_id.slice(0, 8))}…</span>` : ""}
-        <span class="grow"></span>
-        ${res.trace_url ? `<a class="btn btn-xs btn-navy" href="${esc(res.trace_url)}" target="_blank" rel="noopener">${esc(t("foot.openLf"))}${icon("ext")}</a>` : ""}
-        ${res.apm_url ? `<a class="btn btn-xs" href="${esc(res.apm_url)}" target="_blank" rel="noopener">${icon("pulse")}${esc(t("foot.openApm"))}${icon("ext")}</a>` : ""}
-      </div>`;
+  }
+  $('#voiceFile').addEventListener('change', e => {
+    if (S.busy) return;
+    V.file = e.target.files[0] || null; V.job = null; renderFileName();
+  });
+  $('#voiceRecord').addEventListener('click', async () => {
+    if (S.busy) return;
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+      toast(vt('Recording requires a supported browser on HTTPS. Upload audio instead.', 'La grabación requiere un navegador compatible con HTTPS. Suba audio.'),true); return;
+    }
+    const mime = ['audio/webm;codecs=opus','audio/mp4'].find(type => MediaRecorder.isTypeSupported(type));
+    if (!mime) { toast(vt('Recording format unavailable. Upload audio.', 'Formato de grabación no disponible. Suba audio.'),true); return; }
+    setBusy(true); const epoch = V.epoch;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+      if (epoch !== V.epoch) { stream.getTracks().forEach(track => track.stop()); return; }
+      V.stream = stream;
+      const recorder = new MediaRecorder(stream,{mimeType:mime}); V.recorder = recorder;
+      const chunks = []; let bytes = 0;
+      recorder.ondataavailable = event => {
+        bytes += event.data.size;
+        if (bytes > 10*1024*1024) { stopRecording(true); toast(vt('Recording exceeded 10 MiB.', 'La grabación superó 10 MiB.'),true); }
+        else if (event.data.size) chunks.push(event.data);
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach(track => track.stop()); clearTimeout(V.timer);
+        if (!recorder.discard && epoch === V.epoch) {
+          V.file = new File(chunks,mime.includes('mp4')?'recording.mp4':'recording.webm',{type:mime}); V.job = null;
+        }
+        if (V.recorder === recorder) V.recorder = null;
+        setBusy(false); renderFileName();
+      };
+      recorder.onerror = () => { stopRecording(true); toast(vt('Recording failed. Upload audio.', 'La grabación falló. Suba audio.'),true); };
+      recorder.start(250); V.timer = setTimeout(() => stopRecording(),60000); renderFileName();
+    } catch(e) { stopRecording(true); setBusy(false); toast(vt('Microphone unavailable: ', 'Micrófono no disponible: ')+e.name,true); }
+  });
+  $('#voiceStop').onclick = () => stopRecording();
+  window.addEventListener('pagehide', () => stopRecording(true));
+  $('#voiceUploadBtn').onclick = () => processVoice();
+  $('#voiceCancel').onclick = async () => {
+    if (!S.activeRequest) return;
+    try { await postJSON('/api/cancel',S.activeRequest); }
+    catch(e) { toast(e.message,true); }
+  };
+  async function processVoice() {
+    if (S.busy || !V.file || !V.data?.available) return;
+    if (V.file.size > 10*1024*1024) { toast(vt('Audio exceeds 10 MiB.', 'El audio supera 10 MiB.'),true); return; }
+    const selectedFile=V.file, selectedLanguage=$('#voiceLanguage').value;
+    if (!S.session) await newConversation();
+    if (!S.session) return;
+    V.file=selectedFile;
+    const job = V.job || {id:crypto.randomUUID(),session:S.session,language:selectedLanguage,file:selectedFile};
+    V.job = job; const epoch = V.epoch;
+    S.activeRequest = {session_id:job.session,request_id:job.id}; setBusy(true);
+    $('#voiceCancel').hidden = false; renderFileName(); renderVoiceList();
+    $('#voiceResult').textContent = vt('Processing audio…', 'Procesando audio…');
+    const form = new FormData(); form.append('session_id',job.session); form.append('request_id',job.id);
+    form.append('lang',job.language); form.append('file',job.file,job.file.name);
+    try {
+      let result = await api('/api/voice/process',{method:'POST',body:form});
+      const end = Date.now()+185000;
+      while (result.status === 'running') {
+        if (Date.now()>end) throw new Error(vt('Response pending. Retry this request to check its result.', 'Respuesta pendiente. Reintente esta solicitud para consultar el resultado.'));
+        await new Promise(resolve => setTimeout(resolve,500));
+        if (epoch!==V.epoch || job.session!==S.session) return;
+        result = await api('/api/voice/status/'+encodeURIComponent(job.id));
+      }
+      if (epoch!==V.epoch || job.session!==S.session) return;
+      if (result.answer && !S.messages.some(message => message.meta?.observation_id===result.observation_id)) {
+        S.messages.push({role:'user',content:result.transcript});
+        S.messages.push({role:'assistant',content:result.answer,meta:{...result}});
+        persist(); renderTranscript();
+      }
+      V.index = S.messages.findIndex(message => message.meta?.observation_id===result.observation_id);
+      V.last = result; renderVoiceResult();
+      if (result.answer) void pollVoiceMedia(job,result,epoch);
+    } catch(e) {
+      if (epoch!==V.epoch) return;
+      V.last={error:e.message}; renderVoiceResult();
+    } finally {
+      if (epoch===V.epoch) { S.activeRequest=null; setBusy(false); $('#voiceCancel').hidden=true; renderFileName(); renderVoiceList(); }
+    }
+  }
+  async function pollVoiceMedia(job,result,epoch) {
+    // Delivery reads are independent of the completed banking response.
+    for (let n=0;n<30 && result.media_status==='pending';n++) {
+      await new Promise(resolve => setTimeout(resolve,2000));
+      if (epoch!==V.epoch || V.job!==job || job.session!==S.session) return;
+      try { result=await api('/api/voice/status/'+encodeURIComponent(job.id)); }
+      catch { return; }
+      V.last=result;
+      const label=$('#voiceMediaStatus'); if(label) label.textContent=mediaLabel(result);
+    }
+  }
+  function mediaLabel(result) {
+    return result.media_status==='uploaded'
+      ? vt('Langfuse media uploaded. Open the trace to check native playback.', 'Audio subido a Langfuse. Abra la traza para comprobar la reproducción nativa.')
+      : vt('Langfuse media upload pending. Local playback is independent.', 'Carga de audio en Langfuse pendiente. La reproducción local es independiente.');
+  }
+  function renderVoiceResult() {
+    const result=V.last; if(!result) return;
+    const out=$('#voiceResult');out.replaceChildren();
+    if (result.answer && V.index>=0 && S.messages[V.index]) {
+      const transcript=document.createElement('p');transcript.textContent=result.transcript;out.appendChild(transcript);
+      out.appendChild(renderMessage(S.messages[V.index],V.index));
+      if(result.reply_audio_url) {
+        const audio=document.createElement('audio');audio.controls=true;audio.preload='metadata';audio.src=result.reply_audio_url;out.appendChild(audio);
+      } else {
+        const note=document.createElement('p');note.textContent=result.speech_status==='not_requested'
+          ? vt('Confirmation uses text. No speech was requested.', 'La confirmación usa texto. No se solicitó voz.')
+          : result.speech_status==='cancelled'
+            ? vt('Audio cancelled. The banking answer remains available.', 'Audio cancelado. La respuesta bancaria sigue disponible.')
+            : vt('Audio unavailable. The banking answer remains available.', 'Audio no disponible. La respuesta bancaria sigue disponible.');out.appendChild(note);
+      }
+      if (result.voice_observation_id) { const media=document.createElement('p');media.id='voiceMediaStatus';media.textContent=mediaLabel(result);out.appendChild(media); }
+    } else {
+      const note=document.createElement('p');note.textContent=result.error || vt('Request cancelled.', 'Solicitud cancelada.');out.appendChild(note);
+      if(result.error) { const retry=document.createElement('button');retry.className='btn';retry.textContent=vt('Retry same request', 'Reintentar la misma solicitud');retry.onclick=processVoice;out.appendChild(retry); }
+    }
   }
 
   /* ── Presenter console ───────────────────────────────────────────────── */

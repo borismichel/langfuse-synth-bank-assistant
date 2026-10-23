@@ -5,7 +5,7 @@ from synth.receipt import RunReceipt
 
 
 def enabled(name):
-    allowed = {'apm_enabled', 'n8n_enabled'}
+    allowed = {'apm_enabled', 'n8n_enabled', 'voice_enabled'}
     if name not in allowed:
         raise ValueError('Unknown runtime option')
     path = Path(RunReceipt.state_dir()) / 'runtime-config.json'
