@@ -11,6 +11,13 @@ from .judges import pages,plain,scalar
 
 VERSION='northwind-provider-comparison-v1'
 
+
+def resolved_model_matches(provider,requested,resolved):
+    # This declared comparison role may resolve to its documented OpenAI snapshot.
+    # Do not accept arbitrary suffixes, other families or silently change the binding.
+    return resolved==requested or (provider,requested,resolved)==(
+        'openai','gpt-4.1-mini','gpt-4.1-mini-2025-04-14')
+
 class ProviderRequest(BaseModel):
     model_config=ConfigDict(extra="forbid")
     request_id: str=Field(min_length=1,max_length=80,pattern=r'^[A-Za-z0-9_-]+$')
@@ -74,6 +81,9 @@ class ProviderReplay(Replay):
             selected=run['scope']['bindings'][arm_name]
             summary={key:{'generations':0,'usage':{'input':0,'output':0},'native_cost_usd':0.0,'missing':0} for key in ('application','judges')}
             summary.update(provider=selected['provider'],model=selected['model'],latency_ms=0)
+            for key in ('application','judges'):
+                summary[key].update(requested_model=selected['model'] if key=='application' else run['scope']['judge']['model'],
+                    resolved_models=[])
             for row in arm['rows']:
                 if row.get('error') or not row.get('trace_id'):
                     # An uncertain dispatch or partial judge failure is not zero consumption.
@@ -89,12 +99,20 @@ class ProviderReplay(Replay):
                 for generation in generations:
                     kind='application' if generation.get('name')=='generate-response' else 'judges'
                     expected_model=selected['model'] if kind=='application' else run['scope']['judge']['model']
+                    resolved=generation.get('model')
+                    identity_matches=resolved==expected_model
+                    if kind=='application':
+                        attributes={k:scalar(v) for k,v in (generation.get('metadata') or {}).items()}
+                        identity_matches=(all(attributes.get('application_'+k)==selected[k] for k in ('provider','model','role')) and
+                            resolved_model_matches(selected['provider'],expected_model,resolved))
                     usage=generation.get('usageDetails') or {};cost=generation.get('totalCost')
-                    valid=(generation.get('model')==expected_model and
+                    valid=(identity_matches and
                         all(type(usage.get(k)) is int and usage[k]>=0 for k in ('input','output')) and
                         type(cost) in (int,float) and math.isfinite(cost) and cost>=0)
                     accounting[kind].append(generation)
                     target=summary[kind];target['generations']+=1
+                    if isinstance(resolved,str) and resolved not in target['resolved_models']:
+                        target['resolved_models'].append(resolved)
                     if not valid:target['missing']+=1;row['verified']=False
                     else:
                         for key in ('input','output'):target['usage'][key]+=usage[key]
