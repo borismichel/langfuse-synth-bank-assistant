@@ -81,7 +81,7 @@ async def main():
         until=time.monotonic()+1
         while not disconnected.is_set() and time.monotonic()<until:await asyncio.sleep(.01)
         assert disconnected.is_set(),'Cancelled request still owns a receiving socket'
-        assert len(calls)==len(permits)==4,'No retry or extra paid request' 
+        assert len(calls)==len(permits)==4,'No retry or extra paid request'
     finally:
         await config.close_native_clients()
     assert adapter.native_llm().judge.is_closed,'Owned judge client must close before completion'
