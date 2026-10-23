@@ -200,9 +200,11 @@ class ComplaintBridge:
             system, text, name = prompt.prompt, run['text'], 'classify-complaint'
         else:
             system, text, name = DRAFT, json.dumps(run['triage']) + '\n' + run['text'], 'draft-reply'
+        model = self.adapter.native_llm()
+        await asyncio.to_thread(self.adapter.check_spending)
         with self.attributes(run), run['root'].start_as_current_observation(name='complaint-step'), \
                 propagate_attributes(metadata={'generation_owner': 'langchain'}):
-            answer = await self.adapter.native_llm().ainvoke([SystemMessage(content=system), HumanMessage(content=text)],
+            answer = await model.ainvoke([SystemMessage(content=system), HumanMessage(content=text)],
                 config={'run_name': name, 'callbacks': [CallbackHandler(public_key=os.environ.get('LANGFUSE_PUBLIC_KEY'))],
                         'metadata': {'langfuse_prompt': prompt} if prompt is not None else {}})
         content = answer.content if isinstance(answer.content, str) else ''.join(

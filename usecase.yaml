@@ -138,7 +138,7 @@ live_components:
   llm_roles: [speech_to_text, text_to_speech]
   description: Bilingual banking assistant with retrieval, guardrails, confirmed
     banking actions, participant reset, answer feedback, protected policy judges,
-    annotation queues, measured calibration, model-free conduct reconciliation,
+    annotation queues, measured calibration, bounded application experiments, model-free conduct reconciliation,
     optional private APM and optional bilingual voice. Advanced workshop
     capabilities remain unavailable in this candidate.
   command: synth companion --config {config} --host 0.0.0.0 --port 8080
@@ -149,6 +149,8 @@ live_components:
   - LLM_API_KEY
   health_path: /api/health
   protected_paths:
+  - path: /manage/experiments
+    access: manage
   - path: /manage/judges
     access: manage
   - path: /manage/reviews
