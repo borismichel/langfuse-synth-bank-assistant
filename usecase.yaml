@@ -128,6 +128,8 @@ live_components:
   protected_paths:
   - path: /manage/judges
     access: manage
+  - path: /manage/reviews
+    access: manage
   - path: /apm
     access: presenter
   - path: /n8n
