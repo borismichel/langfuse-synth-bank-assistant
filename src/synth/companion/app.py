@@ -562,10 +562,27 @@ def create_app(adapter, *, preview=False):
 
     @app.get('/api/acts')
     async def acts():
-        return {'acts': [{'id': 'pending', 'group': 'Configuration', 'title': 'Presenter actions',
-                         'available': False, 'blurb': 'Experiments and promotion are not enabled in this candidate.',
-                         'show': 'Use the delivered runbook for available evidence.', 'command': '', 'button': 'Run'}],
-                'groups': {}, 'job': None}
+        links = []
+        for title, route, control in (
+            ('Application experiments', '/manage/experiments', experiment_controls),
+            ('Prompt releases', '/manage/releases', release_controls),
+        ):
+            available = False
+            status = 'Unavailable in development preview'
+            if not preview:
+                try:
+                    control.required()
+                    available = True
+                    status = ('Manager access required. Confirm estimated model costs before starting an experiment.'
+                              if route.endswith('/experiments') else
+                              'Manager access required. Review evidence before confirming a prompt release.')
+                except HTTPException as exc:
+                    status = str(exc.detail)
+                except ValueError:
+                    status = 'Presenter access configuration is invalid'
+            links.append({'title': title, 'available': available, 'status': status,
+                          'url': paths.base_path() + route if available else None})
+        return {'acts': [], 'groups': {}, 'job': None, 'links': links}
 
     def owned_answer(request, session_id, trace_id, observation_id):
         state = sessions.get(request.cookies.get('northwind_session'))

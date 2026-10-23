@@ -561,3 +561,7 @@ body.langfuse-theme { background:var(--surface-1); color:var(--text-primary); fo
   -webkit-mask-image:var(--cx-mask-tl),var(--cx-mask-bl),var(--cx-mask-br),var(--cx-mask-tr);
   mask-image:var(--cx-mask-tl),var(--cx-mask-bl),var(--cx-mask-br),var(--cx-mask-tr);
 }
+
+.presenter-layout.controls-only { grid-template-columns:1fr; }
+.controls-only .act-title,.controls-only .act-blurb { margin:0; }
+.controls-only .act .btn { align-self:flex-start; margin-top:8px; }

@@ -41,3 +41,26 @@ def test_complaint_http_and_real_sdk_contract(mode):
     result = subprocess.run([sys.executable, 'tests/n8n_bridge_case.py', *mode], env=env,
                             capture_output=True, text=True, timeout=60)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_failed_import_reports_bounded_sanitized_diagnostics():
+    import os
+    import subprocess
+    import sys
+    env = {k: v for k, v in os.environ.items() if k in ('PATH', 'HOME', 'TMPDIR', 'LANG')}
+    env['PYTHONPATH'] = 'src:demos/bank-assistant'
+    result = subprocess.run([sys.executable, 'tests/n8n_diagnostics_case.py'], env=env,
+                            capture_output=True, text=True, timeout=70)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize('mode', ['runtime', 'runtime-held-pipe'])
+def test_post_start_exit_reports_bounded_sanitized_diagnostics(mode):
+    import os
+    import subprocess
+    import sys
+    env = {k: v for k, v in os.environ.items() if k in ('PATH', 'HOME', 'TMPDIR', 'LANG')}
+    env['PYTHONPATH'] = 'src:demos/bank-assistant'
+    result = subprocess.run([sys.executable, 'tests/n8n_diagnostics_case.py', mode], env=env,
+                            capture_output=True, text=True, timeout=70)
+    assert result.returncode == 0, result.stdout + result.stderr

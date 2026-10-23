@@ -8,7 +8,7 @@ The complete implementation scope is [Depot spec #365](https://github.com/borism
 
 ## Developer mode
 
-Use Python 3.12.15, `uv sync --frozen --extra dev`, then `.venv/bin/synth-authoring check . --python .venv/bin/python --json`. The exact runtime, SDK and authoring versions are locked in `uv.lock`; runtime and authoring share the tested immutable core integration candidate recorded in provenance. The publishing workflow stays on the v5.0.0 commit. A coordinated stable core release remains required before full qualification.
+Use Python 3.12.15, `uv sync --frozen --extra dev`, then `.venv/bin/synth-authoring check . --python .venv/bin/python --json`. The exact dependencies are locked in `uv.lock`. [Candidate provenance](DEPOT_PROVENANCE.md) is the authoritative record for the current package, stable core, SDK and publishing identity, including the separate qualification status.
 
 Generate a credential-free example with isolated writable paths:
 
