@@ -445,7 +445,9 @@ def create_app(adapter, *, preview=False):
         if task.cancelled():
             return {'status':'cancelled','request_id':request_id,'status_url':status_url}
         try:
-            return {'status':'completed','request_id':request_id,'status_url':status_url,**task.result()}
+            result=task.result()
+            result['media_status']=speech.uploaded_status(result)
+            return {'status':'completed','request_id':request_id,'status_url':status_url,**result}
         except Exception as exc:
             return {'status':'failed','request_id':request_id,'status_url':status_url,'error':type(exc).__name__}
 

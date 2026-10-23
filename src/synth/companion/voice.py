@@ -4,6 +4,8 @@ from __future__ import annotations
 import asyncio
 import base64
 import io
+import json
+import hashlib
 import re
 import secrets
 import time
@@ -50,6 +52,7 @@ class VoiceService:
         self.adapter, self.enabled = adapter, enabled
         self.clients, self.bindings, self.media = {}, {}, {}
         self.flush_task = None
+        self.receipts = {}
         self.error = None
         if enabled:
             try:
@@ -76,6 +79,9 @@ class VoiceService:
         await asyncio.to_thread(self.adapter.check_spending,self.bindings[role].provider)
 
     def clear_session(self, session):
+        for ident in [i for i,r in self.receipts.items() if r['session_id']==session]:
+            receipt=self.receipts.pop(ident)
+            if receipt.get('task'): receipt['task'].cancel()
         for ident in [i for i,m in self.media.items() if m['session_id']==session]: self.media.pop(ident)
 
     def store(self, session, data, mime):
@@ -87,6 +93,10 @@ class VoiceService:
 
     async def close(self):
         self.media.clear()
+        tasks=[r['task'] for r in self.receipts.values() if r.get('task')]
+        for task in tasks: task.cancel()
+        await asyncio.gather(*tasks,return_exceptions=True)
+        self.receipts.clear()
         for client in self.clients.values(): await client.close()
         if self.flush_task:
             await self.flush_task
@@ -154,6 +164,8 @@ class VoiceService:
                                   trace_name=TRACE_NAME,version=config.RELEASE):
             with lf.start_as_current_observation(as_type='agent',name=TRACE_NAME,
                     metadata={'channel':'voice','judge_eligible':'false'}) as root:
+                receipt={'session_id':session_id,'trace_id':root.trace_id,'expected':{'input':(mime,len(data),hashlib.sha256(data).hexdigest())},'status':'pending','checked_at':0}
+                self.receipts[root.id]=receipt
                 t=time.monotonic()
                 transcript,caller=await self.transcribe(lf,data,mime,language)
                 root.update(input={'audio':caller})
@@ -164,6 +176,7 @@ class VoiceService:
                 t=time.monotonic()
                 try:
                     audio,reply,spoken=await self.speak(lf,speakable(result['answer']),language)
+                    receipt['expected']['output']=('audio/wav',len(audio),hashlib.sha256(audio).hexdigest())
                     result.update(reply_audio_url=self.store(session_id,audio,'audio/wav'),reply_mime='audio/wav',
                                   speech_status='completed',spoken_transcript=spoken,tts_ms=round((time.monotonic()-t)*1000))
                     root.update(output={'transcript':transcript,'answer':result['answer'],'reply_audio':reply},
@@ -177,3 +190,40 @@ class VoiceService:
         if self.flush_task is None or self.flush_task.done():
             self.flush_task=asyncio.create_task(asyncio.to_thread(config.flush))
         return result
+
+    def uploaded_status(self, result):
+        """Read accepted media records independently of banking and local playback.
+
+        'uploaded' confirms target records, not browser playback or byte retrieval.
+        References come from the exact owned observation, never caller-supplied IDs.
+        """
+        ident=result.get('voice_observation_id');receipt=self.receipts.get(ident)
+        if not receipt: return 'unavailable'
+        task=receipt.get('task')
+        if receipt['status']!='uploaded' and (not task or task.done()) and time.monotonic()-receipt['checked_at']>=2:
+            receipt['checked_at']=time.monotonic()
+            async def check():
+                try: receipt['status']=await asyncio.to_thread(self._read_uploaded,ident,receipt)
+                except Exception: receipt['status']='pending'
+            receipt['task']=asyncio.create_task(check())
+        return receipt['status']
+
+    def _read_uploaded(self, ident, receipt):
+        client=self.adapter.langfuse().api
+        options={'timeout_in_seconds':5,'max_retries':0}
+        page=client.observations.get_many(trace_id=receipt['trace_id'],name=TRACE_NAME,
+            fields='basic,io',limit=100,parse_io_as_json=True,request_options=options)
+        matches=[row for row in page.data if row.id==ident and row.trace_id==receipt['trace_id'] and row.name==TRACE_NAME]
+        if len(matches)!=1: return 'pending'
+        observation=matches[0]
+        for field,(mime,length,_) in receipt['expected'].items():
+            payload=getattr(observation,field,None)
+            if isinstance(payload,str): payload=json.loads(payload)
+            if not isinstance(payload,dict): return 'pending'
+            token=payload.get('audio' if field=='input' else 'reply_audio')
+            reference=LangfuseMedia.parse_reference_string(token)
+            if reference['content_type']!=mime: return 'pending'
+            record=client.media.get(reference['media_id'],request_options=options)
+            if record.media_id!=reference['media_id'] or record.content_type!=mime or record.content_length!=length or not record.uploaded_at:
+                return 'pending'
+        return 'uploaded'

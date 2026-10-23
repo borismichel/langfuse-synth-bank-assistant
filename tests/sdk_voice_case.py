@@ -2,6 +2,8 @@
 import asyncio
 import base64
 import io
+import gzip
+import hashlib
 import json
 import os
 import tempfile
@@ -17,10 +19,15 @@ from fastapi.testclient import TestClient
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
+from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTraceServiceRequest
 from openai import AsyncOpenAI
 from websockets.asyncio.server import serve
 
 requests = []
+exports = []
+media_records = {}
+media_healthy = Event()
+def attrs(span): return {a.key:a.value.string_value for a in span.attributes}
 spoken = 'An international wire costs USD 35.'
 
 class API(BaseHTTPRequestHandler):
@@ -34,7 +41,14 @@ class API(BaseHTTPRequestHandler):
         if '/prompts/' in self.path:
             from northwind.prompts import V5_RELEASE
             return self.reply({'name':'northwind-assistant-system','version':1,'prompt':V5_RELEASE,'labels':['production'],'tags':[],'config':{},'type':'text'})
-        if '/observations' in self.path: return self.reply({'data':[], 'meta':{}})
+        if '/observations' in self.path:
+            return self.reply({'data':[{'id':s.span_id.hex(),'traceId':s.trace_id.hex(),'name':s.name,'startTime':'2026-10-23T09:00:00Z','projectId':'fixture-project','type':attrs(s).get('langfuse.observation.type','span').upper(),
+                'input':attrs(s).get('langfuse.observation.input'),'output':attrs(s).get('langfuse.observation.output')}
+                for s in exports], 'meta':{'cursor':None}})
+        if '/media/' in self.path:
+            ident=self.path.rsplit('/',1)[1];record=media_records.get(ident)
+            if not record or not record.get('uploadedAt'): return self.reply({'message':'Not uploaded'},404)
+            return self.reply({**record,'mediaId':ident,'url':base+'/download/'+ident,'urlExpiry':'2099-01-01T00:00:00Z'})
         return self.reply({'data':[{'id':'fixture-project','name':'Voice fixture'}]})
     def do_POST(self):
         body = self.rfile.read(int(self.headers.get('Content-Length','0')))
@@ -42,8 +56,32 @@ class API(BaseHTTPRequestHandler):
             requests.append('transcription')
             assert b'gpt-transcribe' in body and b'name="languages[]"' in body and b'\r\nen\r\n' in body
             return self.reply({'text':'International wire fees?','languages':[{'code':'en'}], 'usage':{'type':'duration','seconds':1}})
-        if self.path.endswith('/media'): return self.reply({'message':'Fixture media unavailable'},503)
+        if self.headers.get('Content-Encoding') == 'gzip': body=gzip.decompress(body)
+        if self.path.endswith('/otel/v1/traces'):
+            if 'json' in self.headers.get('Content-Type',''):
+                from google.protobuf.json_format import Parse
+                batch=Parse(body.decode(),ExportTraceServiceRequest())
+            else: batch=ExportTraceServiceRequest.FromString(body)
+            exports.extend(s for r in batch.resource_spans for sc in r.scope_spans for s in sc.spans)
+        if self.path.endswith('/media'):
+            if not media_healthy.is_set(): return self.reply({'message':'Fixture media unavailable'},503)
+            record=json.loads(body);ident=record['sha256Hash'].replace('+','-').replace('/','_')[:22]
+            media_records.setdefault(ident,record)
+            return self.reply({'mediaId':ident,'uploadUrl':base+'/upload/'+ident},201)
         return self.reply({'successes':[], 'errors':[]})
+
+    def do_PUT(self):
+        ident=self.path.rsplit('/',1)[1];record=media_records[ident]
+        body=self.rfile.read(int(self.headers['Content-Length']))
+        assert base64.b64encode(hashlib.sha256(body).digest()).decode()==record['sha256Hash']
+        assert len(body)==record['contentLength'] and self.headers['Content-Type']==record['contentType']
+        record['received']=True
+        self.reply({})
+    def do_PATCH(self):
+        ident=self.path.rsplit('/',1)[1];record=media_records[ident]
+        body=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+        assert record['received'] and body['uploadHttpStatus']==200
+        record.update(body);self.reply({})
 
 class ChatProvider(BaseChatModel):
     model: str = 'fixture-banking-model'
@@ -64,7 +102,7 @@ async def speech(socket):
     assert response['input'][0]['content'][0]['text'] == spoken
     requests.append('speech')
     fields = {'event_id':'evt-fixture','response_id':'response-fixture','item_id':'item-fixture','output_index':0,'content_index':0}
-    await socket.send(json.dumps({**fields,'type':'response.output_audio.delta','delta':base64.b64encode(b'\0\0'*2400).decode()}))
+    await socket.send(json.dumps({**fields,'type':'response.output_audio.delta','delta':base64.b64encode(b'\1\0'*2400).decode()}))
     await socket.send(json.dumps({**fields,'type':'response.output_audio_transcript.done','transcript':spoken}))
     await socket.send(json.dumps({'event_id':'evt-done','type':'response.done','response':{'id':'response-fixture','status':'completed','output':[], 'usage':{'input_tokens':20,'output_tokens':10,'total_tokens':30,'input_token_details':{'text_tokens':20,'audio_tokens':0,'cached_tokens':0},'output_token_details':{'text_tokens':5,'audio_tokens':5}}}}))
 async def start_ws():
@@ -127,6 +165,21 @@ with tempfile.TemporaryDirectory() as directory:
             assert requests.count('transcription') == requests.count('banking') == requests.count('speech') == 1
             assert requests.count('permit') >= 2
             assert browser.get('/api/session',params={'session_id':session}).status_code == 200
+            media_healthy.set()
+            for _ in range(150):
+                uploaded=browser.get(result['status_url']).json()
+                if uploaded.get('media_status')=='uploaded': break
+                time.sleep(.1)
+            assert uploaded['media_status']=='uploaded', uploaded
+            assert len(media_records)==2 and all(m.get('uploadedAt') for m in media_records.values())
+            outer=[s for s in exports if s.name=='northwind-voice-call']
+            assistant=[s for s in exports if s.name=='northwind-assistant']
+            assert len(outer)==len(assistant)==1
+            assert outer[0].trace_id==assistant[0].trace_id and assistant[0].parent_span_id==outer[0].span_id
+            generations=[s for s in exports if attrs(s).get('langfuse.observation.type')=='generation']
+            assert len(generations)==3, [s.name for s in generations]
+            assert all(s.trace_id==outer[0].trace_id for s in generations)
+            assert requests.count('transcription')==requests.count('banking')==requests.count('speech')==1
             print(json.dumps({'voice':'completed','separate_roles':True,'same_conversation':True,'duplicate_replay':True,'media_verification':'pending_fixture_outage'}))
     finally:
         server.shutdown();http_thread.join();server.server_close();loop.call_soon_threadsafe(loop.stop);thread.join(5)
