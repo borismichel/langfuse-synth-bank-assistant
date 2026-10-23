@@ -779,9 +779,11 @@
   async function processVoice() {
     if (S.busy || !V.file || !V.data?.available) return;
     if (V.file.size > 10*1024*1024) { toast(vt('Audio exceeds 10 MiB.', 'El audio supera 10 MiB.'),true); return; }
+    const selectedFile=V.file, selectedLanguage=$('#voiceLanguage').value;
     if (!S.session) await newConversation();
     if (!S.session) return;
-    const job = V.job || {id:crypto.randomUUID(),session:S.session,language:$('#voiceLanguage').value,file:V.file};
+    V.file=selectedFile;
+    const job = V.job || {id:crypto.randomUUID(),session:S.session,language:selectedLanguage,file:selectedFile};
     V.job = job; const epoch = V.epoch;
     S.activeRequest = {session_id:job.session,request_id:job.id}; setBusy(true);
     $('#voiceCancel').hidden = false; renderFileName(); renderVoiceList();

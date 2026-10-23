@@ -73,6 +73,21 @@ def exercise(app):
             page.locator('[data-tab="voice"]').click()
             assert page.locator('#voiceResult audio').count()==0
             assert not errors,errors
+            # A failed initial session request must not discard a later chosen file.
+            recovery=browser.new_context().new_page();first_session=[True]
+            recovery.on('pageerror',lambda e:errors.append(str(e)))
+            def session_transport(route):
+                if first_session[0] and route.request.method=='POST':
+                    first_session[0]=False;route.abort()
+                else:route.continue_()
+            recovery.route('**/api/session',session_transport)
+            recovery.goto(f'http://127.0.0.1:{port}{prefix}/')
+            recovery.wait_for_function("document.querySelector('#sessionId').textContent === '—'")
+            recovery.locator('[data-tab="voice"]').click()
+            recovery.locator('#voiceFile').set_input_files('demos/bank-assistant/data/voice/03-international-wire.mp3')
+            recovery.locator('#voiceUploadBtn').click()
+            recovery.locator('#voiceResult audio').wait_for(timeout=15000)
+            assert not errors,errors
             browser.close()
             print('browser_voice_record_upload_feedback_confirmation_reset_prefix=true')
     finally:
