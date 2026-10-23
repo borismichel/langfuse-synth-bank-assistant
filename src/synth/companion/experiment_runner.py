@@ -154,13 +154,33 @@ class Replay:
                 row.update(provider=selected['provider'],model=selected['model'],role=selected['role'],provider_error=result['error'],trace_id=result['trace_id'],observation_id=result['observation_id'])
                 raise ValueError('banking_runner_failed')
             if self.body.cohort=='disputes':
-                pending=[a for a in result['banking_actions'] if a.get('status')=='confirmation_required' and a.get('tool')=='open_dispute']
+                history=[{'role':'user','content':item.input['question']},
+                         {'role':'assistant','content':result['answer']}]
+                reply=item.metadata.get('confirm_reply')
+                # A fixture may answer a conversational question before the app emits a
+                # proposal. This is one authored customer turn, never inferred approval.
+                # Any action evidence (including errors/foreign/ambiguous proposals)
+                # prevents corrective steering. No oracle fields enter the conversation.
+                if (not result['blocked'] and not result['banking_actions'] and
+                        isinstance(reply,str) and reply.strip()):
+                    binding.update(request_id=uuid4().hex)
+                    result=await turn(reply,history=history);turns.append(result)
+                    if result['error']:raise ValueError('banking_runner_failed')
+                    history += [{'role':'user','content':reply},
+                                {'role':'assistant','content':result['answer']}]
+                actions=result['banking_actions']
                 accepted=set(item.metadata.get('accepted_transactions') or [item.metadata.get('expected_transaction')])
-                if len(pending)==1 and pending[0]['arguments'].get('transaction_id') in accepted:
-                    binding.update(request_id=uuid4().hex,confirmation_id=pending[0]['action_id'])
-                    result=await turn(item.metadata.get('confirm_reply','Yes, open this dispute.'),
-                        history=[{'role':'user','content':item.input['question']},{'role':'assistant','content':result['answer']}],
-                        confirmation=pending[0]);turns.append(result)
+                pending=actions[0] if len(actions)==1 else None
+                if (not result['blocked'] and isinstance(pending,dict) and
+                        pending.get('status')=='confirmation_required' and pending.get('tool')=='open_dispute' and
+                        isinstance(pending.get('action_id'),str) and pending['action_id'] and
+                        isinstance(pending.get('arguments'),dict) and
+                        pending['arguments'].get('transaction_id') in accepted):
+                    # MCP validates this capability against the same scenario/session;
+                    # a matching transaction alone can never authorize mutation.
+                    binding.update(request_id=uuid4().hex,confirmation_id=pending['action_id'])
+                    result=await turn(reply or 'Yes, open this dispute.',history=history,
+                        confirmation=pending);turns.append(result)
                     if result['error']:raise ValueError('banking_confirmation_runner_failed')
             row.update(answer=result['answer'],query=result['query'],context=result['context'],trace_id=result['trace_id'],
                 observation_id=result['observation_id'],trace_url=result['trace_url'],prompt_version=result['prompt_version'],

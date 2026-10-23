@@ -61,3 +61,17 @@ def test_parallel_judges_cancel_through_delivered_controls():
     env['PYTHONPATH']=os.pathsep.join(['src','tests','demos/bank-assistant'])
     result=subprocess.run([sys.executable,'-m','pytest','tests/sdk_parallel_judge_case.py','-q'],env=env,capture_output=True,text=True,timeout=30)
     assert result.returncode==0,result.stdout+result.stderr
+
+
+@pytest.mark.parametrize('mode', ['conversation','wrong','foreign','ambiguous','no-proposal','deny','deadline','case-limit'])
+def test_delivered_dispute_conversation_replay(mode):
+    import tempfile
+    env = {k:v for k,v in os.environ.items() if k in ('PATH','HOME','TMPDIR','LANG')}
+    env['PYTHONPATH'] = os.pathsep.join(['src','tests','demos/bank-assistant'])
+    env['BANK_TEST_REPLAY_MODE'] = mode
+    # SDK process globals and live receipt storage must be isolated per scenario.
+    with tempfile.TemporaryDirectory(prefix='dispute-replay-') as folder:
+        env['TMPDIR'] = folder
+        result = subprocess.run([sys.executable, '-m', 'pytest', 'tests/sdk_dispute_replay_case.py', '-q'],
+            env=env, capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, result.stdout + result.stderr
