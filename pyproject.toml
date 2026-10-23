@@ -7,7 +7,7 @@ dependencies = [
     # The shared synthesis library (public git dependency). Pinned to an immutable commit — never a
     # moving branch — so this kit's vendor-approved output can't be silently rewritten by a
     # later lib change. Bump deliberately (see the lib's RELEASING.md).
-    "langfuse-synth-core[companion] @ git+https://github.com/borismichel/langfuse-synth-core@220ffccfdf02a4594478e7f214ac9950f5a25ff3",
+    "langfuse-synth-core[companion] @ git+https://github.com/borismichel/langfuse-synth-core@eb3ca1d678bc77a377d815e0bb8e5d895a4d9b22",
     "langfuse==5.0.4",
     "PyYAML>=6,<7",
     "requests>=2.31",
@@ -23,10 +23,11 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8,<9",
+    "playwright==1.64.1",
     # The determinism golden gate + `synth-authoring validate/freeze` ride the [authoring]
     # extra. SAME ref as the runtime pin above — the gate and the core the kit runs against
     # must be the one, identical build. Bump both pins together, never let them drift.
-    "langfuse-synth-core[authoring] @ git+https://github.com/borismichel/langfuse-synth-core@220ffccfdf02a4594478e7f214ac9950f5a25ff3",
+    "langfuse-synth-core[authoring] @ git+https://github.com/borismichel/langfuse-synth-core@eb3ca1d678bc77a377d815e0bb8e5d895a4d9b22",
 ]
 
 [project.scripts]

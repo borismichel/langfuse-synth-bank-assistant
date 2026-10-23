@@ -33,6 +33,8 @@ class API(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(payload).encode())
     def do_POST(self):
         body = self.rfile.read(int(self.headers['Content-Length']))
+        from operation_fixture import respond
+        if respond(self,body): return
         if self.headers.get('Content-Encoding') == 'gzip':
             body = gzip.decompress(body)
         if urlparse(self.path).path.endswith('/otel/v1/traces') and body:
@@ -75,6 +77,8 @@ server = ThreadingHTTPServer(('127.0.0.1', 0), API)
 thread = Thread(target=server.serve_forever, daemon=True); thread.start()
 base = f'http://127.0.0.1:{server.server_port}'
 os.environ.update(LANGFUSE_BASE_URL=base, LANGFUSE_PUBLIC_KEY='pk-fixture', LANGFUSE_SECRET_KEY='sk-fixture', ANTHROPIC_API_KEY='fixture-key', LLM_PROVIDER='anthropic', PORTAL_LIVE_INSTANCE_ID='fixture-deployment')
+from operation_fixture import configure
+configure(server.server_port)
 from langfuse_synth_core.companion import CompanionAdapter
 from synth.config import load_config
 from synth.companion.app import create_app, REQUIRES_SECRETS

@@ -87,6 +87,6 @@ def test_customer_cannot_select_someone_elses_conversation_or_execute_a_job():
         response = browser.post('/api/chat', json={'session_id': first, 'message': 'International wire fees?'})
         assert response.status_code == 409
         assert browser.post('/api/run/anything').status_code == 404
-        assert browser.post('/api/voice/process').status_code == 404
+        assert browser.post('/api/voice/process').status_code == 503
         assert browser.post('/api/feedback', json={'session_id': first, 'trace_id': 'someone-else',
                                                  'observation_id': 'foreign', 'value': 1}).status_code == 403

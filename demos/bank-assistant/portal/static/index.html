@@ -135,27 +135,26 @@
         <div class="voice-col">
           <div class="card voice-toolbar">
             <label for="voiceCustomer" data-i18n="voice.caller">Caller</label>
-            <select class="input" id="voiceCustomer"></select>
+            <input class="input" id="voiceCustomer" readonly aria-label="Selected customer">
             <button class="btn btn-sm btn-ghost" id="voiceRefresh" title="Reload sample calls" data-i18n-title="voice.reload" data-i18n-aria="voice.reload"><svg><use href="#i-refresh"/></svg></button>
           </div>
-          <div id="voiceList" class="voice-col"></div>
           <div class="card upload" id="uploadCard">
-            <div class="call-head">
-              <div class="call-icon"><svg><use href="#i-upload"/></svg></div>
-              <div><div class="call-title" data-i18n="voice.upload">Upload a call</div><div class="call-file" data-i18n="voice.formats">.wav or .mp3</div></div>
-            </div>
+            <p id="voiceNotice"></p>
+            <label for="voiceLanguage" data-i18n="voice.audioLanguage">Audio language</label>
+            <select id="voiceLanguage" class="input"><option value="en">English</option><option value="es">Español</option></select>
             <div class="row">
-              <label class="btn btn-sm file-btn"><input type="file" id="voiceFile" class="sr-only" accept=".wav,.mp3,audio/wav,audio/mpeg"><svg><use href="#i-upload"/></svg><span data-i18n="voice.choose">Choose file</span></label>
-              <span class="file-name" id="voiceFileName">No file chosen</span>
-              <button class="btn btn-sm btn-primary" id="voiceUploadBtn" disabled><svg><use href="#i-play"/></svg><span data-i18n="voice.process">Process call</span></button>
+              <button class="btn btn-sm" id="voiceRecord" data-i18n="voice.record">Record</button>
+              <button class="btn btn-sm" id="voiceStop" hidden data-i18n="voice.stop">Stop recording</button>
+              <label class="btn btn-sm file-btn"><input type="file" id="voiceFile" class="sr-only" accept=".wav,.mp3,.webm,.mp4,.m4a,audio/wav,audio/mpeg,audio/webm,audio/mp4"><span data-i18n="voice.chooseAudio">Choose audio</span></label>
+              <span class="file-name" id="voiceFileName">No audio selected</span>
+              <button class="btn btn-sm btn-primary" id="voiceUploadBtn" disabled data-i18n="voice.send">Send audio</button>
+              <button class="btn btn-sm" id="voiceCancel" hidden data-i18n="voice.cancel">Cancel</button>
             </div>
           </div>
+          <details class="card voice-samples"><summary data-i18n="voice.samples">Sample recordings</summary><div id="voiceList" class="voice-col"></div></details>
         </div>
         <div class="card result" id="voiceResult">
-          <div class="empty-result" id="voiceEmpty">
-            <svg><use href="#i-phone"/></svg>
-            <p data-i18n-html="voice.empty">Pick a recorded call and press <b>Process call</b>. The caller's audio is transcribed, answered by the same assistant, and spoken back — one trace in Langfuse.</p>
-          </div>
+          <p>Record or upload audio. The selected customer and conversation apply to voice and text.</p>
         </div>
       </div>
     </section>

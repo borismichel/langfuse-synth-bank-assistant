@@ -440,3 +440,11 @@ textarea::placeholder, input::placeholder { color: var(--muted); opacity: 1; }
   .lang-toggle svg { display: none; }
   .lang-toggle { padding-left: 3px; }
 }
+
+/* Voice controls wrap within the retained Northwind layout. */
+#view-voice [hidden] { display: none !important; }
+.upload .row { flex-wrap: wrap; }
+.voice-toolbar input { min-width: 0; }
+.voice-samples { padding: 16px; }
+.voice-samples summary { cursor: pointer; margin-bottom: 12px; }
+#voiceResult { min-height: 260px; }

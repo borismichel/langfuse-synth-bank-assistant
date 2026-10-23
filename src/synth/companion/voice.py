@@ -12,6 +12,8 @@ import time
 import unicodedata
 import wave
 from datetime import datetime, timezone
+from pathlib import Path
+from threading import Thread
 
 from langfuse import propagate_attributes
 from langfuse.media import LangfuseMedia
@@ -21,6 +23,62 @@ MAX_INPUT = 10 * 1024 * 1024
 MAX_AUDIO = 24000 * 2 * 60
 MAX_STORED = 64 * 1024 * 1024
 TRACE_NAME = 'northwind-voice-call'
+SAMPLES = Path('demos/bank-assistant/data/voice').resolve()
+
+def samples():
+    return [{'name':row['file'],'lang':row['lang'],'customer_id':row['customer_id'],
+             'title':row['scenario'],'title_es':row['scenario_es'],'script':row['script'],
+             'provenance':'Synthetic upstream recording','size_kb':round((SAMPLES/row['file']).stat().st_size/1024),
+             'url':paths.local('/api/voice/samples/'+row['file'])}
+            for row in json.loads((SAMPLES/'manifest.json').read_text())
+            if Path(row['file']).name==row['file'] and (SAMPLES/row['file']).is_file()]
+
+
+
+class AudioBodyLimit:
+    """Count actual ASGI bytes before the multipart parser can spool an upload."""
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope['type'] != 'http' or scope.get('method') != 'POST' or scope['path'] != '/api/voice/process':
+            return await self.app(scope, receive, send)
+        class TooLarge(Exception):
+            pass
+        size = 0
+        async def bounded_receive():
+            nonlocal size
+            event = await receive()
+            size += len(event.get('body', b''))
+            if size > MAX_INPUT + 16384:
+                raise TooLarge()
+            return event
+        try:
+            await self.app(scope, bounded_receive, send)
+        except TooLarge:
+            from starlette.responses import PlainTextResponse
+            await PlainTextResponse('Audio upload exceeds 10 MiB', status_code=413)(scope, receive, send)
+
+
+def start_delivery(function):
+    """A best-effort SDK delivery cannot keep the owned process alive on exit.
+
+    SDK media workers are daemon threads; use the same lifecycle for their public
+    flush/shutdown calls. The caller can bound its wait without changing SDK internals.
+    """
+    loop=asyncio.get_running_loop();finished=loop.create_future()
+    def settle(success):
+        if not finished.done(): finished.set_result(success)
+    def run():
+        success=True
+        try: function()
+        except Exception as exc:
+            success=False
+            print('Voice delivery failed: '+type(exc).__name__,flush=True)
+        try: loop.call_soon_threadsafe(settle,success)
+        except RuntimeError: pass  # The application has already stopped.
+    Thread(target=run,daemon=True,name='northwind-voice-delivery').start()
+    return finished
 
 
 def speech_factory(*, provider, model, api_key):
@@ -53,6 +111,8 @@ class VoiceService:
         self.clients, self.bindings, self.media = {}, {}, {}
         self.flush_task = None
         self.receipts = {}
+        self.reservations = {}
+        self.active = set()
         self.error = None
         if enabled:
             try:
@@ -71,14 +131,30 @@ class VoiceService:
         return {'enabled':self.enabled,'available':self.enabled and self.error is None,
                 'error': ('Voice is disabled in Configuration' if not self.enabled else
                           'Voice requires the supported OpenAI speech roles and operation checks: '+self.error if self.error else None),
-                'models':{name:b.model for name,b in self.bindings.items()},'samples':[],
+                'models':{name:b.model for name,b in self.bindings.items()},'samples':samples() if self.enabled else [],
                 'input_limit_bytes':MAX_INPUT,'recording_limit_seconds':60,
                 'notice':'AI-generated voice. Use synthetic recordings. Audio is stored in the demo project.'}
 
     async def permit(self, role):
         await asyncio.to_thread(self.adapter.check_spending,self.bindings[role].provider)
 
+    def reserve(self, session, input_size):
+        # Reserve the maximum reply before STT; retain the charge until reset so
+        # pending SDK media deliveries cannot cause unlimited accepted uploads.
+        size=input_size+MAX_AUDIO+44
+        if len(self.active)>=2:
+            raise ValueError('Two voice requests are running; retry when one finishes')
+        if len(self.reservations)>=128 or sum(r[1] for r in self.reservations.values())+size>MAX_STORED:
+            raise ValueError('Voice storage capacity reached; reset demo state')
+        token=secrets.token_hex(16)
+        self.reservations[token]=(session,size)
+        self.active.add(token)
+        return token
+
     def clear_session(self, session):
+        for token in [key for key,r in self.reservations.items() if r[0]==session]:
+            self.reservations.pop(token)
+            self.active.discard(token)
         for ident in [i for i,r in self.receipts.items() if r['session_id']==session]:
             receipt=self.receipts.pop(ident)
             if receipt.get('task'): receipt['task'].cancel()
@@ -93,13 +169,16 @@ class VoiceService:
 
     async def close(self):
         self.media.clear()
+        self.reservations.clear()
+        self.active.clear()
         tasks=[r['task'] for r in self.receipts.values() if r.get('task')]
         for task in tasks: task.cancel()
         await asyncio.gather(*tasks,return_exceptions=True)
         self.receipts.clear()
         for client in self.clients.values(): await client.close()
         if self.flush_task:
-            await self.flush_task
+            try: await asyncio.wait_for(asyncio.shield(self.flush_task),2)
+            except TimeoutError: print('Voice media delivery pending at shutdown',flush=True)
 
     async def transcribe(self, lf, data, mime, language):
         binding = self.bindings['speech_to_text']
@@ -181,6 +260,11 @@ class VoiceService:
                                   speech_status='completed',spoken_transcript=spoken,tts_ms=round((time.monotonic()-t)*1000))
                     root.update(output={'transcript':transcript,'answer':result['answer'],'reply_audio':reply},
                                 metadata={'assistant_observation_id':result['observation_id']})
+                except asyncio.CancelledError:
+                    # The banking response is already committed. Cancelling audio
+                    # must not discard it or encourage repeating a confirmed action.
+                    result.update(speech_status='cancelled',tts_ms=round((time.monotonic()-t)*1000))
+                    root.update(output={'transcript':transcript,'answer':result['answer']},level='WARNING',status_message='Speech output cancelled')
                 except Exception as exc:
                     result.update(speech_status='failed',speech_error=type(exc).__name__,tts_ms=round((time.monotonic()-t)*1000))
                     root.update(output={'transcript':transcript,'answer':result['answer']},level='WARNING',status_message='Speech output unavailable')
@@ -188,7 +272,7 @@ class VoiceService:
         # Audio remains locally usable during target media retries. SDK flush is
         # delivery work, not per-file verification and not a banking completion gate.
         if self.flush_task is None or self.flush_task.done():
-            self.flush_task=asyncio.create_task(asyncio.to_thread(config.flush))
+            self.flush_task=start_delivery(config.flush)
         return result
 
     def uploaded_status(self, result):

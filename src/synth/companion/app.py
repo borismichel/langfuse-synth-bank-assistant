@@ -83,7 +83,7 @@ def create_app(adapter, *, preview=False):
     from .runtime_options import enabled
     from .workflows import WorkflowService, mount_workflow
     workflow = WorkflowService(adapter, enabled=not preview and enabled('n8n_enabled'))
-    from .voice import VoiceService, MAX_INPUT
+    from .voice import VoiceService, MAX_INPUT, AudioBodyLimit
     speech = VoiceService(adapter, enabled=not preview and enabled('voice_enabled'))
     if not preview:
         config.bind_adapter(adapter)
@@ -128,11 +128,17 @@ def create_app(adapter, *, preview=False):
                 await banking.stop()
             try:
                 if not preview:
-                    await asyncio.to_thread(config.shutdown)
+                    if speech.enabled:
+                        from .voice import start_delivery
+                        try: await asyncio.wait_for(asyncio.shield(start_delivery(config.shutdown)),2)
+                        except TimeoutError: print('Voice telemetry shutdown deadline reached',flush=True)
+                    else:
+                        await asyncio.to_thread(config.shutdown)
             finally:
                 await apm.stop()
 
     app = FastAPI(title='Northwind Bank', lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+    app.add_middleware(AudioBodyLimit)
     app.mount('/static', StaticFiles(directory=STATIC), name='static')
     mount_apm(app, apm)
     from .judge_routes import mount_judges
@@ -143,9 +149,9 @@ def create_app(adapter, *, preview=False):
     async def same_origin(request, call_next):
         if request.method == 'POST' and request.url.path == '/api/voice/process':
             length = request.headers.get('content-length', '')
-            if not length.isdecimal():
-                return Response('Audio upload requires Content-Length', status_code=411)
-            if int(length) > MAX_INPUT + 16384:
+            if length and not length.isdecimal():
+                return Response('Invalid audio upload length', status_code=400)
+            if length and int(length) > MAX_INPUT + 16384:
                 return Response('Audio upload exceeds 10 MiB', status_code=413)
         origin = request.headers.get('origin')
         if request.method not in ('GET', 'HEAD') and origin:
@@ -196,6 +202,9 @@ def create_app(adapter, *, preview=False):
         report['ready'] = report['ready'] and banking.ready
         report['detail']['banking'] = {'ok': banking.ready}
         report['detail']['workflow'] = workflow.detail()
+        report['detail']['voice'] = speech.detail()
+        if speech.enabled and not speech.detail()['available']:
+            report['ready'] = False
         if workflow.enabled:
             report['ready'] = report['ready'] and workflow.ready
         if not banking.ready:
@@ -228,8 +237,8 @@ def create_app(adapter, *, preview=False):
                 'links': ([{'label': 'Langfuse project', 'url': project_url}] if project_url else []) +
                          ([{'label': 'APM', 'url': paths.base_path() + '/apm/'}] if apm.ready else []) +
                          ([{'label': 'Complaint workflow', 'url': paths.base_path() + '/n8n/workflow/northwindComplaint'}] if workflow.ready else []),
-                'customers': CUSTOMERS, 'channels': ['web'], 'preview': preview,
-                'capabilities': {'feedback': not preview, 'banking_actions': bool(banking and banking.ready)}}
+                'customers': CUSTOMERS, 'channels': ['web'] + (['voice'] if speech.detail()['available'] else []), 'preview': preview,
+                'capabilities': {'voice': speech.detail()['available'], 'feedback': not preview, 'banking_actions': bool(banking and banking.ready)}}
 
     def owned(request, session_id, customer_id=None):
         token = request.cookies.get('northwind_session')
@@ -366,7 +375,8 @@ def create_app(adapter, *, preview=False):
                     history=state['history'], channel=channel, trace_name=trace_name or agent.TRACE_NAME,
                     prompt_label='production', tags=['source:depot'],
                     extra_metadata={'live_instance_id': banking.instance, 'live_run_id': state['scenario']['run_id']},
-                    banking_binding=sign(binding, banking.secret), confirmation=confirmation)
+                    banking_binding=sign(binding, banking.secret), confirmation=confirmation,
+                    before_model_call=lambda: asyncio.to_thread(adapter.check_spending))
                 if flush:
                     await asyncio.to_thread(config.flush)
             except Exception as exc:
@@ -437,6 +447,14 @@ def create_app(adapter, *, preview=False):
     async def voice():
         return speech.detail()
 
+    @app.get('/api/voice/samples/{name}')
+    async def voice_sample(name: str):
+        from .voice import samples, SAMPLES
+        from fastapi.responses import FileResponse
+        if name not in {s['name'] for s in samples()}:
+            raise HTTPException(404,'Sample unavailable')
+        return FileResponse(SAMPLES/name,media_type='audio/mpeg',headers={'X-Content-Type-Options':'nosniff'})
+
     def voice_result(entry, request_id):
         task = entry['task']
         status_url = paths.local('/api/voice/status/') + request_id
@@ -480,13 +498,17 @@ def create_app(adapter, *, preview=False):
             raise HTTPException(409,'A reply is already running')
         if len(state['requests'])>=128 or len(state['answers'])>=512:
             raise HTTPException(429,'Conversation capacity reached; start a new conversation or deployment')
+        try: reservation=speech.reserve(session_id,len(data))
+        except ValueError as exc: raise HTTPException(429,str(exc)) from None
         async def run_voice():
             async def banking_turn(transcript):
                 body=ChatIn(message=transcript,session_id=session_id,customer_id=state['customer_id'],request_id=request_id,lang=language)
                 return await execute(state,body,channel='voice',trace_name=TRACE_NAME,flush=False)
-            return await asyncio.wait_for(speech.run(data=data,mime=mime,language=language,
-                session_id=session_id,customer_id=state['customer_id'],execute=banking_turn),180)
+            async with asyncio.timeout(180):
+                return await speech.run(data=data,mime=mime,language=language,
+                    session_id=session_id,customer_id=state['customer_id'],execute=banking_turn)
         entry={'fingerprint':fingerprint,'task':asyncio.create_task(run_voice()),'voice':True}
+        entry['task'].add_done_callback(lambda _:speech.active.discard(reservation))
         state['requests'][request_id]=entry
         return voice_result(entry,request_id)
 
@@ -502,7 +524,23 @@ def create_app(adapter, *, preview=False):
         media=speech.media.get(media_id)
         if not media: raise HTTPException(404,'Audio is unavailable or was cleared')
         owned(request,media['session_id'])
-        return Response(media['data'],media_type=media['mime'],headers={'Cache-Control':'no-store'})
+        data=media['data']; length=len(data)
+        headers={'Cache-Control':'no-store','Accept-Ranges':'bytes','X-Content-Type-Options':'nosniff'}
+        requested=request.headers.get('range')
+        if requested:
+            import re
+            match=re.fullmatch(r'bytes=(\d*)-(\d*)',requested)
+            try:
+                if not match or not any(match.groups()): raise ValueError()
+                first,last=match.groups()
+                start=int(first) if first else max(0,length-int(last))
+                end=min(int(last),length-1) if first and last else length-1
+                if start>=length or start>end: raise ValueError()
+            except ValueError:
+                return Response(status_code=416,headers={**headers,'Content-Range':f'bytes */{length}'})
+            return Response(data[start:end+1],status_code=206,media_type=media['mime'],
+                            headers={**headers,'Content-Range':f'bytes {start}-{end}/{length}'})
+        return Response(data,media_type=media['mime'],headers=headers)
 
     @app.get('/api/acts')
     async def acts():

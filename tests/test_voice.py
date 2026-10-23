@@ -22,19 +22,41 @@ def test_voice_option_rejects_non_boolean_before_generation(tmp_path):
     assert not (tmp_path / 'state/events.ndjson').exists()
 
 
-def test_voice_uses_owned_conversation_and_independent_speech_roles():
+def run_voice_fixture(extra_env=None):
     import os
     import signal
     import subprocess
     import sys
     env = {k:v for k,v in os.environ.items() if k in ('PATH','HOME','TMPDIR','LANG')}
     env['PYTHONPATH']='src:demos/bank-assistant'
+    env.update(extra_env or {})
     child = subprocess.Popen([sys.executable,'tests/sdk_voice_case.py'],env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,start_new_session=True)
     try:
         out, err = child.communicate(timeout=60)
         assert child.returncode == 0, out + err
-        assert '"duplicate_replay": true' in out
+        assert ('bounded_shutdown=true' if extra_env else '"duplicate_replay": true') in out
     finally:
         try: os.killpg(child.pid,signal.SIGKILL)
         except ProcessLookupError: pass
         child.wait(timeout=5)
+
+
+def test_manifest_enables_only_explicit_independent_speech_roles():
+    import yaml
+    from pathlib import Path
+    manifest=yaml.safe_load(Path('usecase.yaml').read_text())
+    assert manifest['config_schema']['properties']['runtime.voice_enabled']['default'] is False
+    bindings=manifest['llm']['roles']['bindings']
+    assert {name:(bindings[name]['provider'],bindings[name]['models']['openai'],bindings[name]['enabled_by']) for name in ('speech_to_text','text_to_speech')} == {
+        'speech_to_text':('openai','gpt-transcribe','runtime.voice_enabled'),
+        'text_to_speech':('openai','gpt-realtime-2.1-mini','runtime.voice_enabled')}
+    component=next(row for row in manifest['live_components'] if row['name']=='companion')
+    assert {'speech_to_text','text_to_speech'} <= set(component['llm_roles'])
+    assert component['spending_check']=={'version':1}
+
+
+def test_voice_uses_owned_conversation_and_independent_speech_roles():
+    run_voice_fixture()
+
+def test_voice_shutdown_does_not_wait_for_remote_media():
+    run_voice_fixture({"VOICE_SHUTDOWN":"1"})
