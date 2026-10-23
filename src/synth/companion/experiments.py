@@ -35,6 +35,7 @@ COHORTS = ('english', 'spanish', 'redteam', 'disputes')
 class ExperimentControls:
     def __init__(self, adapter, banking, preview):
         self.adapter, self.banking, self.preview = adapter, banking, preview
+        self.strategies = {}
         self.runs = []
         self.state_error = False
         self.closing = False
@@ -87,7 +88,9 @@ class ExperimentControls:
             'cost_scope':'Application and local judge calls use Depot checks. Remote managed evaluations are separate and may continue after cancellation.',
             'reference_labels':'Constructed fixtures; not independent human reviews.'}
 
-    async def start(self, body):
+    async def start(self, body, *, kind='application'):
+        strategy = self.strategies.get(kind)
+        if kind != 'application' and strategy is None:raise HTTPException(409, 'Experiment kind is unavailable')
         self.required()
         if not body.cost_acknowledged:
             raise HTTPException(400, 'Confirm application and judge costs before starting')
@@ -95,19 +98,22 @@ class ExperimentControls:
             payload=body.model_dump()
             prior=next((r for r in self.runs if r['request_id']==body.request_id),None)
             if prior:
-                if prior['request']!=payload:raise HTTPException(409,'Request identity has different settings')
+                if prior.get('kind','application')!=kind or prior['request']!=payload:raise HTTPException(409,'Request identity has different settings')
                 return JSONResponse(prior,status_code=202 if prior['status']=='running' else 200)
             if self.job and not self.job.done():raise HTTPException(409,'An experiment is already running')
             if len(self.runs)>=8:raise HTTPException(429,'This deployment reached its eight-comparison limit')
             if not self.banking.ready:raise HTTPException(503,'Banking service is unavailable')
-            run=dict(id=uuid4().hex,request_id=body.request_id,request=payload,status='running',
+            run=dict(id=uuid4().hex,kind=kind,request_id=body.request_id,request=payload,status='running',
                 created_at=datetime.now(timezone.utc).isoformat(),dispatches=0,
                 limits={'cases_per_arm':16,'arms':2,'application_dispatches_per_case':10,'judge_calls_per_case':5,
                         'total_dispatches':480,'deadline_seconds':600,'concurrency':1},
                 arms={arm:dict(id=uuid4().hex,rows=[]) for arm in ('baseline','candidate')},
                 gate={'status':'incomplete','expected':0,'scored':0,'missing':0,'errors':0,'failed':0})
+            if strategy:
+                initial=strategy.initial(body)
+                run.update(initial,arms={arm:dict(id=uuid4().hex,rows=[]) for arm in initial['arms']})
             self.runs.append(run);self.persist();self.cancelled=threading.Event()
-            replay=Replay(self,run,body,self.cancelled)
+            replay=(strategy or Replay)(self,run,body,self.cancelled)
             async def execute():
                 # Publish a terminal status only after the worker has flushed and stopped.
                 status=await asyncio.to_thread(replay.execute)
@@ -131,13 +137,17 @@ class ExperimentControls:
             run=next((r for r in self.runs if r['id']==identity),None)
             if run is None:raise HTTPException(404,'Comparison not found')
             if 'scope' not in run:raise HTTPException(409,'Comparison did not reach fixed cohort preparation')
+            strategy=self.strategies.get(run.get('kind','application'))
+            if run.get('kind','application')!='application' and strategy is None:
+                raise HTTPException(409,'Experiment kind is unavailable')
             from .experiment_gate import assess
             for arm in run['arms'].values():
                 for row in arm['rows']:row['verified']=False
-            run['gate']=assess(run['expected'],run['arms']['baseline']['rows'],run['arms']['candidate']['rows'],required=run['scope'].get('required_checks'))
+            if strategy:strategy.reset_readback(run)
+            else:run['gate']=assess(run['expected'],run['arms']['baseline']['rows'],run['arms']['candidate']['rows'],required=run['scope'].get('required_checks'))
             self.persist()
             try:
-                result=await asyncio.to_thread(readback,self.adapter,run)
+                result=await asyncio.to_thread(strategy.readback if strategy else readback,self.adapter,run)
                 self.persist();return result
             except Exception as exc:
                 raise HTTPException(409,str(exc) if isinstance(exc,ValueError) else type(exc).__name__) from None

@@ -111,6 +111,15 @@ class Replay:
         self.control,self.adapter,self.banking,self.run,self.body,self.cancel=control,control.adapter,control.banking,run,body,cancel
         self.deadline=time.monotonic()+600;self.dispatches=0;self.case_dispatches=0
 
+    def prepare(self):
+        return freeze(self.adapter,self.body)
+
+    def binding(self,arm):
+        return {'provider':self.adapter.llm().provider,'model':self.run['scope']['primary_model'],'role':'primary'}
+
+    def assessment(self):
+        return assess(self.run.get('expected',[]),self.run['arms']['baseline']['rows'],self.run['arms']['candidate']['rows'],required=self.run.get('scope',{}).get('required_checks'))
+
     def check(self):
         if self.cancel.is_set():raise ValueError('cancelled')
         if time.monotonic()>self.deadline:raise ValueError('deadline_reached')
@@ -119,14 +128,15 @@ class Replay:
     def dispatched(self):
         self.dispatches+=1;self.run['dispatches']=self.dispatches;self.control.persist()
 
-    async def permit(self):
+    async def permit(self,provider=None):
         self.check()
         if self.case_dispatches>=10:raise ValueError('case_dispatch_limit_reached')
-        await asyncio.to_thread(self.adapter.check_spending,self.adapter.llm().provider)
+        await asyncio.to_thread(self.adapter.check_spending,provider or self.adapter.llm().provider)
         self.check();self.case_dispatches+=1;self.dispatched()
 
     async def item(self,*,item,arm,prompt,rubrics,experiment_id):
         self.check();self.case_dispatches=0
+        selected = self.binding(arm)
         case=item.metadata['case_id'];scenario=uuid4().hex;session='experiment-'+uuid4().hex
         binding=dict(instance=self.banking.instance,epoch=self.banking.epoch,scenario_id=scenario,
             customer_id=item.input.get('customer_id','C-1001'),session_id=session,request_id=uuid4().hex,revision=0)
@@ -138,12 +148,15 @@ class Replay:
                 self.check()
                 return await agent.run_turn(message,customer_id=binding['customer_id'],session_id=session,
                     history=history,channel='experiment',trace_name='northwind-application-experiment',
-                    exact_prompt=prompt,model=self.run['scope']['primary_model'],run_policy=POLICIES_BY_NAME['current' if arm=='baseline' else self.body.candidate_policy],
-                    before_model_call=self.permit,banking_binding=sign(binding,self.banking.secret),confirmation=confirmation,
+                    exact_prompt=prompt,model=selected['model'],llm_role=None if selected['role']=='primary' else selected['role'],run_policy=POLICIES_BY_NAME['current' if arm=='baseline' else self.body.candidate_policy],
+                    before_model_call=lambda:self.permit(selected['provider']),banking_binding=sign(binding,self.banking.secret),confirmation=confirmation,
                     tags=['source:depot','scope:application-experiment'],extra_metadata={'live_instance_id':self.banking.instance,
-                    'comparison_id':self.run['id'],'experiment_case':case,'experiment_arm':arm})
+                    'comparison_id':self.run['id'],'experiment_case':case,'experiment_arm':arm,
+                    'application_provider':selected['provider'],'application_model':selected['model'],'application_role':selected['role']})
             result=await turn(item.input['question']);turns=[result]
-            if result['error']:raise ValueError('banking_runner_failed')
+            if result['error']:
+                row.update(provider=selected['provider'],model=selected['model'],role=selected['role'],provider_error=result['error'],trace_id=result['trace_id'],observation_id=result['observation_id'])
+                raise ValueError('banking_runner_failed')
             if self.body.cohort=='disputes':
                 pending=[a for a in result['banking_actions'] if a.get('status')=='confirmation_required' and a.get('tool')=='open_dispute']
                 accepted=set(item.metadata.get('accepted_transactions') or [item.metadata.get('expected_transaction')])
@@ -155,7 +168,7 @@ class Replay:
                     if result['error']:raise ValueError('banking_confirmation_runner_failed')
             row.update(answer=result['answer'],query=result['query'],context=result['context'],trace_id=result['trace_id'],
                 observation_id=result['observation_id'],trace_url=result['trace_url'],prompt_version=result['prompt_version'],
-                model=result['model'],banking_actions=result['banking_actions'],tools_used=result['tools_used'],
+                model=result['model'],provider=selected['provider'],role=selected['role'],banking_actions=result['banking_actions'],tools_used=result['tools_used'],
                 latency_ms=sum(r['latency_ms'] for r in turns),turns=len(turns),checks=checks(item,result),
                 usage={k:sum(r['usage'][k] for r in turns) for k in ('input','output')} if all(r['usage'] is not None for r in turns) else None)
             labels={}
@@ -198,7 +211,7 @@ class Replay:
         try:
             self.check()
             if not callable(getattr(self.adapter,'check_spending',None)):raise ValueError('Operation spending checks are unavailable')
-            dataset,frozen,rubrics,scope=freeze(self.adapter,self.body)
+            dataset,frozen,rubrics,scope=self.prepare()
             self.run['scope']=scope;self.run['expected']=[i.metadata['case_id'] for i in dataset.items]
             for arm in ('baseline','candidate'):
                 self.check();eid=self.run['arms'][arm]['id']
@@ -220,7 +233,7 @@ class Replay:
             self.run['error']=str(exc) if isinstance(exc,ValueError) else type(exc).__name__
         finally:
             self.adapter.langfuse().flush()
-            self.run['gate']=assess(self.run.get('expected',[]),self.run['arms']['baseline']['rows'],self.run['arms']['candidate']['rows'],required=self.run.get('scope',{}).get('required_checks'))
+            self.run['gate']=self.assessment()
             self.control.persist()
         return status
 
