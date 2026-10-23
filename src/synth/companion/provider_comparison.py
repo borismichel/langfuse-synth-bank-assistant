@@ -99,10 +99,13 @@ class ProviderReplay(Replay):
                     else:
                         for key in ('input','output'):target['usage'][key]+=usage[key]
                         target['native_cost_usd']+=cost
-                if (len(accounting['judges'])!=5 or (not accounting['application'] and row.get('usage')!={'input':0,'output':0})):
+                if len(accounting['judges'])!=5:
+                    summary['judges']['missing']+=1
                     row['verified']=False
                 actual={k:sum((g.get('usageDetails') or {}).get(k,0) for g in accounting['application']) for k in ('input','output')}
-                if actual!=row.get('usage'):row['verified']=False
+                if actual!=row.get('usage') or (not accounting['application'] and row.get('usage')!={'input':0,'output':0}):
+                    summary['application']['missing']+=1
+                    row['verified']=False
                 summary['latency_ms']+=row.get('latency_ms',0)
             for target in (summary['application'],summary['judges']):
                 if target['missing']:target['native_cost_usd']=None;target['usage']=None

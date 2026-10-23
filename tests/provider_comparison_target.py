@@ -49,6 +49,11 @@ def two_providers(env,data,monkeypatch):
                 row['usageDetails']=json.loads(attrs.get('langfuse.observation.usage_details','{}'))
                 if row['type']=='GENERATION':row['totalCost']=0.002 if row['model']=='gpt-4.1-mini' else 0.003
                 if data.get('missing_cost'):row.pop('totalCost',None)
+            if data.get('missing_generation')=='application':
+                rows=[r for r in rows if r['name']!='generate-response']
+            elif data.get('missing_generation')=='judge':
+                missing=next((r for r in rows if r['type']=='GENERATION' and r['name']!='generate-response'),None)
+                if missing:rows.remove(missing)
             return 200,{'data':rows,'meta':{'cursor':None}}
         return prior(method,path,query,body)
     data['extension']=extension

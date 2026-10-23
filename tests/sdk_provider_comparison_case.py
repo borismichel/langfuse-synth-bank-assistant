@@ -60,6 +60,15 @@ def test_delivered_provider_comparison_freezes_inputs_and_attributes_both_bindin
             assert len({r['trace_id'] for arm in measured['arms'].values() for r in arm['rows']})==32
             assert browser.post('/manage/experiments/providers/start',json=body).json()['id']==run['id']
             assert len(target['openai_calls'])==32
+            for kind in ('application','judge'):
+                target['missing_generation']=kind
+                partial=browser.post('/manage/experiments/'+run['id']+'/readback',json={}).json()
+                assert partial['gate']['status']=='incomplete'
+                account='application' if kind=='application' else 'judges'
+                for arm in partial['measurements'].values():
+                    assert arm[account]['native_cost_usd'] is None, arm[account]
+                    assert arm[account]['usage'] is None and arm[account]['missing']>0
+            target.pop('missing_generation')
             target['missing_cost']=True
             assert browser.post('/manage/experiments/'+run['id']+'/readback',json={}).json()['gate']['status']=='incomplete'
 
