@@ -104,6 +104,7 @@ class Replay:
     def __init__(self,control,run,body,cancel):
         self.control,self.adapter,self.banking,self.run,self.body,self.cancel=control,control.adapter,control.banking,run,body,cancel
         self.deadline=time.monotonic()+600;self.dispatches=0;self.case_dispatches=0
+        self.loop=asyncio.get_running_loop()
 
     def prepare(self):
         return freeze(self.adapter,self.body)
@@ -212,7 +213,13 @@ class Replay:
             self.run['scope']=scope;self.run['expected']=[i.metadata['case_id'] for i in dataset.items]
             for arm in ('baseline','candidate'):
                 self.check();eid=self.run['arms'][arm]['id']
-                async def task(*,item):return await self.item(item=item,arm=arm,prompt=frozen[arm],rubrics=rubrics,experiment_id=eid)
+                async def task(*,item):
+                    # The SDK owns its experiment loop; cached native async clients
+                    # belong to the Companion loop shared with web and voice turns.
+                    # Scheduling copies the SDK item's context, preserving its trace.
+                    pending=asyncio.run_coroutine_threadsafe(self.item(item=item,arm=arm,
+                        prompt=frozen[arm],rubrics=rubrics,experiment_id=eid),self.loop)
+                    return await asyncio.wrap_future(pending)
                 from opentelemetry import context as otel_context
                 token=otel_context.attach(otel_context.Context())
                 try:
