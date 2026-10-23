@@ -43,7 +43,7 @@ def test_protected_experiment_controls_preserve_fixed_cohorts_without_spending(t
             assert 'test-secret' not in json.dumps(status)
 
 
-def test_comparison_replays_fixed_application_cohort_and_requires_exact_native_readback(tmp_path,monkeypatch):
+def test_comparison_replays_fixed_application_cohort_and_requires_exact_native_readback(tmp_path,monkeypatch,request):
     import time
     from fastapi.testclient import TestClient
     from langfuse_synth_core.companion import CompanionAdapter
@@ -56,6 +56,11 @@ def test_comparison_replays_fixed_application_cohort_and_requires_exact_native_r
         seeded_run(tmp_path,env,target)
         result=invoke(tmp_path,'prepare-cohorts',extra_env=env)
         assert result.returncode==0,result.stderr
+        # Depot mounts imported history read-only; presenter writes belong elsewhere.
+        state = tmp_path/'state'
+        before = {p.name:p.read_bytes() for p in state.iterdir() if p.is_file()}
+        state.chmod(0o555)
+        request.addfinalizer(lambda: state.chmod(0o700))
         provider_fixture(env,target,monkeypatch)
         for key,value in env.items():monkeypatch.setenv(key,value)
         monkeypatch.setenv('SYNTH_STATE_DIR',str(tmp_path/'state'))
@@ -90,6 +95,7 @@ def test_comparison_replays_fixed_application_cohort_and_requires_exact_native_r
             assert run['gate']['status']=='incomplete'
             assert all(a['url'].endswith('/experiments/results?baseline='+a['id']) for a in run['arms'].values())
             assert len(target['calls'])==len(target['permits'])==224
+            assert {p.name:p.read_bytes() for p in state.iterdir() if p.is_file()} == before
             assert len({r['trace_id'] for arm in run['arms'].values() for r in arm['rows']})==32
             actual=browser.post('/manage/experiments/'+identity+'/readback',json={})
             assert actual.status_code==200,actual.text
@@ -202,3 +208,14 @@ def test_comparison_replays_fixed_application_cohort_and_requires_exact_native_r
                 time.sleep(.02)
             assert changed['status']=='runner_failed' and changed['dispatches']==0
             assert len(target['calls'])==calls+1
+
+        # A restarted application in this container recovers receipts without touching the spool.
+        with TestClient(guarded_app(create_app(adapter),health_path='/api/health')) as restarted:
+            restarted.headers['x-depot-live-proof']='a'*64
+            recovered=restarted.get('/manage/experiments/status')
+            assert recovered.status_code==200,recovered.text
+            assert len(recovered.json()['runs'])==8
+            previous=restarted.post('/manage/experiments/start',json=body)
+            assert previous.status_code==200 and previous.json()['id']==identity
+            assert len(target['calls'])==calls+1
+            assert {p.name:p.read_bytes() for p in state.iterdir() if p.is_file()} == before

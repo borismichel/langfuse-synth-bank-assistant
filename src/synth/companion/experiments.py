@@ -5,10 +5,12 @@ import asyncio
 import json
 import os
 import threading
+import tempfile
+from pathlib import Path
 from datetime import datetime, timezone
 from uuid import uuid4
 from fastapi.responses import JSONResponse
-from synth.assets import save, fingerprint
+from synth.assets import fingerprint
 from .experiment_runner import Replay, prepare_prompts, readback
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
@@ -39,9 +41,11 @@ class ExperimentControls:
         self.job = None
         self.cancelled = threading.Event()
         self.lock = asyncio.Lock()
-        self.file = 'experiments-'+fingerprint([getattr(adapter,'base_url',''),os.environ.get('LANGFUSE_PUBLIC_KEY'),getattr(banking,'instance','preview')])+'.json'
+        key = fingerprint([getattr(adapter,'base_url',''),os.environ.get('LANGFUSE_PUBLIC_KEY'),getattr(banking,'instance','preview')])
+        # Imported history is mounted read-only. Receipts share only this live container's lifetime.
+        self.file = Path(tempfile.gettempdir()) / ('northwind-experiments-'+str(os.getuid())) / key / 'comparisons.json'
         try:
-            saved=json.loads(state_path(self.file).read_text())
+            saved=json.loads(self.file.read_text())
             if saved.get('version')!=1 or not isinstance(saved.get('runs'),list) or len(saved['runs'])>8:
                 raise ValueError('Invalid comparison receipt')
             self.runs=saved['runs']
@@ -51,7 +55,13 @@ class ExperimentControls:
         except (OSError,ValueError,KeyError,TypeError):self.state_error=True
 
     def persist(self):
-        save(self.file,{'version':1,'runs':self.runs})
+        self.file.parent.parent.mkdir(mode=0o700, exist_ok=True)
+        self.file.parent.mkdir(mode=0o700, exist_ok=True)
+        temporary = self.file.with_suffix('.tmp')
+        fd = os.open(temporary, os.O_CREAT | os.O_TRUNC | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, 'w') as stream:
+            json.dump({'version':1,'runs':self.runs}, stream, sort_keys=True)
+        temporary.replace(self.file)
 
     def required(self):
         if self.state_error:raise HTTPException(503,'Comparison receipt is unreadable; inspect native evidence before replacing this deployment')
