@@ -30,4 +30,4 @@ def call_judge(adapter,*,model,prompt,inputs,name='faithfulness-judge',check=lam
         else:raise ValueError('Unsupported selected judge provider')
         if any(type(value) is not int or value<0 for value in usage.values()):usage=None
         generation.update(output=output,usage_details=usage,metadata={'judge_provider':provider,'provider_usage_reported':usage is not None})
-    return {'text':output,'usage':usage,'observation_id':generation.id,'trace_id':generation.trace_id,'latency_ms':round((time.monotonic()-started)*1000,2)}
+    return {'text':output,'usage':usage,'generation_id':generation.id,'generation_trace_id':generation.trace_id,'latency_ms':round((time.monotonic()-started)*1000,2)}

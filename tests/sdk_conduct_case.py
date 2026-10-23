@@ -97,7 +97,7 @@ def test_matched_frozen_inputs_measured_outputs_and_native_evidence(tmp_path,mon
         assert all(r['verified'] for arm in verified.json()['arms'].values() for r in arm['rows'])
         assert browser.post('/manage/experiments/conduct/start',json=body).status_code==200
         assert len(target['calls'])==132
-        generation_id=next(iter(run['arms']['single']['rows'][0]['calls'].values()))['observation_id']
+        generation_id=next(iter(run['arms']['single']['rows'][0]['calls'].values()))['generation_id']
         generation=next(o for o in target['observations'] if o['id']==generation_id)
         generation['model']='different-model'
         mismatch=browser.post('/manage/experiments/'+run['id']+'/readback',json={}).json()

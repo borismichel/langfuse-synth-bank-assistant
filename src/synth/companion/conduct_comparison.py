@@ -205,7 +205,7 @@ class ConductReplay:
                 observations=pages(client.api.observations.get_many,trace_id=row['trace_id'],fields='basic,io,metadata,model,usage,prompt,trace_context')
                 byobs={o.id:plain(o) for o in observations}
                 def generation_matches(call):
-                    o=byobs.get(call['observation_id'],{})
+                    o=byobs.get(call['generation_id'],{})
                     return (o.get('type')=='GENERATION' and o.get('traceId')==row['trace_id'] and
                         o.get('parentObservationId')==row['observation_id'] and o.get('model')==scope['model'] and
                         (call['usage'] is None or all((o.get('usageDetails') or {}).get(k)==v for k,v in call['usage'].items())) and
