@@ -17,7 +17,10 @@ def test_n8n_option_uses_separate_runtime_state_without_changing_history(tmp_pat
     import sys
     env = {key: value for key, value in os.environ.items() if key in {'PATH', 'HOME', 'TMPDIR', 'LANG'}}
     env.update(PYTHONPATH='src:demos/bank-assistant', SYNTH_STATE_DIR=str(tmp_path/'state'), SYNTH_OUT_DIR=str(tmp_path/'out'))
-    command = [sys.executable, '-m', 'synth.cli', 'generate-spool', '--config', 'config/demo.yaml']
+    # Compare the same generation inputs: an omitted date reads the wall clock
+    # separately in each process and legitimately changes history identities.
+    command = [sys.executable, '-m', 'synth.cli', 'generate-spool', '--config', 'config/demo.yaml',
+               '--set', 'generation.as_of_date=2026-10-20']
     off = subprocess.run(command, env=env, capture_output=True, text=True)
     assert off.returncode == 0, off.stderr
     spool = (tmp_path/'state/events.ndjson').read_bytes()
