@@ -6,7 +6,7 @@
 - Fork identity and unused destination checked by the integration coordinator before GitHub fork creation; upstream history is retained. No existing remote was repointed.
 - Upstream Apache-2.0 licence remains in `LICENSE`; banking source and notices are preserved.
 - Root package slug: `northwind-bank-assistant`; GHCR release identity: `ghcr.io/borismichel/langfuse-synth-bank-assistant`.
-- Current package version: `0.7.0` (`pyproject.toml`).
+- Current package version: `0.7.1` (`pyproject.toml`).
 - Runtime, authoring and reusable publishing workflow: stable core `v5.1.0`, resolved by `uv.lock` to commit `ee87bf749b95a3a1026c655830c95dd2219ca83d`. This release includes the split-generation Manifest contract, native Companion factories, protected live-route transport gate, validated public origin, bounded fixed-target native OTLP forwarding, optional provider roles and fresh per-operation spending authorization.
 - Python 3.12.15 and Langfuse SDK 5.0.4; full dependency resolution in `uv.lock`.
 
@@ -33,7 +33,7 @@ Maintained Langfuse skill entrypoint SHA256: `e8908ea1c924374ba7bc5e82b220709d10
 
 ## Current candidate scope
 
-Package `0.7.0` integrates the full banking implementation: participant sessions,
+Package `0.7.1` integrates the full banking implementation: participant sessions,
 confirmation/reset/feedback, verified frozen history, native datasets and prompts,
 managed policy judges, review/calibration, matched judge and application/provider
 comparisons, prompt promotion/rollback, optional voice/n8n/APM, governance
@@ -46,6 +46,11 @@ qualification requirements. Implemented scope is not a claim of full-spec
 catalogue readiness.
 
 ## Retained intermediate history
+
+The `0.7.0` release attempt did not publish an image: its hosted optional
+complaint-workflow image check failed after the offline package checks passed.
+It is a historical source release, not a qualified image. The `0.7.1` candidate
+requires its own successful checks, signed image and target qualification evidence.
 
 The original shared-core baseline was v5.0.0 at
 `5f56e75f9a8b5d160ddf54a8fcde380d0d15a205`. Early banking integration used
