@@ -16,6 +16,7 @@ from pathlib import Path
 from threading import Thread
 
 from langfuse import propagate_attributes
+from langfuse.api.commons.errors.not_found_error import NotFoundError
 from langfuse.media import LangfuseMedia
 from langfuse_synth_core.live import paths
 
@@ -303,13 +304,14 @@ class VoiceService:
     def uploaded_status(self, result):
         """Read accepted media records independently of banking and local playback.
 
-        'uploaded' confirms target records, not browser playback or byte retrieval.
-        References come from the exact owned observation, never caller-supplied IDs.
+        'uploaded' confirms server-accepted target records, not browser playback.
+        References must match the exact owned audio digest. A native failed-upload
+        response remains failed; missing/not-yet-uploaded records remain pending.
         """
         ident=result.get('voice_observation_id');receipt=self.receipts.get(ident)
         if not receipt: return 'unavailable'
         task=receipt.get('task')
-        if receipt['status']!='uploaded' and (not task or task.done()) and time.monotonic()-receipt['checked_at']>=2:
+        if receipt['status'] not in ('uploaded','failed') and (not task or task.done()) and time.monotonic()-receipt['checked_at']>=2:
             receipt['checked_at']=time.monotonic()
             async def check():
                 try: receipt['status']=await asyncio.to_thread(self._read_uploaded,ident,receipt)
@@ -321,18 +323,28 @@ class VoiceService:
         client=self.adapter.langfuse().api
         options={'timeout_in_seconds':5,'max_retries':0}
         page=client.observations.get_many(trace_id=receipt['trace_id'],name=TRACE_NAME,
-            fields='basic,io',limit=100,parse_io_as_json=True,request_options=options)
+            fields='basic,io',limit=100,request_options=options)
         matches=[row for row in page.data if row.id==ident and row.trace_id==receipt['trace_id'] and row.name==TRACE_NAME]
         if len(matches)!=1: return 'pending'
         observation=matches[0]
-        for field,(mime,length,_) in receipt['expected'].items():
+        for field,(mime,length,digest) in receipt['expected'].items():
             payload=getattr(observation,field,None)
             if isinstance(payload,str): payload=json.loads(payload)
             if not isinstance(payload,dict): return 'pending'
             token=payload.get('audio' if field=='input' else 'reply_audio')
             reference=LangfuseMedia.parse_reference_string(token)
-            if reference['content_type']!=mime: return 'pending'
-            record=client.media.get(reference['media_id'],request_options=options)
+            expected_id=base64.urlsafe_b64encode(bytes.fromhex(digest)).decode()[:22]
+            if reference['content_type']!=mime or reference['media_id']!=expected_id:
+                return 'pending'
+            try:
+                # Native GET is available only after the server has accepted a
+                # successful storage PUT. uploadedAt alone is not that evidence.
+                record=client.media.get(reference['media_id'],request_options=options)
+            except NotFoundError as exc:
+                message=exc.body.get('message') if isinstance(exc.body,dict) else None
+                if isinstance(message,str) and re.match(r'^Media upload failed with status [0-9]{3}:',message):
+                    return 'failed'
+                return 'pending'
             if record.media_id!=reference['media_id'] or record.content_type!=mime or record.content_length!=length or not record.uploaded_at:
                 return 'pending'
         return 'uploaded'

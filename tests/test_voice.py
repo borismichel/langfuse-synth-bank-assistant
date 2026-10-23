@@ -34,7 +34,14 @@ def run_voice_fixture(extra_env=None):
     try:
         out, err = child.communicate(timeout=60)
         assert child.returncode == 0, out + err
-        assert ('pending_media_capacity=true' if (extra_env or {}).get('VOICE_CAPACITY') else 'bounded_shutdown=true' if extra_env else '"duplicate_replay": true') in out
+        markers = {
+            'VOICE_MEDIA_REFERENCE_MISMATCH':'foreign_media_reference_rejected=true',
+            'VOICE_MEDIA_FAILURE':'failed_media_preserves_answer=true',
+            'VOICE_CAPACITY':'pending_media_capacity=true',
+            'VOICE_SHUTDOWN':'bounded_shutdown=true',
+        }
+        expected = next((marker for key,marker in markers.items() if (extra_env or {}).get(key)), '"duplicate_replay": true')
+        assert expected in out
     finally:
         try: os.killpg(child.pid,signal.SIGKILL)
         except ProcessLookupError: pass
@@ -64,3 +71,11 @@ def test_voice_shutdown_does_not_wait_for_remote_media():
 
 def test_pending_media_keeps_capacity_reserved_across_new_conversations():
     run_voice_fixture({'VOICE_CAPACITY':'1'})
+
+
+def test_voice_storage_upload_failure_is_explicit_without_replaying_bank_work():
+    run_voice_fixture({'VOICE_MEDIA_FAILURE':'1'})
+
+
+def test_voice_rejects_media_reference_for_different_owned_bytes():
+    run_voice_fixture({'VOICE_MEDIA_REFERENCE_MISMATCH':'1'})

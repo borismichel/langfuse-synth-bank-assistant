@@ -827,6 +827,9 @@
     }
   }
   function mediaLabel(result) {
+    if (result.media_status==='failed') return vt(
+      'Langfuse media upload failed. The banking answer and local playback remain available.',
+      'Error al subir el audio a Langfuse. La respuesta bancaria y la reproducción local siguen disponibles.');
     return result.media_status==='uploaded'
       ? vt('Langfuse media uploaded. Open the trace to check native playback.', 'Audio subido a Langfuse. Abra la traza para comprobar la reproducción nativa.')
       : vt('Langfuse media upload pending. Local playback is independent.', 'Carga de audio en Langfuse pendiente. La reproducción local es independiente.');
