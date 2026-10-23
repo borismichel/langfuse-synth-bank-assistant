@@ -565,3 +565,8 @@ body.langfuse-theme { background:var(--surface-1); color:var(--text-primary); fo
 .presenter-layout.controls-only { grid-template-columns:1fr; }
 .controls-only .act-title,.controls-only .act-blurb { margin:0; }
 .controls-only .act .btn { align-self:flex-start; margin-top:8px; }
+
+@media (max-width:650px) {
+  .langfuse-theme .stat-cell :is(.v,.s) { white-space:normal; overflow:visible; overflow-wrap:anywhere; }
+  .langfuse-theme .stat-cell .v { flex-wrap:wrap; }
+}
