@@ -130,6 +130,8 @@ class ConductReplay:
             row['finished']=True
             self.scores(row,arm)
             row['native_output']={k:v for k,v in row.items() if k not in ('verified','native_output')}
+            from northwind.masking import CONDUCT_EVIDENCE_SCHEMA
+            client.update_current_span(metadata={'northwind_evidence_schema':CONDUCT_EVIDENCE_SCHEMA})
             return row['native_output']
         except Exception as exc:
             row['error']=str(exc) if isinstance(exc,ValueError) and str(exc) in ('cancelled','deadline_reached','dispatch_limit_reached') else type(exc).__name__
