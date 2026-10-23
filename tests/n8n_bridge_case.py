@@ -15,6 +15,8 @@ numeric_span_ids()
 
 exports, model_calls, permits = [], [], []
 deny_reply = '--deny-reply' in sys.argv
+provider = os.environ.get('BANK_TEST_PROVIDER', 'openai')
+invalid = os.environ.get('BANK_CLASSIFIER_INVALID', '')
 native_mode = 'ok'
 class Target(BaseHTTPRequestHandler):
     def log_message(self, *args):
@@ -32,19 +34,49 @@ class Target(BaseHTTPRequestHandler):
         if self.path.endswith('/operation-permit'):
             permits.append(json.loads(raw))
             denied = deny_reply and len(model_calls) >= 1
-            data = ({'reason':'cap_exhausted'} if denied else dict(allowed=True, provider='openai',
+            data = ({'reason':'cap_exhausted'} if denied else dict(allowed=True, provider=provider,
                 source='shared',checked_at='2026-10-23T12:00:00+00:00',accounting='hourly-estimate',scope='shared-company'))
             self.send_response(409 if denied else 200); self.send_header('content-type','application/json'); self.end_headers()
             self.wfile.write(json.dumps(data).encode()); return
-        if self.path == '/chat/completions':
+        if self.path in {'/chat/completions', '/v1/messages'}:
             request = json.loads(raw)
             model_calls.append(request)
-            answer = (json.dumps({'category': 'fees', 'severity': 'medium', 'regulatory_escalation': False,
-                                  'rationale': 'The reported duplicate charge requires review.'}) if len(model_calls) == 1
-                      else 'Northwind Customer Care will review the duplicate fee. No refund is promised.')
-            data = {'id': 'fixture-' + str(len(model_calls)), 'object': 'chat.completion', 'created': 123456,
-                'model': request['model'], 'choices': [{'index': 0, 'message': {'role': 'assistant', 'content': answer}, 'finish_reason': 'stop'}],
-                'usage': {'prompt_tokens': 20, 'completion_tokens': 12, 'total_tokens': 32}}
+            classification = len(model_calls) == 1
+            triage = {'category': 'fees', 'severity': 'medium', 'regulatory_escalation': False,
+                      'rationale': 'The reported duplicate charge requires review.'}
+            if classification and invalid == 'boolean': triage['regulatory_escalation'] = 'false'
+            if classification and invalid == 'category': triage['category'] = 'invented'
+            if classification and invalid == 'severity': triage['severity'] = 'critical'
+            if classification and invalid == 'rationale': triage['rationale'] = 'x' * 301
+            if classification and invalid == 'missing': del triage['regulatory_escalation']
+            if classification and invalid == 'extra': triage['extra'] = True
+            answer = (json.dumps(triage) if classification else
+                      'Northwind Customer Care will review the duplicate fee. No refund is promised.')
+            fmt = (request.get('output_config', {}).get('format', {}) if provider == 'anthropic'
+                   else request.get('response_format', {}))
+            if classification and (fmt.get('type') != 'json_schema' or invalid == 'fenced'):
+                answer = '```json\n' + answer + '\n```'
+            if classification and invalid == 'duplicate': answer = answer[:-1] + ', "category":"other"}'
+            if classification and fmt.get('type') == 'json_schema':
+                schema = fmt['schema'] if provider == 'anthropic' else fmt['json_schema']['schema']
+                assert schema['additionalProperties'] is False
+                assert set(schema['required']) == {'category', 'severity', 'regulatory_escalation', 'rationale'}
+                assert schema['properties']['category']['enum'] == ['card_fraud', 'fees', 'transfers', 'service', 'other']
+                assert schema['properties']['severity']['enum'] == ['low', 'medium', 'high']
+                assert schema['properties']['regulatory_escalation']['type'] == 'boolean'
+                assert schema['properties']['rationale']['type'] == 'string'
+                if provider == 'openai': assert fmt['json_schema']['strict'] is True
+            if provider == 'anthropic':
+                data = {'id': 'fixture-' + str(len(model_calls)), 'type': 'message', 'role': 'assistant',
+                    'model': request['model'], 'content': [{'type':'text', 'text':answer}],
+                    'stop_reason': 'max_tokens' if invalid == 'truncated' else 'end_turn', 'stop_sequence': None,
+                    'usage': {'input_tokens': 20, 'output_tokens': 12}}
+            else:
+                data = {'id': 'fixture-' + str(len(model_calls)), 'object': 'chat.completion', 'created': 123456,
+                    'model': request['model'], 'choices': [{'index': 0,
+                        'message': {'role': 'assistant', 'content': answer, 'refusal': 'Cannot classify' if invalid == 'refusal' else None},
+                        'finish_reason': 'length' if invalid == 'truncated' else 'stop'}],
+                    'usage': {'prompt_tokens': 20, 'completion_tokens': 12, 'total_tokens': 32}}
             self.send_response(200); self.send_header('content-type', 'application/json'); self.end_headers()
             self.wfile.write(json.dumps(data).encode()); return
         if self.headers.get('x-langfuse-ingestion-version') == '4' and native_mode != 'ok':
@@ -64,7 +96,8 @@ server = ThreadingHTTPServer(('127.0.0.1', 0), Target)
 thread = Thread(target=server.serve_forever, daemon=True); thread.start()
 base = f'http://127.0.0.1:{server.server_port}'
 os.environ.update(LANGFUSE_BASE_URL=base, LANGFUSE_PUBLIC_KEY='pk-fixture', LANGFUSE_SECRET_KEY='sk-fixture',
-    OPENAI_BASE_URL=base, OPENAI_API_KEY='fixture-key', LLM_PROVIDER='openai', LLM_MODEL='gpt-4o')
+    OPENAI_BASE_URL=base, OPENAI_API_KEY='fixture-key', ANTHROPIC_BASE_URL=base, ANTHROPIC_API_KEY='fixture-key',
+    LLM_PROVIDER=provider, LLM_MODEL='claude-sonnet-4-6' if provider == 'anthropic' else 'gpt-4o')
 instance = 'bde5ea54-d6dc-4e43-95a4-3696886c9620'
 os.environ.update(PORTAL_LIVE_INSTANCE_ID=instance, DEPOT_OPERATION_TOKEN='b'*64,
     DEPOT_OPERATION_CHECK_URL=f'http://caddy:8081/api/v1/live-assets/{instance}/operation-permit')
@@ -111,6 +144,15 @@ async def main():
             span.trace_id = bytes.fromhex('f' * 32)
             assert (await client.post(bridge.url + '/otel', headers=headers, content=native.SerializeToString())).status_code == 400
             classified = await client.post(bridge.url + '/classify', headers=headers, json=masked.json())
+            if invalid:
+                assert classified.status_code == 502, classified.text
+                assert len(model_calls) == len(permits) == 1
+                again = await client.post(bridge.url + '/classify', headers=headers, json=masked.json())
+                reply = await client.post(bridge.url + '/reply', headers=headers, json=masked.json())
+                assert again.status_code == reply.status_code == 409
+                assert len(model_calls) == len(permits) == 1, 'Invalid classification must not retry or draft'
+                assert invalid not in classified.text and 'fixture-key' not in classified.text
+                return
             assert classified.status_code == 200, classified.text
             repeat = await client.post(bridge.url + '/classify', headers=headers, json=masked.json())
             assert repeat.json() == classified.json() and len(model_calls) == 1
@@ -118,7 +160,7 @@ async def main():
             if deny_reply:
                 assert reply.status_code == 502, reply.text
                 assert len(model_calls) == 1, 'Denied reply must never reach the model provider'
-                assert len(permits) == 2 and all(p == {'provider':'openai'} for p in permits)
+                assert len(permits) == 2 and all(p == {'provider':provider} for p in permits)
                 again = await client.post(bridge.url + '/reply', headers=headers, json=classified.json())
                 assert again.status_code == 409 and len(model_calls) == 1 and len(permits) == 2
                 cached = await client.post(bridge.url + '/classify', headers=headers, json=masked.json())
@@ -159,14 +201,26 @@ try:
     asyncio.run(main())
 finally:
     server.shutdown(); thread.join(); server.server_close()
-assert len(model_calls) == (1 if deny_reply else 2)
-assert len(permits) == 2
+assert len(model_calls) == (1 if deny_reply or invalid else 2)
+assert len(permits) == (1 if invalid else 2)
 assert 'ana@example.com' not in json.dumps(model_calls) and '4111 1111' not in json.dumps(model_calls)
 attrs = lambda span: {a.key: a.value.string_value for a in span.attributes}
 generations = [s for s in exports if attrs(s).get('langfuse.observation.type') == 'generation']
-assert len(generations) == (1 if deny_reply else 2), [s.name for s in exports]
+assert len(generations) == (1 if deny_reply or invalid else 2), [s.name for s in exports]
+classification = next(s for s in generations if s.name == 'classify-complaint')
+assert attrs(classification).get('langfuse.observation.prompt.name') == 'northwind-complaint-triage', attrs(classification)
+assert next(a.value.int_value for a in classification.attributes if a.key == 'langfuse.observation.prompt.version') == 1
+if provider == 'openai' and invalid == 'truncated':
+    # The SDK raises before returning usage on a length-finished structured response; unknown is not zero.
+    assert 'langfuse.observation.usage_details' not in attrs(classification)
+    assert attrs(classification)['langfuse.observation.level'] == 'ERROR'
+else:
+    usage = json.loads(attrs(classification)['langfuse.observation.usage_details'])
+    assert usage['input'] == 20 and usage['output'] == 12, usage
+assert attrs(classification)['langfuse.observation.model.name'] == ('claude-sonnet-4-6' if provider == 'anthropic' else 'gpt-4o')
+assert all('langfuse.observation.prompt.name' not in attrs(s) for s in generations if s.name == 'draft-reply')
 assert all(s.trace_id.hex() == 'a' * 32 for s in exports)
-assert ({'n8n-complaint-triage', 'mask-pii', 'classify-complaint'} | (set() if deny_reply else {'draft-reply'})) <= {s.name for s in exports}
+assert ({'n8n-complaint-triage', 'mask-pii', 'classify-complaint'} | (set() if deny_reply or invalid else {'draft-reply'})) <= {s.name for s in exports}
 assert all(s.name != 'northwind-assistant' for s in exports)
 assert 'ana@example.com' not in str(exports) and '4111 1111' not in str(exports)
-print(json.dumps({'masked_before_model': True, 'model_calls': len(model_calls), 'spending_checks':len(permits), 'reply_denied':deny_reply, 'joined_native_trace': True, 'idempotent_steps': True, 'bounded_export': True, 'partial_success_and_failure': True}))
+print(json.dumps({'masked_before_model': True, 'model_calls': len(model_calls), 'spending_checks':len(permits), 'reply_denied':deny_reply, 'invalid':invalid, 'provider':provider, 'joined_native_trace': True, 'idempotent_steps': True, 'bounded_export': True, 'partial_success_and_failure': True}))

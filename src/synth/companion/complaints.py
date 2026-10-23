@@ -16,9 +16,22 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from langfuse import propagate_attributes
 from langfuse.langchain import CallbackHandler
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.prompts import ChatPromptTemplate
 import uvicorn
 
 from synth.complaint_prompt import PROMPT_NAME
+CLASSIFICATION_SCHEMA = {
+    'type': 'object',
+    'properties': {
+        'category': {'type': 'string', 'enum': ['card_fraud', 'fees', 'transfers', 'service', 'other']},
+        'severity': {'type': 'string', 'enum': ['low', 'medium', 'high']},
+        'regulatory_escalation': {'type': 'boolean'},
+        'rationale': {'type': 'string', 'description': 'One short sentence, at most 300 characters.'},
+    },
+    'required': ['category', 'severity', 'regulatory_escalation', 'rationale'],
+    'additionalProperties': False,
+}
+
 DRAFT = '''You draft replies for Northwind Bank, a fictional bank. Write at most 120 words in the customer's language.
 Acknowledge the complaint and explain that customer care will review it. Never claim a card has been blocked,
 a dispute opened, a refund issued or a formal complaint filed: this workflow classifies and drafts only.
@@ -201,17 +214,42 @@ class ComplaintBridge:
         else:
             system, text, name = DRAFT, json.dumps(run['triage']) + '\n' + run['text'], 'draft-reply'
         model = self.adapter.native_llm()
+        provider = self.adapter.llm().provider
+        if stage == 'classify':
+            if provider == 'anthropic':
+                model = model.bind(output_config={'format': {'type': 'json_schema', 'schema': CLASSIFICATION_SCHEMA}})
+            elif provider == 'openai':
+                model = model.bind(response_format={'type': 'json_schema', 'json_schema': {
+                    'name': 'complaint_classification', 'strict': True, 'schema': CLASSIFICATION_SCHEMA}})
+            else:
+                raise ValueError('Unsupported complaint provider')
         await asyncio.to_thread(self.adapter.check_spending)
         with self.attributes(run), run['root'].start_as_current_observation(name='complaint-step'), \
                 propagate_attributes(metadata={'generation_owner': 'langchain'}):
-            answer = await model.ainvoke([SystemMessage(content=system), HumanMessage(content=text)],
-                config={'run_name': name, 'callbacks': [CallbackHandler(public_key=os.environ.get('LANGFUSE_PUBLIC_KEY'))],
-                        'metadata': {'langfuse_prompt': prompt} if prompt is not None else {}})
+            callbacks = [CallbackHandler(public_key=os.environ.get('LANGFUSE_PUBLIC_KEY'))]
+            if prompt is not None:
+                # Register the managed prompt at its rendering step so the callback links the sole generation.
+                template = ChatPromptTemplate.from_messages([SystemMessage(content=system), ('human', '{text}')])
+                chain = template.with_config(metadata={'langfuse_prompt': prompt}) | model.with_config(run_name=name)
+                answer = await chain.ainvoke({'text': text}, config={'callbacks': callbacks, 'run_name': 'complaint-classification'})
+            else:
+                answer = await model.ainvoke([SystemMessage(content=system), HumanMessage(content=text)],
+                    config={'run_name': name, 'callbacks': callbacks})
         content = answer.content if isinstance(answer.content, str) else ''.join(
             part.get('text', '') for part in answer.content if isinstance(part, dict))
         if stage == 'classify':
-            triage = json.loads(content)
-            if (not isinstance(triage, dict) or triage.get('category') not in {'card_fraud', 'fees', 'transfers', 'service', 'other'}
+            complete = (answer.response_metadata.get('stop_reason') == 'end_turn' if provider == 'anthropic'
+                        else answer.response_metadata.get('finish_reason') == 'stop' and not answer.additional_kwargs.get('refusal'))
+            def unique_fields(pairs):
+                result = {}
+                for key, value in pairs:
+                    if key in result:
+                        raise ValueError('Duplicate classification field')
+                    result[key] = value
+                return result
+            triage = json.loads(content, object_pairs_hook=unique_fields)
+            if (not complete or not isinstance(triage, dict) or set(triage) != set(CLASSIFICATION_SCHEMA['required'])
+                    or triage.get('category') not in {'card_fraud', 'fees', 'transfers', 'service', 'other'}
                     or triage.get('severity') not in {'low', 'medium', 'high'}
                     or type(triage.get('regulatory_escalation')) is not bool
                     or not isinstance(triage.get('rationale'), str) or len(triage['rationale']) > 300):
