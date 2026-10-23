@@ -42,6 +42,7 @@ class ExperimentControls:
         self.job = None
         self.cancelled = threading.Event()
         self.lock = asyncio.Lock()
+        self.snapshot_lock = threading.Lock()
         key = fingerprint([getattr(adapter,'base_url',''),os.environ.get('LANGFUSE_PUBLIC_KEY'),getattr(banking,'instance','preview')])
         # Imported history is mounted read-only. Receipts share only this live container's lifetime.
         self.file = Path(tempfile.gettempdir()) / ('northwind-experiments-'+str(os.getuid())) / key / 'comparisons.json'
@@ -54,6 +55,7 @@ class ExperimentControls:
                 if run['status']=='running':run.update(status='interrupted',error='Process stopped; inspect partial native results. A new request identity is required to rerun.')
         except FileNotFoundError:pass
         except (OSError,ValueError,KeyError,TypeError):self.state_error=True
+        self.receipt_snapshot = json.dumps({'version':1,'runs':self.runs}, sort_keys=True)
 
     def persist(self):
         self.file.parent.parent.mkdir(mode=0o700, exist_ok=True)
@@ -61,10 +63,22 @@ class ExperimentControls:
         temporary = self.file.with_suffix('.tmp')
         fd = os.open(temporary, os.O_CREAT | os.O_TRUNC | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, 'w') as stream:
-            # Encode once: dump() walks every receipt in Python for each dispatch.
-            # Keep every durable checkpoint and the same JSON representation.
-            stream.write(json.dumps({'version':1,'runs':self.runs}, sort_keys=True))
+            # Encode once for both the durable checkpoint and its HTTP snapshot.
+            encoded = json.dumps({'version':1,'runs':self.runs}, sort_keys=True)
+            stream.write(encoded)
         temporary.replace(self.file)
+        with self.snapshot_lock:
+            self.receipt_snapshot = encoded
+
+    def snapshot_runs(self):
+        # The worker owns live receipts. HTTP callers get detached JSON values
+        # from the latest successful checkpoint, never its mutable dictionaries.
+        with self.snapshot_lock:
+            encoded = self.receipt_snapshot
+        return json.loads(encoded)['runs']
+
+    def snapshot_run(self, identity):
+        return next(run for run in self.snapshot_runs() if run['id'] == identity)
 
     def required(self):
         if self.state_error:raise HTTPException(503,'Comparison receipt is unreadable; inspect native evidence before replacing this deployment')
@@ -86,7 +100,7 @@ class ExperimentControls:
                 'url': receipt['datasets'][key]['url']} for key in COHORTS}
         except (OSError, ValueError, KeyError):
             cohorts = {}
-        return {'scope':'application-retrieval-and-mcp', 'cohorts':cohorts, 'runs':self.runs,
+        return {'scope':'application-retrieval-and-mcp', 'cohorts':cohorts, 'runs':self.snapshot_runs(),
             'cost_scope':'Application and local judge calls use Depot checks. Remote managed evaluations are separate and may continue after cancellation.',
             'reference_labels':'Constructed fixtures; not independent human reviews.'}
 
@@ -101,7 +115,8 @@ class ExperimentControls:
             prior=next((r for r in self.runs if r['request_id']==body.request_id),None)
             if prior:
                 if prior.get('kind','application')!=kind or prior['request']!=payload:raise HTTPException(409,'Request identity has different settings')
-                return JSONResponse(prior,status_code=202 if prior['status']=='running' else 200)
+                snapshot = self.snapshot_run(prior['id'])
+                return JSONResponse(snapshot,status_code=202 if snapshot['status']=='running' else 200)
             if self.job and not self.job.done():raise HTTPException(409,'An experiment is already running')
             if len(self.runs)>=8:raise HTTPException(429,'This deployment reached its eight-comparison limit')
             if not self.banking.ready:raise HTTPException(503,'Banking service is unavailable')
@@ -122,7 +137,7 @@ class ExperimentControls:
                 run['status']=status
                 self.persist()
             self.job=asyncio.create_task(execute())
-            return JSONResponse(run,status_code=202)
+            return JSONResponse(self.snapshot_run(run['id']),status_code=202)
 
     async def prepare(self):
         self.required()
@@ -149,8 +164,8 @@ class ExperimentControls:
             else:run['gate']=assess(run['expected'],run['arms']['baseline']['rows'],run['arms']['candidate']['rows'],required=run['scope'].get('required_checks'))
             self.persist()
             try:
-                result=await asyncio.to_thread(strategy.readback if strategy else readback,self.adapter,run)
-                self.persist();return result
+                await asyncio.to_thread(strategy.readback if strategy else readback,self.adapter,run)
+                self.persist();return self.snapshot_run(identity)
             except Exception as exc:
                 raise HTTPException(409,str(exc) if isinstance(exc,ValueError) else type(exc).__name__) from None
 
