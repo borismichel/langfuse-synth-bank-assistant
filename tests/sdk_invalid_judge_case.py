@@ -44,4 +44,3 @@ def test_invalid_judge_response_preserves_evidence_and_stops_further_dispatch(tm
             assert judged['generation_id'] and judged['generation_trace_id']
             assert browser.post('/manage/experiments/start',json=body).json()['id']==run['id']
             assert len(target['calls'])==3
-
