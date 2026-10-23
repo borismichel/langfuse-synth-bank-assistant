@@ -1,7 +1,39 @@
 """Reviewer actions against a real SDK and an external native API fixture."""
 import json
+import pytest
 from sdk_judges_case import presenter
 from judge_target import judge_target
+
+
+@pytest.mark.parametrize('binding',['foreign_instance','foreign_environment','missing_instance'])
+def test_foreign_queued_annotation_stays_unresolved_without_modifying_reviews(tmp_path,monkeypatch,binding):
+    with judge_target() as (env,target):
+        target.update(queues={},queue_items={})
+        install_reviews(target);receipt(tmp_path,env,monkeypatch);install_calibration(target,tmp_path)
+        with presenter(env,monkeypatch) as browser:
+            assert browser.post('/manage/reviews/prepare',json={'request_id':'prep','pending':2}).status_code==200
+            foreign=next(row for row in target['observations'] if row['id']=='foreign')
+            if binding=='foreign_environment':
+                foreign['metadata']['live_instance_id']='test-instance'
+                foreign['environment']='other-environment'
+            elif binding=='missing_instance':foreign['metadata'].pop('live_instance_id')
+            item={**next(iter(target['queue_items'].values())),'id':'manual-foreign',
+                'objectId':'foreign','status':'COMPLETED'}
+            target['queue_items'][item['id']]=item
+            before=json.dumps(target['queue_items'],sort_keys=True)
+            stamp=foreign['startTime']
+            target['scores']=[dict(id='foreign-review',projectId='bank-project',name='nw-faithfulness-v1',
+                source='ANNOTATION',dataType='NUMERIC',value=1,configId='faithfulness-config',queueId='queue-1',
+                authorUserId='reviewer-fixture',timestamp=stamp,createdAt=stamp,updatedAt=stamp,
+                environment=foreign['environment'],subject={'kind':'observation','id':'foreign','traceId':'trace-foreign'})]
+            result=browser.post('/manage/reviews/plan',json={'request_id':'foreign-plan','model':'fixture-judge','include_reviews':True})
+            assert result.status_code==200,result.text
+            plan=result.json()['calibration']
+            assert plan['annotation_rows']==0
+            assert plan['unresolved_reviews'][0]['status']=='source_ineligible'
+            assert plan['unresolved_reviews'][0]['observation_id']=='foreign'
+            assert json.dumps(target['queue_items'],sort_keys=True)==before
+            assert not any('/messages' in w[1] or '/scores' in w[1] or w[0] in ('DELETE','PATCH') for w in target['writes'])
 
 
 def test_prepare_preserves_completed_native_reviews_and_refills_only_pending(tmp_path,monkeypatch):

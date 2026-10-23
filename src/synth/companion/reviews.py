@@ -151,13 +151,14 @@ class Reviews:
                 continue
             found=pages(self.api.observations.get_many,budget=self.subjects.budget,
                 trace_id=trace,
-                fields='basic,io,metadata,trace_context',expand_metadata='context,judge_eligible,judge_evidence_version')
+                fields='basic,io,metadata,trace_context',expand_metadata='context,judge_eligible,judge_evidence_version,live_instance_id')
             found=[plain(o) for o in found if o.id==oid and o.trace_id==trace]
             if len(found)!=1:
                 unresolved.append(dict(observation_id=oid,source_url=url,status='source_unavailable'));continue
             row=found[0];meta={k:scalar(v) for k,v in (row.get('metadata') or {}).items()}
             inputs=dict(query=scalar(row.get('input')),generation=scalar(row.get('output')),context=meta.get('context'))
-            if (row.get('name')!='northwind-assistant' or row.get('environment')=='synthetic-history'
+            if (row.get('name')!='northwind-assistant' or row.get('environment')!=self.subjects.environment
+                    or meta.get('live_instance_id')!=self.subjects.instance
                     or str(meta.get('judge_eligible')).lower()!='true'
                     or meta.get('judge_evidence_version')!='northwind-delivered-v1'
                     or not all(isinstance(v,str) and v for v in inputs.values())):
