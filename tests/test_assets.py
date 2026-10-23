@@ -75,44 +75,30 @@ def test_conflicting_human_item_is_preserved_and_missing_current_asset_fails_ver
         assert 'dataset item/source relationship' in verified.stdout
 
 
-def test_delivered_history_view_shows_verified_run_links_and_honest_coverage(tmp_path,monkeypatch):
-    from fastapi.testclient import TestClient
-    from synth.companion.app import create_app,REQUIRES_SECRETS
-    from langfuse_synth_core.companion import CompanionAdapter
-    from synth.config import load_config
-    from northwind import config
-    with asset_target() as (env,target):
-        seeded_run(tmp_path,env,target)
-        assert invoke(tmp_path,'prepare-cohorts',extra_env=env).returncode==0
-        result=invoke(tmp_path,'verify','--timeout-seconds','0',extra_env=env)
-        assert result.returncode==0,result.stdout+result.stderr
-        for key,value in env.items():monkeypatch.setenv(key,value)
-        monkeypatch.setenv('SYNTH_STATE_DIR',str(tmp_path/'state'))
-        monkeypatch.setenv('LIVE_BASE_PATH','/live/bank-test')
-        adapter=CompanionAdapter(load_config('config/demo.yaml'),requires_secrets=REQUIRES_SECRETS,
-            langfuse_factory=config.langfuse_factory,native_llm_factory=config.native_llm_factory)
-        with TestClient(create_app(adapter)) as browser:
-            assert '/live/bank-test/history' in browser.get('/').text
-            page=browser.get('/history')
-            assert page.status_code==200
-            assert 'Historical banking evidence' in page.text
-            view=browser.get('/api/history').json()
-            assert view['verified'] is True
-            assert view['coverage']==dict(total=58,eligible=55,blocked=3,scored=54,unscored=1,pending=2,unknown=3,invalid=1,errors=0)
-            assert len(view['cases'])==58 and len(view['datasets'])==6
-            from urllib.parse import urlparse, parse_qs
-            start,end=map(int,parse_qs(urlparse(view['native_views']['traces']).query)['dateRange'][0].split('-'))
-            roots=[r for r in map(json.loads,(tmp_path/'state/events.ndjson').read_text().splitlines()) if r.get('name')=='northwind-assistant']
-            assert len(roots)==64
-            assert all(start < int(r['startTimeUnixNano'])/1_000_000 < end for r in roots)
-            assert view['dates']['trace_count']==64
-            assert all('/project/bank-project/traces/' in case['url'] for case in view['cases'])
-            assert 'test-secret' not in json.dumps(view) and 'test-public' not in json.dumps(view)
-            assert browser.post('/api/history').status_code==405
-        with TestClient(create_app(None,preview=True)) as browser:
-            preview=browser.get('/api/history').json()
-            assert preview['verified'] is False and preview['cases']==[]
-            assert 'preview' in preview['status'].lower()
+def test_delivered_history_view_shows_verified_run_links_and_honest_coverage(tmp_path):
+    import os
+    import signal
+    import subprocess
+    import sys
+    # Real MCP startup belongs to an isolated, credential-clean HTTP fixture
+    # process, like the other delivered Companion contracts. The authoring
+    # worker deliberately denies even loopback connections in this process.
+    env = {k: v for k, v in os.environ.items() if k in ('PATH', 'HOME', 'TMPDIR', 'LANG')}
+    env['PYTHONPATH'] = os.pathsep.join(['src', 'tests', 'demos/bank-assistant'])
+    process = subprocess.Popen([sys.executable, 'tests/sdk_history_case.py', str(tmp_path)],
+        env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
+    try:
+        output, errors = process.communicate(timeout=45)
+    finally:
+        # MCP inherits the fixture's output pipes. Kill only this owned process
+        # group, including that child, if startup/teardown ever stalls again.
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait(timeout=5)
+    assert process.returncode == 0, output + errors
+    assert 'history_contract_passed' in output
 
 
 def test_asset_preparation_preserves_unrelated_resources_and_rejects_ambiguous_names(tmp_path):
