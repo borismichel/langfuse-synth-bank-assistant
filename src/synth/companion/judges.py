@@ -107,8 +107,10 @@ class PolicyJudges:
                 raise ValueError('Judge variables do not resolve to the selected delivered answer')
             if not context.startswith('APPROVED POLICY AND BANKING TOOL RESULTS'):
                 raise ValueError('Authoritative judge evidence is not marked')
+            # Score upserts preserve ID and the server's millisecond timestamp.
+            timestamp=d['startTime'].replace(microsecond=d['startTime'].microsecond//1000*1000)
             eligible.append(dict(trace_id=d['traceId'],observation_id=d['id'],query=query,
-                timestamp=d['startTime'],live_run_id=meta.get('live_run_id'),
+                timestamp=timestamp,live_run_id=meta.get('live_run_id'),
                 context=context,generation=answer,url=self.project_url+'/traces/'+quote(d['traceId'],safe='')))
         scope=[{'type':'stringOptions','column':'name','operator':'any of','value':['northwind-assistant']},
             {'type':'stringObject','column':'metadata','key':'live_instance_id','operator':'=','value':self.instance}]

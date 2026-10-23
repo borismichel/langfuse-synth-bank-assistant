@@ -76,7 +76,7 @@ def judge_target():
             if p.endswith('/scores'):
                 accepted=b[:1] if data.get('partial_batch') else b
                 for item in accepted:
-                    row={**item,'projectId':'bank-project','createdAt':stamp,'updatedAt':stamp,
+                    row={**item,'timestamp':datetime.fromisoformat(item['timestamp'].replace('Z','+00:00')).isoformat(timespec='milliseconds'),'projectId':'bank-project','createdAt':stamp,'updatedAt':stamp,
                         'subject':{'kind':'observation','id':item['observationId'],'traceId':item['traceId']}}
                     data['scores'][:]=[r for r in data['scores'] if r['id']!=row['id']]
                     data.setdefault('delayed' if data.get('delay_scores') else 'scores',[]).append(row)
