@@ -38,7 +38,8 @@ def test_passed_exact_candidate_changes_fresh_conversation_without_restart(tmp_p
         adapter = CompanionAdapter(load_config('config/demo.yaml'), requires_secrets=REQUIRES_SECRETS,
             llm_model_default=config.AGENT_MODEL, langfuse_factory=config.langfuse_factory,
             native_llm_factory=config.native_llm_factory)
-        with TestClient(guarded_app(create_app(adapter), health_path='/api/health')) as browser:
+        app=guarded_app(create_app(adapter), health_path='/api/health')
+        with TestClient(app) as browser:
             assert browser.get('/manage/releases').status_code == 404
             browser.headers['x-depot-live-proof'] = 'a'*64
             page = browser.get('/manage/releases')
@@ -60,8 +61,37 @@ def test_passed_exact_candidate_changes_fresh_conversation_without_restart(tmp_p
             assert measured.json()['gate']['status'] == 'passed', measured.text
             # Warm the normal production prompt cache before the label transition.
             assert prompts.get_system_prompt(adapter.langfuse())[1].version == 1
-            release = browser.post('/manage/releases/promote', json={
-                'request_id':'release-one', 'comparison_id':identity})
+            # Disconnect the first HTTP caller during the native mutation. Its
+            # owned action must keep its lock and duplicate identity until done.
+            from threading import Event
+            entered,proceed=Event(),Event();target['patch_hold']=(entered,proceed)
+            async def interrupted_release():
+                import asyncio,httpx
+                from contextlib import suppress
+                async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://testserver',headers={'x-depot-live-proof':'a'*64}) as client:
+                    payload={'request_id':'release-one','comparison_id':identity}
+                    first=asyncio.create_task(client.post('/manage/releases/promote',json=payload))
+                    assert await asyncio.to_thread(entered.wait,5)
+                    first.cancel()
+                    with suppress(asyncio.CancelledError):await first
+                    recovered=asyncio.create_task(client.post('/manage/releases/promote',json=payload))
+                    try:
+                        await asyncio.sleep(.1)
+                        assert not recovered.done(), 'Cancelled caller released an unfinished label mutation'
+                        other=await client.post('/manage/releases/promote',json={**payload,'request_id':'concurrent-release'})
+                        assert other.status_code==409
+                        experiment=asyncio.create_task(client.post('/manage/experiments/start',json={**body,'request_id':'concurrent-experiment'}))
+                        try:
+                            await asyncio.sleep(.05)
+                            assert not experiment.done(), 'Label mutation released the experiment lock'
+                        finally:
+                            experiment.cancel()
+                            with suppress(asyncio.CancelledError):await experiment
+
+                    finally:proceed.set()
+                    return await recovered
+            release=browser.portal.call(interrupted_release)
+            target.pop('patch_hold')
             assert release.status_code == 200, release.text
             record = release.json()
             assert record['status'] == 'promoted'

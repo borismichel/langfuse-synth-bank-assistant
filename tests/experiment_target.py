@@ -66,6 +66,9 @@ def experiment_target(*, barrier=None):
             path = unquote(urlparse(self.path).path)
             body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
             data['writes'].append((path,body))
+            if data.get('patch_hold') and not data['patch_hold'][0].is_set():
+                entered,release=data['patch_hold'];entered.set()
+                assert release.wait(10), 'Fixture label-update barrier timed out'
             if data.get('patch_mode')=='denied':return self.reply({'message':'label denied'},403)
             name, version = path.split('/v2/prompts/',1)[1].rsplit('/versions/',1)
             row = data['versions'].get((name,int(version)))

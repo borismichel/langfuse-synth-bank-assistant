@@ -36,6 +36,9 @@ class Releases:
         self.file = experiments.file.with_name('releases.json')
         self.records = []
         self.error = False
+        self.job = None
+        self.operation = None
+        self.closing = False
         try:
             saved = json.loads(self.file.read_text())
             if saved.get('version') != 1 or not isinstance(saved.get('records'), list) or len(saved['records']) > 16:
@@ -50,6 +53,8 @@ class Releases:
             self.error = True
 
     def required(self):
+        if self.closing:
+            raise HTTPException(503, 'Prompt release controls are stopping')
         self.experiments.required()
         policy = validate_protected_paths(json.loads(os.environ.get('PORTAL_LIVE_PROTECTED_PATHS', '[]')))
         if route_access('/manage/releases', policy) != 'manage':
@@ -160,7 +165,32 @@ class Releases:
             client.clear_prompt_cache()
             self.persist()
 
+    async def perform(self, kind, body):
+        self.required()
+        operation=(kind,body.model_dump())
+        if self.job is not None and not self.job.done() and self.operation==operation:
+            return await asyncio.shield(self.job)
+        if self.job is not None and not self.job.done():
+            raise HTTPException(409, 'A prompt release action is running')
+        self.operation=operation
+        self.job=asyncio.create_task(self._promote(body) if kind=='promote' else self._rollback(body))
+        # A disconnected HTTP caller does not release the experiment lock while
+        # the native thread still mutates. Retain and drain this owned task.
+        self.job.add_done_callback(lambda task: None if task.cancelled() else task.exception())
+        return await asyncio.shield(self.job)
+
+    async def stop(self):
+        self.closing=True
+        if self.job is not None:
+            await asyncio.shield(asyncio.gather(self.job,return_exceptions=True))
+
     async def promote(self, body):
+        return await self.perform('promote',body)
+
+    async def rollback(self, body):
+        return await self.perform('rollback',body)
+
+    async def _promote(self, body):
         self.required()
         async with self.experiments.lock:
             if self.experiments.job and not self.experiments.job.done():
@@ -201,7 +231,7 @@ class Releases:
         if fingerprint(previous.prompt) != source['old']['content_hash']:
             raise ValueError('The recorded previous prompt content changed')
 
-    async def rollback(self, body):
+    async def _rollback(self, body):
         self.required()
         async with self.experiments.lock:
             if self.experiments.job and not self.experiments.job.done():

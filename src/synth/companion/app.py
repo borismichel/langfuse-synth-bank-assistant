@@ -121,6 +121,7 @@ def create_app(adapter, *, preview=False):
                 task.cancel()
             if tasks:
                 await asyncio.gather(*tasks, return_exceptions=True)
+            await release_controls.stop()
             await experiment_controls.stop()
             await review_controls.stop()
             await judge_controls.stop()
@@ -149,7 +150,7 @@ def create_app(adapter, *, preview=False):
     from .experiments import mount_experiments
     experiment_controls = mount_experiments(app, adapter, banking, preview=preview)
     from .releases import mount_releases
-    mount_releases(app, experiment_controls)
+    release_controls = mount_releases(app, experiment_controls)
     from .review_routes import mount_reviews
     review_controls = mount_reviews(app, adapter, banking, preview=preview)
 
