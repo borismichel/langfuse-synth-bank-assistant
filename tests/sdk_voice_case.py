@@ -24,9 +24,8 @@ from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTrace
 from openai import AsyncOpenAI
 from websockets.asyncio.server import serve
 
-from pytest import MonkeyPatch
 from sdk_identifiers import numeric_span_ids
-numeric_span_ids(MonkeyPatch())
+numeric_span_ids()
 
 requests = []
 exports = []

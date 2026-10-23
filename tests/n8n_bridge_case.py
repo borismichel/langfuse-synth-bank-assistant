@@ -10,9 +10,8 @@ from threading import Thread
 import httpx
 from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTraceServiceRequest
 
-from pytest import MonkeyPatch
 from sdk_identifiers import numeric_span_ids
-numeric_span_ids(MonkeyPatch())
+numeric_span_ids()
 
 exports, model_calls, permits = [], [], []
 deny_reply = '--deny-reply' in sys.argv
