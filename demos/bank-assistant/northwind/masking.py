@@ -155,6 +155,64 @@ def scrub(text: str) -> "tuple[str, set[str]]":
     return text, found
 
 
+# Set only by the conduct task on its SDK-owned experiment root span. Customer
+# input, model text and tool results never supply span attributes or this schema.
+CONDUCT_EVIDENCE_SCHEMA = "northwind-conduct-evidence-v1"
+_EVIDENCE_ATTRIBUTE = "langfuse.observation.metadata.northwind_evidence_schema"
+_ROOT_ATTRIBUTE = "langfuse.experiment.item.root_observation_id"
+
+
+def _conduct_output(text: str) -> "tuple[str, set[str]]":
+    """Mask payload leaves while retaining the owned schema's exact linkage IDs."""
+    try:
+        output = json.loads(text)
+    except (ValueError, TypeError):
+        return scrub(text)
+    if not isinstance(output, dict):
+        return scrub(text)
+    hits, links = set(), {}
+    # Shield only validated schema paths. A collision-free sentinel lets the
+    # normal whole-document scrub retain keyword context (e.g. {"PIN": 1234}).
+    prefix = "NORTHWINDEVIDENCELINK"
+    rendered = json.dumps(output, ensure_ascii=False)
+    while prefix in rendered:
+        prefix += "X"
+
+    def visit(value, path=()):
+        if isinstance(value, str):
+            length = None
+            if path in (("trace_id",), ("source_trace_id",)):
+                length = 32
+            elif path in (("observation_id",), ("source_observation_id",)):
+                length = 16
+            elif len(path) == 3 and path[0] == "calls":
+                length = {"generation_id": 16, "generation_trace_id": 32}.get(path[2])
+            if length and re.fullmatch(r"[0-9a-f]{%d}" % length, value):
+                token = prefix + str(len(links))
+                links[token] = value
+                return token
+            return value
+        if isinstance(value, dict):
+            return {key: visit(item, (*path, key)) for key, item in value.items()}
+        if isinstance(value, list):
+            return [visit(item, (*path, index)) for index, item in enumerate(value)]
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            # Keep a redacted numeric payload valid JSON; ordinary metrics retain
+            # their numeric type. Include its field label for PIN/account rules.
+            label = str(path[-1]) + ": " if path else ""
+            masked, found = scrub(label + str(value))
+            hits.update(found)
+            return masked[len(label):] if found else value
+        return value
+
+    masked, found = scrub(json.dumps(visit(output), ensure_ascii=False))
+    hits.update(found)
+    for token, value in links.items():
+        masked = masked.replace(json.dumps(token), json.dumps(value))
+    return (masked, hits) if hits else (text, hits)
+
+
+
 def mask_otel_spans(*, params) -> Optional[object]:
     """Export-stage hook: return sparse patches for spans whose strings changed.
 
@@ -168,9 +226,20 @@ def mask_otel_spans(*, params) -> Optional[object]:
         try:
             replacements: dict = {}
             hits: "set[str]" = set()
+            sdk_span = span.instrumentation_scope_name == "langfuse-sdk"
+            owned_conduct = (
+                sdk_span and span.attributes.get(_EVIDENCE_ATTRIBUTE) == json.dumps(CONDUCT_EVIDENCE_SCHEMA)
+                and span.attributes.get(_ROOT_ATTRIBUTE) == span.span_id
+            )
             for key, value in span.attributes.items():
                 if isinstance(value, str):
-                    masked, found = scrub(value)
+                    # The SDK propagates this reserved attribute to task, wrapper
+                    # and child spans, which may export in different batches.
+                    # Payload keys and other instrumentation never get this exemption.
+                    if sdk_span and key == _ROOT_ATTRIBUTE and re.fullmatch(r"[0-9a-f]{16}", value):
+                        continue
+                    masked, found = (_conduct_output(value) if owned_conduct and
+                        key == "langfuse.observation.output" else scrub(value))
                     if found:
                         replacements[key] = masked
                         hits |= found

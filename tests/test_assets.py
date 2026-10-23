@@ -21,10 +21,10 @@ def test_preparation_creates_owned_definitions_and_prompts_without_paid_evaluati
         assert all(p['version']==7 for p in receipt['prompts'].values())
 
 
-def seeded_run(tmp_path, env, target):
+def seeded_run(tmp_path, env, target, *, generation_args=()):
     from test_history import api_evidence
     for verb in ('setup-assets','generate-spool','import-spool'):
-        result=invoke(tmp_path,verb,extra_env=env)
+        result=invoke(tmp_path,verb,*(generation_args if verb=='generate-spool' else ()),extra_env=env)
         assert result.returncode==0,result.stdout+result.stderr
     target.update(api_evidence(tmp_path/'state/events.bound.ndjson'))
 

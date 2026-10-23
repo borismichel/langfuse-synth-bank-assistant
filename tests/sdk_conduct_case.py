@@ -7,7 +7,7 @@ from test_pipeline import invoke
 
 
 @contextmanager
-def presenter(tmp_path,monkeypatch):
+def presenter(tmp_path,monkeypatch,*,generation_args=()):
     from fastapi.testclient import TestClient
     from langfuse_synth_core.companion import CompanionAdapter
     from langfuse_synth_core.companion.access import guarded_app
@@ -17,7 +17,7 @@ def presenter(tmp_path,monkeypatch):
     with experiment_target() as (env,target):
         # SDK resources are keyed by public key; each external fixture is a distinct target.
         env['LANGFUSE_PUBLIC_KEY']='pk-conduct-'+env['LANGFUSE_BASE_URL'].rsplit(':',1)[1]
-        seeded_run(tmp_path,env,target)
+        seeded_run(tmp_path,env,target,generation_args=generation_args)
         prepared=invoke(tmp_path,'prepare-cohorts',extra_env=env)
         assert prepared.returncode==0,prepared.stderr
         provider_fixture(env,target,monkeypatch)
@@ -69,7 +69,18 @@ def finished(browser):
 
 
 def test_matched_frozen_inputs_measured_outputs_and_native_evidence(tmp_path,monkeypatch):
-    with presenter(tmp_path,monkeypatch) as (browser,target):
+    # This fixed seed/date yields a card-shaped source ID for p5-safe in both arms.
+    with presenter(tmp_path,monkeypatch,generation_args=('--set','generation.seed=218','--set','generation.as_of_date=2026-10-23')) as (browser,target):
+        # Pin SDK randomness: a valid span ID can also pass card checks.
+        from itertools import count
+        from opentelemetry.sdk.trace.id_generator import RandomIdGenerator
+        identifiers = count(400000000000000)
+        def span_id(generator):
+            digits = str(next(identifiers))
+            weighted = [int(digit) * (2 if index % 2 == 0 else 1) for index,digit in enumerate(digits)]
+            checksum = -sum(value-9 if value>9 else value for value in weighted) % 10
+            return int(digits+str(checksum),16)
+        monkeypatch.setattr(RandomIdGenerator,'generate_span_id',span_id)
         browser.headers['x-depot-live-proof']='a'*64
         comparison_provider(target)
         body=dict(request_id='matched',judge_model='fixture-judge',include_legacy=False,cost_acknowledged=True)
@@ -77,6 +88,13 @@ def test_matched_frozen_inputs_measured_outputs_and_native_evidence(tmp_path,mon
         assert started.status_code==202,started.text
         run=finished(browser)
         assert run['status']=='awaiting_readback',run
+        assert all(row['observation_id'].isdecimal() for arm in run['arms'].values() for row in arm['rows'])
+        roots={row['trace_id']:row['observation_id'] for arm in run['arms'].values() for row in arm['rows']}
+        for span in target['exports']:
+            if span.trace_id.hex() in roots:
+                for attribute in span.attributes:
+                    if attribute.key=='langfuse.experiment.item.root_observation_id':
+                        assert attribute.value.string_value==roots[span.trace_id.hex()]
         assert set(run['arms'])=={'single','split'}
         assert len(target['calls'])==len(target['permits'])==132
         assert all(c['model']=='fixture-judge' for c in target['calls'])
