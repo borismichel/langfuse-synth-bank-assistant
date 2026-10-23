@@ -152,6 +152,8 @@ def test_activation_prerequisites_fail_without_creating_models_or_rules(monkeypa
             status=activate(browser)
             assert status['operation']['status']=='failed',status
             assert status['operation']['error']
+            if problem=='permission':
+                assert status['operation']['error']=='Langfuse returned an invalid response; refresh status to confirm the outcome'
             assert not target['writes']
 
 
