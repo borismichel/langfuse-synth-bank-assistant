@@ -45,4 +45,4 @@ pythonpath = ["src", "tests", "demos/bank-assistant"]
 testpaths = ["tests"]
 
 [tool.setuptools.package-data]
-synth = ["history.json"]
+synth = ["history.json", "assets.json"]

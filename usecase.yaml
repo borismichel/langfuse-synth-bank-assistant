@@ -76,13 +76,17 @@ pipeline:
   parse:
     plan_counts: regex:PLAN_COUNTS=(\{[^\n]+\})
 - id: prompts
-  run: synth setup-prompts --config {config}
+  run: synth setup-assets --config {config}
   fatal: true
   timeout_minutes: 5
 - id: seed
   run: synth seed --config {config}
   generate: synth generate-spool --config {config}
   resumable: synth import-spool --config {config}
+  timeout_minutes: 10
+- id: cohorts
+  run: synth prepare-cohorts --config {config}
+  fatal: true
   timeout_minutes: 10
 - id: verify
   run: synth verify --config {config}

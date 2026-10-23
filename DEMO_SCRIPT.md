@@ -23,6 +23,29 @@ Generation is network-free and model-free. Setup resolves frozen prompt content 
 
 Verification reads every required trace and root, current-run timestamp/session, observation tree, exact prompt association and fixture score value/type/source/subject. Missing current-run evidence fails even when older records have the same names or case labels. An imported receipt is not a claim of eventual visibility; the subsequent verification must pass.
 
+## Fixed evaluation assets
+
+After the volume confirmation, **Prepare prompts and score definitions** resolves managed historical prompts, nine frozen rubric prompts and reusable score definitions. After import, **Prepare fixed evaluation cohorts** waits for exact source observations, creates missing owned assets and reads them back. Neither step runs a model, activates managed judges, changes model connections, overwrites prompt labels or submits human reviews.
+
+Open **Historical evidence** from the assistant navigation. Use **Open full-run time window in Langfuse** to include the actual earliest and latest imported roots; the default Langfuse one-day filter may hide backdated history. This time-window view can also include unrelated records in that interval. The required-turn table and runbook case links identify exact current-run subjects. The page is a dated deployment verification snapshot, not a live evaluation dashboard. Native links open current records.
+
+The fixed cohorts retain the upstream expected-output schemas and rubric metadata:
+
+| Cohort | Items | Source and purpose |
+| --- | ---: | --- |
+| English banking | 16 | Original banking set, including two Spanish smoke controls; banking-qa-v1 references |
+| Spanish banking | 10 | Full Spanish set and formal-register expectations; banking-qa-v1 references |
+| Red team | 10 | Original refusal expectations; redteam-v1 labels |
+| Judge calibration | 16 | Five pass, six minor and five fail faithfulness-v1 examples |
+| Conduct comparison | 22 | Exact current-run delivered-answer source observations; P1–P5 conduct-v2 references |
+| Dispute lookup | 10 | Eight older-payment and two recent-payment cases; explicit confirmation and accepted-transaction controls |
+
+All 84 items and their rubric text are frozen from the recorded upstream revision. Banking, red-team, calibration and dispute items are authored fixtures, so they do not pretend to originate from a recorded observation. The 22 conduct items link to their exact imported source trace and root. Constructed reference labels are neither independently completed human reviews nor genuine managed EVAL results. Background scaling leaves these cohorts, contents and source identities unchanged for a fixed seed/date.
+
+Prepared dataset links record the actual server dataset ID and snapshot timestamp. Prompt links record the exact target version. Setup reuses matching owned content, preserves unrelated resources and fails on edited, archived, conflicting or ambiguous owned resources. It never resets a target or rewrites completed annotation work. A failed setup or verification must be resolved before presenting this candidate; do not bypass the failure by deleting review data.
+
+Conduct denominators cover the 58 mandatory historical turns only. Blocked turns are excluded from eligible. Scored means at least one policy verdict; unscored means none. Pending means at least one missing historical P1–P5 verdict, not a queued evaluator job. Unknown and invalid are overlapping subsets, not extra disjoint populations. A failed read prevents publication of a verified snapshot; a successful snapshot's zero read errors does not assert that live evaluators are healthy. Banking-task quality uses its own eligible/scored/pass/fail population. Background traffic, live turns, managed judge outputs and independent human reviews are excluded from these historical counts.
+
 ## Candidate capabilities
 
 Available: model-free history, target validation, volume confirmation, split generation/import, exact-run verification, bilingual live retrieval and guardrails, customer-bound confirmed banking actions, private participant state and reset, verified answer feedback, managed production prompt association, masked tracing, and this target-specific runbook.

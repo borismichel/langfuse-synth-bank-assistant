@@ -89,14 +89,15 @@ def api_evidence(spool):
 
 
 def test_verify_requires_every_current_hero_and_real_api_score_source(tmp_path):
-    from test_pipeline import target_server
-    evidence = {'observations': [], 'scores': []}
-    with target_server(evidence=evidence) as (env, _):
-        assert invoke(tmp_path, 'setup-prompts', extra_env=env).returncode == 0
+    from asset_target import asset_target
+    with asset_target() as (env, evidence):
+        assert invoke(tmp_path, 'setup-assets', extra_env=env).returncode == 0
         assert invoke(tmp_path, 'generate-spool', extra_env=env).returncode == 0
         imported = invoke(tmp_path, 'import-spool', extra_env=env)
         assert imported.returncode == 0, imported.stderr
         evidence.update(api_evidence(tmp_path / 'state/events.bound.ndjson'))
+        prepared = invoke(tmp_path, 'prepare-cohorts', extra_env=env)
+        assert prepared.returncode == 0, prepared.stderr
         verified = invoke(tmp_path, 'verify', '--timeout-seconds', '0', extra_env=env)
         assert verified.returncode == 0, verified.stdout + verified.stderr
         # Even complete same-name/case evidence from an old run cannot fill a current gap.
