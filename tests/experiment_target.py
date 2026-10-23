@@ -213,7 +213,12 @@ def provider_fixture(env,data,monkeypatch):
                                            'verdict':data.get('judge_response','pass')})
                     else:
                         assert set(schema['required'])=={'reason','score'}
-                        assert schema['properties']['score']['enum'] in ([0,0.5,1],[0,0.5,1,None])
+                        score_schema=schema['properties']['score']
+                        if score_schema.get('type')==['number','null']:
+                            return 400,{'type':'error','error':{'type':'invalid_request_error',
+                                'message':"output_config.format.schema: Invalid schema: Enum value 0 does not match declared type '['number', 'null']'"}}
+                        assert score_schema in ({'type':'number','enum':[0,0.5,1]},
+                            {'anyOf':[{'type':'number','enum':[0,0.5,1]},{'type':'null'}]})
                         answer=json.dumps({'reason':'The supplied evidence supports this score.','score':1})
                 else:
                     answer='**Evidence:** The answer cites the approved policy.\n\n**Verdict: pass**'
