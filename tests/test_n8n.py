@@ -31,13 +31,14 @@ def test_n8n_option_uses_separate_runtime_state_without_changing_history(tmp_pat
     assert (tmp_path/'state/events.ndjson').read_bytes() == spool
 
 
+@pytest.mark.parametrize('provider', ['openai', 'anthropic'])
 @pytest.mark.parametrize('mode', [[], ['--deny-reply']])
-def test_complaint_http_and_real_sdk_contract(mode):
+def test_complaint_http_and_real_sdk_contract(mode, provider):
     import os
     import subprocess
     import sys
     env = {k: v for k, v in os.environ.items() if k in ('PATH', 'HOME', 'TMPDIR', 'LANG')}
-    env['PYTHONPATH'] = 'src:demos/bank-assistant'
+    env.update(PYTHONPATH='src:demos/bank-assistant', BANK_TEST_PROVIDER=provider)
     result = subprocess.run([sys.executable, 'tests/n8n_bridge_case.py', *mode], env=env,
                             capture_output=True, text=True, timeout=60)
     assert result.returncode == 0, result.stdout + result.stderr
@@ -63,4 +64,18 @@ def test_post_start_exit_reports_bounded_sanitized_diagnostics(mode):
     env['PYTHONPATH'] = 'src:demos/bank-assistant'
     result = subprocess.run([sys.executable, 'tests/n8n_diagnostics_case.py', mode], env=env,
                             capture_output=True, text=True, timeout=70)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize('provider, invalid', [
+    ('openai', mode) for mode in ['fenced', 'duplicate', 'extra', 'missing', 'boolean', 'category', 'severity', 'rationale', 'truncated', 'refusal']
+] + [('anthropic', mode) for mode in ['fenced', 'truncated']])
+def test_invalid_complaint_classification_stops_without_retry_or_reply(provider, invalid):
+    import os
+    import subprocess
+    import sys
+    env = {k: v for k, v in os.environ.items() if k in ('PATH', 'HOME', 'TMPDIR', 'LANG')}
+    env.update(PYTHONPATH='src:demos/bank-assistant', BANK_TEST_PROVIDER=provider, BANK_CLASSIFIER_INVALID=invalid)
+    result = subprocess.run([sys.executable, 'tests/n8n_bridge_case.py'], env=env,
+                            capture_output=True, text=True, timeout=60)
     assert result.returncode == 0, result.stdout + result.stderr

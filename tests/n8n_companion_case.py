@@ -34,6 +34,8 @@ class Target(BaseHTTPRequestHandler):
             answer = (json.dumps({'category': 'fees', 'severity': 'medium', 'regulatory_escalation': False,
                                   'rationale': 'The reported duplicate charge requires review.'}) if len(model_calls) == 1
                       else 'Northwind Customer Care will review the duplicate fee. No refund is promised.')
+            if len(model_calls) == 1 and request.get('response_format', {}).get('type') != 'json_schema':
+                answer = '```json\n' + answer + '\n```'
             data = {'id': 'fixture-' + str(len(model_calls)), 'object': 'chat.completion', 'created': 123456,
                 'model': request['model'], 'choices': [{'index': 0, 'message': {'role': 'assistant', 'content': answer}, 'finish_reason': 'stop'}],
                 'usage': {'prompt_tokens': 20, 'completion_tokens': 12, 'total_tokens': 32}}
@@ -118,6 +120,11 @@ async def delivered():
             trace = bytes.fromhex(result['trace_id'])
             related = [s for s in exports if s.trace_id == trace]
             assert {'workflow.execute', 'node.execute', 'n8n-complaint-triage', 'classify-complaint', 'draft-reply'} <= {s.name for s in related}, [s.name for s in related]
+            classifications = [s for s in related if s.name == 'classify-complaint']
+            assert len(classifications) == 1
+            attrs = {a.key: a.value for a in classifications[0].attributes}
+            assert attrs['langfuse.observation.prompt.name'].string_value == 'northwind-complaint-triage'
+            assert attrs['langfuse.observation.prompt.version'].int_value == 1
             assert (await client.post(local + '/n8n/webhook/complaint-triage', headers={**headers, 'origin': 'https://foreign.invalid'}, json={})).status_code == 403
             assert (await client.post(local + '/n8n/rest/owner/setup', headers=headers, json={})).status_code == 404
     finally:
