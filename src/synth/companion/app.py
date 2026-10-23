@@ -125,7 +125,7 @@ def create_app(adapter, *, preview=False):
         content = (STATIC / 'index.html').read_text()
         prefix = paths.base_path()
         content = content.replace('"/static/', f'"{escape(prefix)}/static/').replace('href="/"', f'href="{escape(prefix)}/"')
-        content = content.replace('<nav class="tabs" role="tablist">', '<nav class="tabs" role="tablist"><a class="tab" href="' + escape(prefix) + '/history">Historical evidence</a>')
+        content = content.replace('<nav class="tabs" role="tablist">', '<nav class="tabs" role="tablist"><a class="history-link" style="padding:12px 16px;color:inherit" href="' + escape(prefix) + '/history">Historical evidence</a>')
         setting = json.dumps(prefix).replace('<', '\\u003c')
         content = content.replace('<head>', '<head><script>window.NORTHWIND_BASE_PATH=' + setting + ';</script>')
         notice = ('Development preview — fixture responses only; no target or provider connection.' if preview
