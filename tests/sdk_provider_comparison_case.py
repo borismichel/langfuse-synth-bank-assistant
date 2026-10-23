@@ -63,6 +63,8 @@ def pause_provider_transition(target):
     return baseline_judge, release_judge, candidate, release_candidate
 
 def test_delivered_provider_comparison_freezes_inputs_and_attributes_both_bindings(tmp_path,monkeypatch,request):
+    from sdk_identifiers import numeric_span_ids
+    numeric_span_ids(monkeypatch)
     from fastapi.testclient import TestClient
     from langfuse_synth_core.companion import CompanionAdapter
     from langfuse_synth_core.companion.access import guarded_app
