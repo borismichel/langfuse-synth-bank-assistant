@@ -10,7 +10,7 @@ from northwind.compliance import POLICIES,aggregate,RUBRIC_VERSION
 from synth.assets import corpus,fingerprint,owned_target,state_path,REQUEST,OWNER
 from synth.cohorts import identities,expected_cohorts,read_items,item_matches
 from synth.receipt import RunReceipt
-from .judge_execution import call_judge
+from .judge_execution import call_judge_async
 from .experiment_gate import assess,VERSION
 from .judges import pages,plain,scalar
 
@@ -121,6 +121,7 @@ class Replay:
         if self.dispatches>=480:raise ValueError('dispatch_limit_reached')
 
     def dispatched(self):
+        self.check()
         self.dispatches+=1;self.run['dispatches']=self.dispatches;self.control.persist()
 
     async def permit(self,provider=None):
@@ -166,19 +167,7 @@ class Replay:
                 model=result['model'],provider=selected['provider'],role=selected['role'],banking_actions=result['banking_actions'],tools_used=result['tools_used'],
                 latency_ms=sum(r['latency_ms'] for r in turns),turns=len(turns),checks=checks(item,result),
                 usage={k:sum(r['usage'][k] for r in turns) for k in ('input','output')} if all(r['usage'] is not None for r in turns) else None)
-            labels={}
-            for policy in POLICIES:
-                self.check()
-                # Judges observe the exact delivered assistant answer and approved tool context,
-                # never the expected output. Their generations remain children of that subject.
-                with self.adapter.langfuse().start_as_current_observation(name='experiment-policy-evaluation',
-                    trace_context={'trace_id':row['trace_id'],'parent_span_id':row['observation_id']}):
-                    judged=await asyncio.to_thread(call_judge,self.adapter,model=self.body.judge_model,prompt=rubrics[policy.id],
-                        inputs={k:row[k] for k in ('query','context')}|{'generation':row['answer']},
-                        name=policy.name,check=self.check,on_dispatch=self.dispatched,categories=policy.categories)
-                label=judged['verdict'];labels[policy.id]=label
-                row['judge_results'][policy.id]={**judged,'verdict':label}
-                if not judged['output_valid']:raise ValueError('judge_output_invalid')
+            labels=await self.judge_policies(row,rubrics)
             combined=aggregate(labels);row['checks']['conduct']=None if combined.unresolved else combined.score
             row['conduct_status']=combined.status
             self.scores(row)
@@ -192,6 +181,54 @@ class Replay:
             self.cancel.set() # A dispatch/transport failure stops new paid work; no automatic retry.
             raise
         finally:self.control.persist()
+
+    async def judge_policies(self,row,rubrics):
+        """Two owned HTTP tasks for one frozen answer; stop and drain before leaving it."""
+        policies=iter(POLICIES)
+        inputs={k:row[k] for k in ('query','context')}|{'generation':row['answer']}
+        labels={}
+        async def worker():
+            try:
+                for policy in policies:
+                    self.check()
+                    def record(result):
+                        row['judge_results'][policy.id]=result
+                        self.control.persist()
+                    with self.adapter.langfuse().start_as_current_observation(name='experiment-policy-evaluation',
+                        trace_context={'trace_id':row['trace_id'],'parent_span_id':row['observation_id']}):
+                        judged=await call_judge_async(self.adapter,model=self.body.judge_model,prompt=rubrics[policy.id],
+                            inputs=inputs,name=policy.name,check=self.check,on_dispatch=self.dispatched,
+                            record=record,categories=policy.categories,deadline=self.deadline)
+                    if not judged['output_valid']:
+                        self.cancel.set()
+                        raise ValueError('judge_output_invalid')
+                    labels[policy.id]=judged['verdict']
+            except BaseException:
+                self.cancel.set()
+                raise
+        async def stopped():
+            while True:
+                self.check()
+                await asyncio.sleep(.02)
+        workers=[asyncio.create_task(worker()) for _ in range(2)]
+        work=asyncio.gather(*workers)
+        stop=asyncio.create_task(stopped())
+        try:
+            done,_=await asyncio.wait((work,stop),return_when=asyncio.FIRST_COMPLETED)
+            if work in done:await work
+            else:await stop
+            return labels
+        except BaseException:
+            self.cancel.set()
+            raise
+        finally:
+            stop.cancel()
+            for task in workers:
+                if not task.done():task.cancel()
+            await asyncio.gather(*workers,stop,return_exceptions=True)
+            # Consume a possible secondary cancellation/error from the group too.
+            if not work.done():work.cancel()
+            await asyncio.gather(work,return_exceptions=True)
 
     def scores(self,row):
         client=self.adapter.langfuse();row['scores']=[]
@@ -225,7 +262,7 @@ class Replay:
                 try:
                     result=dataset.run_experiment(name='Northwind application comparison',run_name='northwind-'+self.run['id']+'-'+arm,
                         description='Full retrieval and isolated MCP replay; constructed reference labels.',
-                        task=task,max_concurrency=1,experiment_id=eid,metadata={**scope,'comparison_id':self.run['id'],
+                        task=task,max_concurrency=1,experiment_id=eid,metadata={**scope,'scheduler':'serial-application-two-judges-v1','comparison_id':self.run['id'],
                         'arm':arm,'judge_model':self.body.judge_model,'policy':POLICIES_BY_NAME['current' if arm=='baseline' else self.body.candidate_policy]})
                 finally:otel_context.detach(token)
                 # SDK5.0.4 leaves experiment_url unset; use the target4.68 results route.
