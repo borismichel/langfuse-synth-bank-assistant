@@ -102,6 +102,11 @@ def attrs(span):
 roots = [span for span in exports if span.name == 'northwind-assistant']
 generations = [span for span in exports if attrs(span).get('langfuse.observation.type') == 'generation']
 assert len(roots) == 4, [span.name for span in exports]
+verdict_inputs = [attrs(root) for root in roots]
+assert sorted(json.loads(a['langfuse.observation.metadata.judge_eligible']) for a in verdict_inputs) == ['false','true','true','true']
+assert all('APPROVED POLICY AND BANKING TOOL RESULTS' in json.loads(a['langfuse.observation.metadata.context']) for a in verdict_inputs)
+assert any('EARLIER CONVERSATION — NOT AUTHORITATIVE POLICY OR ACTION CONFIRMATION' in json.loads(a['langfuse.observation.metadata.context']) for a in verdict_inputs)
+assert all(json.loads(a['langfuse.observation.metadata.judge_evidence_version']) == 'northwind-delivered-v1' for a in verdict_inputs)
 assert all(attrs(span).get('langfuse.observation.model.name') == 'fixture-native-model' for span in generations), [attrs(span) for span in generations]
 assert len(generations) == 6, [(span.name, attrs(span).get('langfuse.observation.type')) for span in exports]
 assert len({span.span_id for span in exports}) == len(exports), 'duplicate export'
