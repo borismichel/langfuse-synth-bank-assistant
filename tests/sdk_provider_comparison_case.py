@@ -4,6 +4,64 @@ from provider_comparison_target import two_providers
 from test_assets import seeded_run
 from test_pipeline import invoke
 
+
+def status_during_arm_transition(browser, monkeypatch, baseline_judge, release_judge, candidate, release_candidate):
+    """Schedule a real worker transition inside the HTTP serializer's traversal."""
+    import fastapi.encoders
+
+    assert baseline_judge.wait(40), 'Baseline did not reach its final judge request'
+    encode = fastapi.encoders.jsonable_encoder
+    paused = False
+
+    def pause_at_row(value, *args, **kwargs):
+        nonlocal paused
+        if not paused and isinstance(value, dict) and 'case_id' in value and 'judge_results' in value:
+            paused = True
+            release_judge.set()
+            assert candidate.wait(10), 'Candidate did not dispatch after the baseline finished'
+        return encode(value, *args, **kwargs)
+
+    try:
+        with monkeypatch.context() as scheduler:
+            # Keep the real encoder; only control its scheduling against provider I/O.
+            scheduler.setattr(fastapi.encoders, 'jsonable_encoder', pause_at_row)
+            response = browser.get('/manage/experiments/status')
+        assert response.status_code == 200, response.text
+        assert paused, 'The response did not exercise nested experiment serialization'
+        frozen = response.json()['runs'][-1]
+        assert len(frozen['arms']['baseline']['rows']) == 16
+        assert 'url' not in frozen['arms']['baseline']
+        assert frozen['arms']['candidate']['rows'] == []
+        advanced = browser.get('/manage/experiments/status').json()['runs'][-1]
+        assert 'url' in advanced['arms']['baseline']
+        assert len(advanced['arms']['candidate']['rows']) == 1
+    finally:
+        release_judge.set()
+        release_candidate.set()
+
+
+def pause_provider_transition(target):
+    from threading import Event
+
+    baseline_judge, release_judge, candidate, release_candidate = (Event() for _ in range(4))
+    extension = target['extension']
+    judges = 0
+
+    def gated(method, path, query, body):
+        nonlocal judges
+        if path.endswith('/messages') and body['model'] == 'fixture-judge':
+            judges += 1
+            if judges == 80:
+                baseline_judge.set()
+                assert release_judge.wait(20), 'Final baseline judge was not released'
+        if path.endswith('/chat/completions') and not candidate.is_set():
+            candidate.set()
+            assert release_candidate.wait(20), 'First candidate call was not released'
+        return extension(method, path, query, body)
+
+    target['extension'] = gated
+    return baseline_judge, release_judge, candidate, release_candidate
+
 def test_delivered_provider_comparison_freezes_inputs_and_attributes_both_bindings(tmp_path,monkeypatch,request):
     from fastapi.testclient import TestClient
     from langfuse_synth_core.companion import CompanionAdapter
@@ -15,6 +73,8 @@ def test_delivered_provider_comparison_freezes_inputs_and_attributes_both_bindin
         seeded_run(tmp_path,env,target)
         assert invoke(tmp_path,'prepare-cohorts',extra_env=env).returncode==0
         two_providers(env,target,monkeypatch)
+        transition = pause_provider_transition(target)
+        request.addfinalizer(lambda: (transition[1].set(), transition[3].set()))
         for k,v in env.items():monkeypatch.setenv(k,v)
         monkeypatch.setenv('SYNTH_STATE_DIR',str(tmp_path/'state'))
         monkeypatch.setenv('PORTAL_LIVE_PROOF','a'*64)
@@ -33,6 +93,7 @@ def test_delivered_provider_comparison_freezes_inputs_and_attributes_both_bindin
             body=dict(request_id='providers-one',cohort='english',prompt_version=prepared['control']['version'],judge_model='fixture-judge',cost_acknowledged=True)
             start=browser.post('/manage/experiments/providers/start',json=body)
             assert start.status_code==202,start.text
+            status_during_arm_transition(browser, monkeypatch, *transition)
             def wait():
                 deadline=time.monotonic()+40
                 while time.monotonic()<deadline:
