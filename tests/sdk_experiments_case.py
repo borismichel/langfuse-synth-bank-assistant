@@ -208,6 +208,7 @@ def test_comparison_replays_fixed_application_cohort_and_requires_exact_native_r
                 time.sleep(.02)
             assert changed['status']=='runner_failed' and changed['dispatches']==0
             assert len(target['calls'])==calls+1
+            saved_runs=browser.get('/manage/experiments/status').json()['runs']
 
         # A restarted application in this container recovers receipts without touching the spool.
         with TestClient(guarded_app(create_app(adapter),health_path='/api/health')) as restarted:
@@ -215,6 +216,7 @@ def test_comparison_replays_fixed_application_cohort_and_requires_exact_native_r
             recovered=restarted.get('/manage/experiments/status')
             assert recovered.status_code==200,recovered.text
             assert len(recovered.json()['runs'])==8
+            assert recovered.json()['runs']==saved_runs
             previous=restarted.post('/manage/experiments/start',json=body)
             assert previous.status_code==200 and previous.json()['id']==identity
             assert len(target['calls'])==calls+1

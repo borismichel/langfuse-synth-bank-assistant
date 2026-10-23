@@ -7,7 +7,8 @@ Remove this probe after the hosted timeout has a reproduced cause.
 """
 from __future__ import annotations
 
-import faulthandler
+import sys
+from threading import Event, Thread
 import json
 import os
 import platform
@@ -17,6 +18,8 @@ from datetime import datetime, timezone
 _progress = None
 _stacks = None
 _started = 0.0
+_stack_stop = Event()
+_stack_thread = None
 
 
 def _record(event, **fields):
@@ -31,7 +34,7 @@ def _record(event, **fields):
 
 
 def pytest_configure(config):
-    global _progress, _stacks, _started
+    global _progress, _stacks, _started, _stack_thread
     directory = config.rootpath / ".ci-diagnostics"
     # A file opt-in survives the authoring worker's deliberate env allowlist.
     if not (directory / "enabled").is_file():
@@ -43,7 +46,18 @@ def pytest_configure(config):
     _stacks = (directory / f"stacks-{os.getpid()}.txt").open("w", buffering=1)
     _record("configured", python=platform.python_version(),
             system=platform.system(), architecture=platform.machine())
-    faulthandler.dump_traceback_later(10, repeat=True, file=_stacks)
+    def snapshots():
+        while not _stack_stop.wait(10):
+            _stacks.write("Python stack snapshot\n")
+            for identity, frame in sys._current_frames().items():
+                _stacks.write(f"Thread {identity}\n")
+                while frame is not None:
+                    code = frame.f_code
+                    _stacks.write(f"  {code.co_filename}:{frame.f_lineno} in {code.co_name}\n")
+                    frame = frame.f_back
+            _stacks.flush()
+    _stack_thread = Thread(target=snapshots, daemon=True)
+    _stack_thread.start()
 
 
 def pytest_collection_finish(session):
@@ -68,7 +82,8 @@ def pytest_unconfigure(config):
     if _progress is None:
         return
     _record("unconfigure")
-    faulthandler.cancel_dump_traceback_later()
+    _stack_stop.set()
+    _stack_thread.join()
     _stacks.close()
     _progress.close()
     _stacks = _progress = None
@@ -141,6 +156,17 @@ def experiment_boundaries(request, monkeypatch):
     monkeypatch.setattr(httpx.Client, "send", wrap_send(httpx.Client.send))
     monkeypatch.setattr(httpx.AsyncClient, "send", async_send)
     monkeypatch.setattr(requests.Session, "send", wrap_send(requests.Session.send))
+    from synth.companion.experiments import ExperimentControls
+    original_persist = ExperimentControls.persist
+    def persist(self):
+        started = time.monotonic()
+        try:
+            return original_persist(self)
+        finally:
+            with lock:
+                counts["receipt_persist"][0] += 1
+                counts["receipt_persist"][1] += time.monotonic()-started
+    monkeypatch.setattr(ExperimentControls, "persist", persist)
     original_request = TestClient.request
     statuses = {}
     def browser_request(self, method, url, *args, **kwargs):

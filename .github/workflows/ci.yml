@@ -8,7 +8,7 @@ permissions:
 jobs:
   experiment:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -23,13 +23,28 @@ jobs:
         run: uv sync --frozen --extra dev
       - name: Enable phase timing and stack samples
         run: mkdir -p .ci-diagnostics && touch .ci-diagnostics/enabled
-      - name: Exercise original 90-second wrapper
+      - name: Exercise original encoding with original 90-second wrapper
+        continue-on-error: true
+        run: |
+          git show fa58ab0837a8af643b838226e1f1764b4bf2b7d5:src/synth/companion/experiments.py > src/synth/companion/experiments.py
+          .venv/bin/python -m pytest tests/test_experiments.py::test_delivered_experiment_controls -q
+      - name: Preserve baseline evidence and restore candidate
+        if: always()
+        run: |
+          mv .ci-diagnostics .ci-baseline
+          mkdir .ci-diagnostics
+          touch .ci-diagnostics/enabled
+          git restore src/synth/companion/experiments.py
+      - name: Exercise candidate encoding with original 90-second wrapper
+        if: always()
         run: .venv/bin/python -m pytest tests/test_experiments.py::test_delivered_experiment_controls -q
       - name: Save credential-free diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: experiment-wrapper-${{ matrix.sample }}
-          path: .ci-diagnostics/
+          path: |
+            .ci-diagnostics/
+            .ci-baseline/
           include-hidden-files: true
           if-no-files-found: error

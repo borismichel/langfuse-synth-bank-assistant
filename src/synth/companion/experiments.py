@@ -61,7 +61,9 @@ class ExperimentControls:
         temporary = self.file.with_suffix('.tmp')
         fd = os.open(temporary, os.O_CREAT | os.O_TRUNC | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, 'w') as stream:
-            json.dump({'version':1,'runs':self.runs}, stream, sort_keys=True)
+            # Encode once: dump() walks every receipt in Python for each dispatch.
+            # Keep every durable checkpoint and the same JSON representation.
+            stream.write(json.dumps({'version':1,'runs':self.runs}, sort_keys=True))
         temporary.replace(self.file)
 
     def required(self):
