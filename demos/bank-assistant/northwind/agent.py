@@ -237,8 +237,14 @@ def _text(content: Any) -> str:
     return "".join(b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text")
 
 
-def make_llm(model: Optional[str] = None):
-    return config.get_adapter().native_llm(model=model)
+def make_llm(model: Optional[str] = None, *, role: str | None = None):
+    adapter = config.get_adapter()
+    if role is not None:
+        binding = adapter.role_binding(role)
+        if model is not None and model != binding.model:
+            raise ValueError('A role model cannot be overridden')
+        return adapter.native_llm_for(role)
+    return adapter.native_llm(model=model)
 
 
 class State(TypedDict):
@@ -411,10 +417,10 @@ async def run_turn(message: str, *, customer_id: str = "C-1001", session_id: Opt
                    prompt_label: Optional[str] = None, tags: Optional[list] = None,
                    extra_metadata: Optional[dict] = None, trace_name: str = TRACE_NAME,
                    banking_binding: str | None = None, confirmation: dict | None = None,
-                   before_model_call=None, exact_prompt=None, run_policy: dict | None = None) -> dict:
+                   before_model_call=None, exact_prompt=None, run_policy: dict | None = None, llm_role: str | None = None) -> dict:
     """One customer turn = one trace. Returns the answer plus links into Langfuse and the APM."""
     langfuse = config.get_langfuse()
-    selected_llm = make_llm(model)
+    selected_llm = make_llm(model, role=llm_role)
     model = getattr(selected_llm, "model", None) or getattr(selected_llm, "model_name", None) or model or config.AGENT_MODEL
     if run_policy is not None:
         if (set(run_policy) != {'retrieval_k','retrieval_min_score','tx_default_days'} or

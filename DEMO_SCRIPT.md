@@ -50,7 +50,7 @@ Conduct denominators cover the 58 mandatory historical turns only. Blocked turns
 
 Available: model-free history, target validation, volume confirmation, split generation/import, exact-run verification, bilingual live retrieval and guardrails, customer-bound confirmed banking actions, private participant state and reset, verified answer feedback, managed production prompt association, masked tracing, explicitly activated P1–P5 managed judges, annotation queues, measured calibration, bounded application experiments, optional bilingual voice, optional private complaint workflow, and this target-specific runbook.
 
-Pending under Depot spec #365: prompt promotion, provider comparisons, governance and full operational qualification. This candidate is not the full-spec catalogue release.
+Pending under Depot spec #365: prompt promotion, governance and full operational qualification. This candidate is not the full-spec catalogue release.
 
 ## Deployment and recovery
 
@@ -294,3 +294,10 @@ Open **Application experiments → Judge comparison** with Depot management acce
 6. Choose **Verify native evidence** after ingestion. Open each arm's native experiment and its individual traces. Verification requires the exact dataset snapshot, item membership, frozen inputs/reference labels, source relationships, model/rubric generations, outputs and API measurement scores. A mismatch remains incomplete. “Verified” means native evidence is complete; it is not a quality gate and cannot approve application promotion.
 
 **Recovery:** Repeating the same action recovers its existing result without new calls. Changing model or arm settings requires a new action identity. Interrupted actions cannot resume automatically. Receipts live in private runtime storage outside the read-only imported spool and survive a process restart within the same container; replacing the container loses them. Before replacement or another paid action, inspect uncertain native outcomes and retain experiment links. Managed evaluation rules have a separate lifecycle. After qualification, stop owned writers/rules and delete every admission project and dedicated key created for this kit.
+
+## Fixed provider comparison
+
+1. During deployment enable **OpenAI comparison** with Anthropic as primary. Open **Application experiments → Provider comparison** through Depot.
+2. Select the complete English cohort and one published control prompt version for both arms. Enter an available Anthropic judge model and acknowledge costs. The binding display identifies the exact Anthropic application model and OpenAI `gpt-4.1-mini` candidate.
+3. Start once and inspect progress. After completion, refresh native evidence. Compare raw quality counts, each provider's measured application usage/native costs, the separate Anthropic judge totals and the linked native experiment generations. Retrieval and the exact prompt are fixed, so this is a provider comparison.
+4. A missing provider, unavailable model, denied spending check or missing native accounting leaves an explicit failed/incomplete outcome, without silently changing model. The completed arm remains inspectable. This result cannot promote a prompt; use the separately required application release evidence.
