@@ -108,6 +108,10 @@ artifacts:
   render: markdown
   title: Presenter Runbook
 assets:
+  screenshots:
+  - docs/screenshots/spanish-voice-fixture.png
+  - docs/screenshots/provider-comparison-fixture.png
+  - docs/screenshots/prompt-release-fixture.png
   docs:
   - path: docs/DEPOT_KIT.md
     title: Overview

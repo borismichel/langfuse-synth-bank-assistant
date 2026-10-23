@@ -24,6 +24,28 @@ Record the release digest, target/project, deployment ID, selected models, enabl
 
 Capture the delivered app, native evidence and option screens without secrets or unrelated project data. Catalogue screenshots must be bundled immutable image assets, with a caption identifying the target, candidate and whether evidence is fixture or live. Local screenshots and a prior candidate's run do not qualify the current release. Target-specific screenshots and the second-presenter record are release evidence; they must be added before final catalogue publication.
 
+## Screen references — local fixtures
+
+These captures show the delivered browser controls against model-free local API fixtures on 23 October 2026. They are UI references, not real-provider results, target governance proof or qualification of the final release. The immutable image links keep these captions tied to the original captures. Use current-deployment native links for live evidence.
+
+### Spanish voice interface after an explicitly confirmed synthetic card block
+
+![Local fixture: Spanish voice interface after an explicitly confirmed synthetic card block](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/3323283acac8a1edbd4cbfddf10eb868597fb7ab/docs/screenshots/spanish-voice-fixture.png)
+
+[Open full-size fixture capture](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/3323283acac8a1edbd4cbfddf10eb868597fb7ab/docs/screenshots/spanish-voice-fixture.png)
+
+### Provider comparison with separately displayed application and judge accounting
+
+![Local fixture: Provider comparison with separately displayed application and judge accounting](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/3323283acac8a1edbd4cbfddf10eb868597fb7ab/docs/screenshots/provider-comparison-fixture.png)
+
+[Open full-size fixture capture](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/3323283acac8a1edbd4cbfddf10eb868597fb7ab/docs/screenshots/provider-comparison-fixture.png)
+
+### Prompt release controls after promotion and recorded-version rollback
+
+![Local fixture: Prompt release controls after promotion and recorded-version rollback](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/3323283acac8a1edbd4cbfddf10eb868597fb7ab/docs/screenshots/prompt-release-fixture.png)
+
+[Open full-size fixture capture](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/3323283acac8a1edbd4cbfddf10eb868597fb7ab/docs/screenshots/prompt-release-fixture.png)
+
 ## Historical walkthrough
 
 The links under **This deployment** identify every required turn in this exact imported run. Start with these cases:
