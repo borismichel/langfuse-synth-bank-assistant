@@ -3,8 +3,9 @@ slug: northwind-bank-assistant
 name: Northwind Bank Assistant
 tagline: Inspect bilingual banking actions, regressions and conduct evidence.
 story: 'Compare frozen banking actions, dispute and retrieval-cost regressions, and
-  conduct policy cases in Langfuse, then use the bilingual live assistant. Further
-  interactive capabilities are tracked by Depot spec #365.'
+  conduct policy cases in Langfuse, then use the bilingual live assistant,
+  protected evaluation controls and prompt releases. The coding-agent workshop
+  includes local implementation and rehearsal instructions.'
 target:
   project_hint: demo
   supports:
@@ -157,8 +158,9 @@ live_components:
   description: Bilingual banking assistant with retrieval, guardrails, confirmed
     banking actions, participant reset, answer feedback, protected policy judges,
     annotation queues, measured calibration, bounded application experiments, model-free conduct reconciliation,
-    optional private APM, bilingual voice and fixed provider comparisons. Advanced workshop
-    capabilities remain unavailable in this candidate.
+    optional private APM and complaint workflow, bilingual voice, fixed provider comparisons,
+    and prompt promotion and rollback. Provider-backed qualification and staging
+    rehearsal are recorded separately from delivered capabilities.
   command: synth companion --config {config} --host 0.0.0.0 --port 8080
   port: 8080
   requires_secrets:

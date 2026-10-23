@@ -90,3 +90,29 @@ def test_customer_cannot_select_someone_elses_conversation_or_execute_a_job():
         assert browser.post('/api/voice/process').status_code == 503
         assert browser.post('/api/feedback', json={'session_id': first, 'trace_id': 'someone-else',
                                                  'observation_id': 'foreign', 'value': 1}).status_code == 403
+
+
+def test_presenter_links_reflect_protected_controls_and_preview(monkeypatch, tmp_path):
+    import json
+    from langfuse_synth_core.companion import CompanionAdapter
+    from synth.companion.app import create_app
+    from synth.config import load_config
+    monkeypatch.setenv('SYNTH_STATE_DIR', str(tmp_path))
+    monkeypatch.setenv('LIVE_BASE_PATH', '/live/presenter-test')
+    monkeypatch.setenv('PORTAL_LIVE_PROOF', 'a' * 64)
+    monkeypatch.setenv('PORTAL_LIVE_PROTECTED_PATHS', json.dumps([{'path':'/manage','access':'manage'}]))
+    adapter = CompanionAdapter(load_config('config/demo.yaml'))
+    browser = TestClient(create_app(adapter))
+    links = browser.get('/api/acts').json()['links']
+    assert {item['title']: item['url'] for item in links} == {
+        'Application experiments': '/live/presenter-test/manage/experiments',
+        'Prompt releases': '/live/presenter-test/manage/releases'}
+    assert all(item['available'] and 'Manager access' in item['status'] for item in links)
+    assert browser.get('/manage/experiments').status_code == 200
+    assert browser.get('/manage/releases').status_code == 200
+    monkeypatch.setenv('PORTAL_LIVE_PROTECTED_PATHS', '[]')
+    unavailable = browser.get('/api/acts').json()['links']
+    assert all(not item['available'] and not item['url'] for item in unavailable)
+    assert browser.get('/manage/experiments').status_code == 503
+    preview = TestClient(create_app(None, preview=True)).get('/api/acts').json()['links']
+    assert all(not item['available'] and 'preview' in item['status'] for item in preview)

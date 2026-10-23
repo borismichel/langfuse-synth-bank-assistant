@@ -872,6 +872,24 @@
   function renderActs() {
     const d = C.data; if (!d) return;
     C.acts = d.acts;
+    const linkedControls = Array.isArray(d.links);
+    $(".presenter-layout").classList.toggle("controls-only", linkedControls);
+    $(".console").classList.toggle("hidden", linkedControls);
+    if (linkedControls) {
+      const root = $("#acts"); root.replaceChildren();
+      for (const item of d.links) {
+        const card = document.createElement('section'); card.className = 'card act lf-frame corner-box-corners';
+        const title = document.createElement('h2'); title.className = 'act-title'; title.textContent = item.title;
+        const status = document.createElement('p'); status.className = 'act-blurb'; status.textContent = item.status;
+        card.append(title, status);
+        if (item.available && item.url) {
+          const link = document.createElement('a'); link.className = 'btn btn-primary';
+          link.href = item.url; link.textContent = item.title; card.append(link);
+        }
+        root.append(card);
+      }
+      return;
+    }
     const groups = [];
     d.acts.forEach((a) => { let g = groups.find((x) => x.id === a.group); if (!g) groups.push((g = { id: a.group, acts: [] })); g.acts.push(a); });
     $("#acts").innerHTML = groups.map((g) => {

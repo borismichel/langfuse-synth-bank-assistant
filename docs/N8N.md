@@ -85,6 +85,15 @@ export failure cannot appear ready. Shutdown first stops n8n and flushes native
 spans while the bridge remains alive, then closes unfinished observations and
 the bridge. Child process groups and temporary directories are cleaned up.
 
+Container stderr includes sanitized n8n import, publish and runtime diagnostics
+with a stage, output stream and exit code. Forwarded child text is limited to
+128 lines and 32 KiB across the instance lifetime; individual lines above 2 KiB
+are omitted whole. A fixed notice reports omitted output. The reader continues
+draining both pipes after this budget is exhausted, and shutdown drains or closes
+owned readers within two seconds. Generated callback, encryption, runner and owner
+credentials are redacted; credential assignments are removed from diagnostic text.
+Fixed stage/exit summaries remain available after the text budget is exhausted.
+
 The local image checks use no external network and no published ports. They
 exercise real n8n import, owner bootstrap, HTML/assets, execution, native export,
 private routing, SSE beyond 30 seconds, new-instance isolation, child failure and

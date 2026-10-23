@@ -6,9 +6,13 @@
 - Fork identity and unused destination checked by the integration coordinator before GitHub fork creation; upstream history is retained. No existing remote was repointed.
 - Upstream Apache-2.0 licence remains in `LICENSE`; banking source and notices are preserved.
 - Root package slug: `northwind-bank-assistant`; GHCR release identity: `ghcr.io/borismichel/langfuse-synth-bank-assistant`.
-- Core baseline and reusable publishing workflow: v5.0.0, commit `5f56e75f9a8b5d160ddf54a8fcde380d0d15a205`.
-- Runtime and authoring pin: tested integration candidate `eb3ca1d678bc77a377d815e0bb8e5d895a4d9b22`, which includes the split-generation Manifest contract, native Companion factories, protected live-route transport gate, validated public origin bounded fixed-target native OTLP forwarding, optional provider roles, and fresh per-operation spending authorization. This is an immutable integration candidate, not a stable core release. Coordinate a stable release and consumer repins before final qualification. The publishing workflow remains pinned independently to the unchanged v5.0.0 release implementation.
+- Current package version: `0.7.0` (`pyproject.toml`).
+- Runtime, authoring and reusable publishing workflow: stable core `v5.1.0`, resolved by `uv.lock` to commit `ee87bf749b95a3a1026c655830c95dd2219ca83d`. This release includes the split-generation Manifest contract, native Companion factories, protected live-route transport gate, validated public origin, bounded fixed-target native OTLP forwarding, optional provider roles and fresh per-operation spending authorization.
 - Python 3.12.15 and Langfuse SDK 5.0.4; full dependency resolution in `uv.lock`.
+
+This is the authoritative narrative release record. Installation instructions refer
+here rather than duplicating mutable versions. The executable identities remain
+`pyproject.toml`, `uv.lock` and `.github/workflows/publish.yml`.
 
 ## Workflow audit
 
@@ -27,15 +31,32 @@ Documentation inspected 22 October 2026:
 
 Maintained Langfuse skill entrypoint SHA256: `e8908ea1c924374ba7bc5e82b220709d107db6a3450a0c4d72228a91a2a7534a`.
 
-## Candidate version
+## Current candidate scope
 
-Package version `0.4.0` combines participant sessions/reset/feedback, deterministic history, validated history controls and progress, native datasets/prompts/score definitions, historical evidence navigation, and optional private APM. It preserves the native-provider duplicate-generation repair and corrects verification for target responses with empty non-generation usage. Its scope is exact-image, live-target and deployed-URL qualification of #367–#372 and #382; it does not represent full-spec catalogue completion. Record the signed image receipt after publication rather than reusing an earlier candidate digest.
+Package `0.7.0` integrates the full banking implementation: participant sessions,
+confirmation/reset/feedback, verified frozen history, native datasets and prompts,
+managed policy judges, review/calibration, matched judge and application/provider
+comparisons, prompt promotion/rollback, optional voice/n8n/APM, governance
+inspection and the delivered runbook. The authored interfaces use the documented
+Langfuse website design adaptation. See [interface design](INTERFACE_DESIGN.md).
 
-The unreleased #381 change adds the opt-in private n8n complaint workflow. Its
-Node runtime and n8n 2.42.4 dependencies are pinned separately in the Dockerfile
-and npm lockfile. Local fixture/image checks are documented in `docs/N8N.md`;
-release identity and real-target admission must be recorded for the next candidate.
+The optional n8n runtime and n8n 2.42.4 dependencies are pinned separately in the
+Dockerfile and npm lockfile. See [workflow operation](N8N.md) for its limits and
+qualification requirements. Implemented scope is not a claim of full-spec
+catalogue readiness.
+
+## Retained intermediate history
+
+The original shared-core baseline was v5.0.0 at
+`5f56e75f9a8b5d160ddf54a8fcde380d0d15a205`. Early banking integration used
+`eb3ca1d678bc77a377d815e0bb8e5d895a4d9b22` before the coordinated stable core
+release. These are historical identities, not current install or publish pins.
+
+Package `0.4.0` covered the earlier sessions/history/assets/APM qualification
+stage. Later intermediate candidates added workflow and voice functionality.
+Never reuse an intermediate release's tag or signed image digest for the current
+candidate; record the actual signed release receipt after publication.
 
 ## Qualification status
 
-The immutable source revision is the release commit, emitted into image labels by CI. Record the actual release tag, signed digest, exact target, admission ID and delivered rehearsal evidence when those operations execute. They are pending at foundation authoring time. No full-spec or catalogue-ready status is claimed by this document.
+The immutable source revision is the release commit, emitted into image labels by CI. Record the actual release tag, signed digest, exact target, admission ID and delivered rehearsal evidence when those operations execute. Actual-provider, native-evidence, staging and second-presenter qualification remain pending until their release evidence is recorded. No full-spec or catalogue-ready status is claimed by this document.
