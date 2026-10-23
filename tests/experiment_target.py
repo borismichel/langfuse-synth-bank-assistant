@@ -35,7 +35,7 @@ def experiment_target(*, barrier=None):
             if path.endswith('/health'):
                 return self.reply({'version':'4.68.0'})
             if path.endswith('/projects'):
-                return self.reply({'data':[{'id':'bank-project','name':'bank-demo'}]})
+                return self.reply({'data':[{'id':'bank-project','name':'bank-demo','organization':{'id':'org-fixture','name':'Fixture'},'metadata':{}}]})
             if '/v2/prompts/' in path:
                 name=path.split('/v2/prompts/',1)[1]
                 row = data['versions'].get((name,int(query['version'][0]))) if query.get('version') else data['prompts'].get(name)
@@ -146,7 +146,7 @@ def ingest(data,raw):
         for scope in resource.scope_spans:
             for span in scope.spans:
                 data['exports'].append(span)
-                attrs={a.key:a.value.string_value for a in span.attributes}
+                attrs={a.key:getattr(a.value,a.value.WhichOneof('value')) for a in span.attributes}
                 metadata={k.removeprefix('langfuse.trace.metadata.'):v for k,v in attrs.items() if k.startswith('langfuse.trace.metadata.')}
                 metadata.update({k.removeprefix('langfuse.observation.metadata.'):v for k,v in attrs.items() if k.startswith('langfuse.observation.metadata.')})
                 stamp=datetime.fromtimestamp(span.start_time_unix_nano/1e9,timezone.utc).isoformat()
@@ -154,12 +154,17 @@ def ingest(data,raw):
                     type=attrs.get('langfuse.observation.type','span').upper(),environment=attrs.get('langfuse.environment','production'),
                     startTime=stamp,endTime=stamp,level='DEFAULT',input=attrs.get('langfuse.observation.input'),
                     output=attrs.get('langfuse.observation.output'),metadata=metadata)
+                row.update(parentObservationId=span.parent_span_id.hex() if span.parent_span_id else None,
+                    model=attrs.get('langfuse.observation.model.name'),usageDetails=json.loads(attrs.get('langfuse.observation.usage_details','{}')),promptName=attrs.get('langfuse.observation.prompt.name'),
+                    promptVersion=int(attrs['langfuse.observation.prompt.version']) if attrs.get('langfuse.observation.prompt.version') else None)
                 data['observations'].append(row)
                 if attrs.get('langfuse.experiment.item.root_observation_id')==span.span_id.hex():
                     data['experiments'].append(dict(id=row['id'],traceId=row['traceId'],startTime=stamp,endTime=stamp,level='DEFAULT',environment=row['environment'],
                         experimentId=attrs['langfuse.experiment.id'],experimentName=attrs['langfuse.experiment.name'],
                         experimentItemId=attrs['langfuse.experiment.item.id'],experimentDatasetId=attrs['langfuse.experiment.dataset.id'],
-                        experimentItemVersion=attrs['langfuse.experiment.item.version'],input=row['input'],output=row['output']))
+                        experimentItemVersion=attrs['langfuse.experiment.item.version'],input=row['input'],output=row['output'],
+                        expectedOutput=attrs.get('langfuse.experiment.item.expected_output'),
+                        experimentMetadata=json.loads(attrs.get('langfuse.experiment.metadata','{}'))))
 
 
 def provider_fixture(env,data,monkeypatch):
