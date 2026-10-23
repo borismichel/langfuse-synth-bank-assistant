@@ -37,6 +37,7 @@ def exercise(app):
             context=browser.new_context(permissions=['microphone'])
             page=context.new_page(); errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
             page.goto(f'http://127.0.0.1:{port}{prefix}/')
+            assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth'), 'Navigation overflows the delivered viewport'
             page.locator('[data-tab="voice"]').click()
             page.locator('#voiceRecord').wait_for(state='visible',timeout=5000)
             assert page.locator('#voiceCustomer').input_value()=='Ana Torres · C-1001'
