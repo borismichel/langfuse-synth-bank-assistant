@@ -273,6 +273,11 @@ def publish_experiment(target):
             expectedOutput=json.loads(a['langfuse.experiment.item.expected_output']),
             experimentItemMetadata=json.loads(a['langfuse.experiment.item.metadata']),
             experimentMetadata=json.loads(a['langfuse.experiment.metadata']),scores=[]))
+    # Native experiment item metadata stores list values as JSON strings.
+    for row in rows:
+        metadata=row['experimentItemMetadata']
+        for key in ('score_ids','reviewer_ids'):
+            metadata[key]=json.dumps(metadata[key])
     target['experiment_items']=rows
     target['experiments']=[dict(id=rows[0]['experimentId'],name=rows[0]['experimentName'],startTime=rows[0]['startTime'],
         endTime=rows[-1]['endTime'],itemCount=len(rows),metadata=rows[0]['experimentMetadata'],
@@ -407,8 +412,25 @@ def test_calibration_preserves_native_annotation_and_generation_linkage(tmp_path
             annotation=next(row for row in target['experiment_items'] if row['output']['provenance']=='native_annotation')
             assert annotation['output']['source_observation_id']==source_id
             assert annotation['experimentItemMetadata']['source_observation_id']==source_id
-            assert annotation['experimentItemMetadata']['reviewer_ids']==['native-reviewer-fixture']
-            assert annotation['experimentItemMetadata']['score_ids']==['native-review-fixture']
+            assert json.loads(annotation['experimentItemMetadata']['reviewer_ids'])==['native-reviewer-fixture']
+            assert json.loads(annotation['experimentItemMetadata']['score_ids'])==['native-review-fixture']
             for row,outcome in zip(target['experiment_items'],state['outcomes']):
                 assert row['output']['generation_id']==outcome['generation_id']
                 assert row['output']['generation_trace_id']==outcome['generation_trace_id']
+            # These synthetic fixture authors test wire ownership, not human acceptance.
+            metadata=annotation['experimentItemMetadata']
+            for key,expected in [('score_ids',['native-review-fixture']),('reviewer_ids',['native-reviewer-fixture'])]:
+                original=metadata[key]
+                # Native arrays and their single JSON encoding have identical meaning.
+                metadata[key]=expected
+                assert browser.post('/manage/reviews/readback').json()['calibration']['native_status']=='confirmed'
+                for bad in (None,'null','{}','not JSON','"[]"',[],[1],[True],[''],['foreign'],expected+expected):
+                    metadata[key]=bad
+                    response=browser.post('/manage/reviews/readback')
+                    assert response.status_code==200,response.text
+                    assert response.json()['calibration']['native_status']=='conflict',(key,bad)
+                del metadata[key]
+                assert browser.post('/manage/reviews/readback').json()['calibration']['native_status']=='conflict'
+                metadata[key]=original
+            assert browser.post('/manage/reviews/readback').json()['calibration']['native_status']=='confirmed'
+            assert len(target['model_calls'])==17,'Native readback repeated paid execution'

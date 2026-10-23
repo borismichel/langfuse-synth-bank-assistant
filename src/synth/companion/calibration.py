@@ -163,6 +163,11 @@ class Calibration:
 
     def readback(self,plan):
         from .judges import pages,scalar
+        def identifiers(value):
+            decoded=scalar(value)
+            if not isinstance(decoded,list) or any(not isinstance(item,str) or not item for item in decoded):
+                return None
+            return decoded
         r=self.reviews;r.subjects.begin()
         if not plan.get('outcomes'):raise ValueError('No computed calibration outcomes to verify')
         start=datetime.fromisoformat(plan['planned_at'])
@@ -185,8 +190,8 @@ class Calibration:
             if (native.experiment_id!=plan['experiment_id'] or native.trace_id!=outcome['trace_id']
                     or scalar(native.input)!={**wanted['input'],'calibration_case_id':iid}
                     or scalar(native.expected_output)!=wanted['expected_output'] or scalar(native.output)!=output
-                    or meta.get('provenance')!=wanted['provenance'] or meta.get('score_ids')!=wanted['score_ids']
-                    or meta.get('reviewer_ids')!=wanted['reviewer_ids']):
+                    or meta.get('provenance')!=wanted['provenance'] or identifiers(meta.get('score_ids'))!=wanted['score_ids']
+                    or identifiers(meta.get('reviewer_ids'))!=wanted['reviewer_ids']):
                 plan['native_status']='conflict';break
         else:
             wanted_scores={}
