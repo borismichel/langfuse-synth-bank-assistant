@@ -11,7 +11,9 @@ stylesheet supplied by the `langfuse-brand-assets` skill. `app.css` applies its
 `lf-*` recipes to the customer, voice, presenter, history, judges, reviews,
 application experiments, judge comparison, provider comparison, releases and
 governance interfaces. Native Langfuse, n8n and Jaeger interfaces retain their own
-styles. The chosen theme is light.
+styles. The chosen theme is light. The four SVG corner masks retain the exact reference paths
+and are served as local files so the preview retains its existing same-origin
+Content Security Policy; no security policy is broadened.
 
 ## Font files and licences
 

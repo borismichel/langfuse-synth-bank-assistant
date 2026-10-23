@@ -549,3 +549,15 @@ body.langfuse-theme { background:var(--surface-1); color:var(--text-primary); fo
   .langfuse-theme .customer .seg-pill { font-size:9px; padding:2px 4px; }
   .langfuse-theme .composer textarea { min-height:72px; }
 }
+/* The retained mobile voice rule must not detach the frame's corner masks. */
+@media (max-width:1700px) { .langfuse-theme #voiceResult { position:relative; top:auto; } }
+
+/* Identical reference masks, served locally so the preview keeps img-src self. */
+.langfuse-theme :is(.corner-box-corners,.corner-box-corners-flush,.corner-box-corners--hover,.corner-box-hover-child) {
+  --cx-mask-tl:url("corners/tl.svg"); --cx-mask-bl:url("corners/bl.svg");
+  --cx-mask-br:url("corners/br.svg"); --cx-mask-tr:url("corners/tr.svg");
+}
+.langfuse-theme .corner-box-hover-child::before {
+  -webkit-mask-image:var(--cx-mask-tl),var(--cx-mask-bl),var(--cx-mask-br),var(--cx-mask-tr);
+  mask-image:var(--cx-mask-tl),var(--cx-mask-bl),var(--cx-mask-br),var(--cx-mask-tr);
+}
