@@ -359,3 +359,49 @@ def test_action_identity_conflict_cannot_replace_the_reviewed_plan(tmp_path,monk
             assert conflict.status_code==502
             current=browser.get('/manage/reviews/status').json()['calibration']
             assert current['model']=='first-model' and current['experiment_id']==first['experiment_id']
+
+
+def test_calibration_preserves_native_annotation_and_generation_linkage(tmp_path,monkeypatch):
+    import time
+    from northwind import config
+    from sdk_identifiers import numeric_span_ids
+    numeric_span_ids(monkeypatch)
+    source_id='4111111111111111'  # Public synthetic value, valid as an observation ID.
+    with judge_target() as (env,target):
+        target.update(queues={},queue_items={});install_reviews(target);receipt(tmp_path,env,monkeypatch)
+        install_calibration(target,tmp_path);spending_fixture(env,target,monkeypatch)
+        source=target['observations'][0]
+        source.update(id=source_id,traceId='a'*32)
+        source['metadata']['live_instance_id']=env['PORTAL_LIVE_INSTANCE_ID']
+        with presenter(env,monkeypatch,langfuse_factory=config.langfuse_factory) as browser:
+            assert browser.post('/manage/reviews/prepare',json={'request_id':'prep-numeric','pending':1}).status_code==200
+            stamp=source['startTime']
+            target['scores']=[dict(id='native-review-fixture',projectId='bank-project',name='nw-faithfulness-v1',
+                source='ANNOTATION',dataType='NUMERIC',value=1,configId='faithfulness-config',queueId='queue-1',
+                authorUserId='native-reviewer-fixture',timestamp=stamp,createdAt=stamp,updatedAt=stamp,
+                environment='production',subject={'kind':'observation','id':source_id,'traceId':'a'*32})]
+            planned=browser.post('/manage/reviews/plan',json={'request_id':'numeric-links','model':'fixture-judge','include_reviews':True})
+            assert planned.status_code==200,planned.text
+            plan=planned.json()['calibration']
+            assert plan['annotation_rows']==1 and plan['constructed_rows']==16
+            body={'request_id':'numeric-links','snapshot_hash':plan['snapshot_hash'],'cost_acknowledged':True}
+            assert browser.post('/manage/reviews/start',json=body).status_code==202
+            for _ in range(400):
+                state=browser.get('/manage/reviews/status').json()['calibration']
+                if state['status']!='running':break
+                time.sleep(.02)
+            assert state['status']=='completed',state
+            assert state['completed']==state['model_calls']==len(target['model_calls'])==17
+            assert len(target['permits'])==18
+            publish_experiment(target)
+            native=browser.post('/manage/reviews/readback')
+            assert native.status_code==200,native.text
+            assert native.json()['calibration']['native_status']=='confirmed',native.json()['calibration']['native_status']
+            annotation=next(row for row in target['experiment_items'] if row['output']['provenance']=='native_annotation')
+            assert annotation['output']['source_observation_id']==source_id
+            assert annotation['experimentItemMetadata']['source_observation_id']==source_id
+            assert annotation['experimentItemMetadata']['reviewer_ids']==['native-reviewer-fixture']
+            assert annotation['experimentItemMetadata']['score_ids']==['native-review-fixture']
+            for row,outcome in zip(target['experiment_items'],state['outcomes']):
+                assert row['output']['generation_id']==outcome['generation_id']
+                assert row['output']['generation_trace_id']==outcome['generation_trace_id']

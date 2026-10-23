@@ -186,6 +186,8 @@ class Replay:
             combined=aggregate(labels);row['checks']['conduct']=None if combined.unresolved else combined.score
             row['conduct_status']=combined.status
             self.scores(row)
+            from northwind.masking import APPLICATION_EVIDENCE_SCHEMA
+            self.adapter.langfuse().update_current_span(metadata={'northwind_evidence_schema':APPLICATION_EVIDENCE_SCHEMA})
             return {key:row[key] for key in ('case_id','answer','trace_id','observation_id','checks','usage')}
         except Exception as exc:
             row['error']=str(exc) if isinstance(exc,ValueError) and str(exc) in (

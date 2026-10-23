@@ -44,6 +44,8 @@ def test_protected_experiment_controls_preserve_fixed_cohorts_without_spending(t
 
 
 def test_comparison_replays_fixed_application_cohort_and_requires_exact_native_readback(tmp_path,monkeypatch,request):
+    from sdk_identifiers import numeric_span_ids
+    numeric_span_ids(monkeypatch)
     import time
     from fastapi.testclient import TestClient
     from langfuse_synth_core.companion import CompanionAdapter

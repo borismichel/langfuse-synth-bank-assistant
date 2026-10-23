@@ -155,14 +155,45 @@ def scrub(text: str) -> "tuple[str, set[str]]":
     return text, found
 
 
-# Set only by the conduct task on its SDK-owned experiment root span. Customer
-# input, model text and tool results never supply span attributes or this schema.
+# These markers are set by the named application callsites, never copied from
+# customer/model data. The export hook also checks SDK scope and span context.
 CONDUCT_EVIDENCE_SCHEMA = "northwind-conduct-evidence-v1"
+APPLICATION_EVIDENCE_SCHEMA = "northwind-application-evidence-v1"
+CALIBRATION_EVIDENCE_SCHEMA = "northwind-calibration-evidence-v1"
+COMPLAINT_EVIDENCE_SCHEMA = "northwind-complaint-evidence-v1"
+VOICE_EVIDENCE_SCHEMA = "northwind-voice-evidence-v1"
 _EVIDENCE_ATTRIBUTE = "langfuse.observation.metadata.northwind_evidence_schema"
 _ROOT_ATTRIBUTE = "langfuse.experiment.item.root_observation_id"
+_EXPERIMENT_METADATA = "langfuse.experiment.metadata"
+_OUTPUT_ID_PATHS = {
+    CONDUCT_EVIDENCE_SCHEMA: {
+        ("trace_id",):32, ("observation_id",):16,
+        ("source_trace_id",):32, ("source_observation_id",):16,
+        ("calls", "*", "generation_id"):16, ("calls", "*", "generation_trace_id"):32,
+    },
+    APPLICATION_EVIDENCE_SCHEMA: {("trace_id",):32, ("observation_id",):16},
+    CALIBRATION_EVIDENCE_SCHEMA: {
+        ("source_trace_id",):32, ("source_observation_id",):16,
+        ("generation_id",):16, ("generation_trace_id",):32,
+    },
+    COMPLAINT_EVIDENCE_SCHEMA: {("trace_id",):32, ("observation_id",):16},
+}
+_CALIBRATION_ITEM_PATHS = {("source_trace_id",):32, ("source_observation_id",):16}
 
 
-def _conduct_output(text: str) -> "tuple[str, set[str]]":
+def _owned_schema(span):
+    """Only an app marker on the expected SDK span grants output exemptions."""
+    if span.instrumentation_scope_name != "langfuse-sdk":
+        return None
+    schemas = {json.dumps(schema):schema for schema in (*_OUTPUT_ID_PATHS, VOICE_EVIDENCE_SCHEMA)}
+    schema = schemas.get(span.attributes.get(_EVIDENCE_ATTRIBUTE))
+    if schema in (CONDUCT_EVIDENCE_SCHEMA, APPLICATION_EVIDENCE_SCHEMA, CALIBRATION_EVIDENCE_SCHEMA):
+        return schema if span.attributes.get(_ROOT_ATTRIBUTE) == span.span_id else None
+    names = {COMPLAINT_EVIDENCE_SCHEMA:"n8n-complaint-triage", VOICE_EVIDENCE_SCHEMA:"northwind-voice-call"}
+    return schema if schema in names and span.name == names[schema] else None
+
+
+def _evidence_output(text: str, paths: dict) -> "tuple[str, set[str]]":
     """Mask payload leaves while retaining the owned schema's exact linkage IDs."""
     try:
         output = json.loads(text)
@@ -180,13 +211,8 @@ def _conduct_output(text: str) -> "tuple[str, set[str]]":
 
     def visit(value, path=()):
         if isinstance(value, str):
-            length = None
-            if path in (("trace_id",), ("source_trace_id",)):
-                length = 32
-            elif path in (("observation_id",), ("source_observation_id",)):
-                length = 16
-            elif len(path) == 3 and path[0] == "calls":
-                length = {"generation_id": 16, "generation_trace_id": 32}.get(path[2])
+            lookup = ("calls", "*", path[2]) if len(path) == 3 and path[0] == "calls" else path
+            length = paths.get(lookup)
             if length and re.fullmatch(r"[0-9a-f]{%d}" % length, value):
                 token = prefix + str(len(links))
                 links[token] = value
@@ -227,10 +253,14 @@ def mask_otel_spans(*, params) -> Optional[object]:
             replacements: dict = {}
             hits: "set[str]" = set()
             sdk_span = span.instrumentation_scope_name == "langfuse-sdk"
-            owned_conduct = (
-                sdk_span and span.attributes.get(_EVIDENCE_ATTRIBUTE) == json.dumps(CONDUCT_EVIDENCE_SCHEMA)
-                and span.attributes.get(_ROOT_ATTRIBUTE) == span.span_id
-            )
+            schema = _owned_schema(span)
+            # Calibration owns its experiment metadata. The SDK propagates that
+            # reserved attribute with item metadata across independent batches.
+            experiment_metadata = span.attributes.get(_EXPERIMENT_METADATA, "{}")
+            try:
+                calibration = sdk_span and json.loads(experiment_metadata).get("northwind_evidence_schema") == CALIBRATION_EVIDENCE_SCHEMA
+            except (ValueError, TypeError, AttributeError):
+                calibration = False
             for key, value in span.attributes.items():
                 if isinstance(value, str):
                     # The SDK propagates this reserved attribute to task, wrapper
@@ -238,8 +268,12 @@ def mask_otel_spans(*, params) -> Optional[object]:
                     # Payload keys and other instrumentation never get this exemption.
                     if sdk_span and key == _ROOT_ATTRIBUTE and re.fullmatch(r"[0-9a-f]{16}", value):
                         continue
-                    masked, found = (_conduct_output(value) if owned_conduct and
-                        key == "langfuse.observation.output" else scrub(value))
+                    if (schema == VOICE_EVIDENCE_SCHEMA and key == "langfuse.observation.metadata.assistant_observation_id"
+                            and re.fullmatch(r'"[0-9a-f]{16}"', value)):
+                        continue
+                    paths = (_OUTPUT_ID_PATHS.get(schema) if key == "langfuse.observation.output" else
+                        _CALIBRATION_ITEM_PATHS if calibration and key == "langfuse.experiment.item.metadata" else None)
+                    masked, found = _evidence_output(value, paths) if paths else scrub(value)
                     if found:
                         replacements[key] = masked
                         hits |= found

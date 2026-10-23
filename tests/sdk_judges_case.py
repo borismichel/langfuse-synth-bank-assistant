@@ -49,14 +49,14 @@ def test_presenter_explicitly_activates_five_owned_judges_and_can_pause(tmp_path
 from contextlib import contextmanager
 
 @contextmanager
-def presenter(env,monkeypatch):
+def presenter(env,monkeypatch,*,langfuse_factory=None):
     from fastapi.testclient import TestClient
     from langfuse_synth_core.companion import CompanionAdapter
     from langfuse_synth_core.companion.access import guarded_app
     from synth.config import load_config
     from synth.companion.app import create_app
     for k,v in env.items():monkeypatch.setenv(k,v)
-    adapter=CompanionAdapter(load_config('config/demo.yaml'))
+    adapter=CompanionAdapter(load_config('config/demo.yaml'),langfuse_factory=langfuse_factory)
     with TestClient(guarded_app(create_app(adapter),health_path='/api/health')) as browser:
         browser.headers['x-depot-live-proof']='a'*64
         yield browser

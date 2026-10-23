@@ -24,6 +24,9 @@ from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTrace
 from openai import AsyncOpenAI
 from websockets.asyncio.server import serve
 
+from sdk_identifiers import numeric_span_ids
+numeric_span_ids()
+
 requests = []
 exports = []
 media_records = {}
@@ -276,6 +279,9 @@ with tempfile.TemporaryDirectory() as directory:
             assistant=[s for s in exports if s.name=='northwind-assistant']
             assert len(outer)==len(assistant)==1
             assert outer[0].trace_id==assistant[0].trace_id and assistant[0].parent_span_id==outer[0].span_id
+            assert assistant[0].span_id.hex().isdecimal()
+            subject=json.loads(attrs(outer[0])['langfuse.observation.metadata.assistant_observation_id'])
+            assert subject==result['observation_id']==assistant[0].span_id.hex(), subject
             assert json.loads(attrs(assistant[0])['langfuse.observation.metadata.judge_eligible'])=='true'
             assert json.loads(attrs(outer[0])['langfuse.observation.metadata.judge_eligible'])=='false'
             assert 'APPROVED POLICY AND BANKING TOOL RESULTS' in json.loads(attrs(assistant[0])['langfuse.observation.metadata.context'])
