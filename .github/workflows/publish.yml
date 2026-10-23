@@ -23,7 +23,7 @@ jobs:
     uses: ./.github/workflows/ci.yml
   publish:
     needs: checks
-    uses: borismichel/langfuse-synth-core/.github/workflows/kit-publish.yml@5f56e75f9a8b5d160ddf54a8fcde380d0d15a205
+    uses: borismichel/langfuse-synth-core/.github/workflows/kit-publish.yml@v5.1.0
     permissions:
       contents: read
       packages: write
