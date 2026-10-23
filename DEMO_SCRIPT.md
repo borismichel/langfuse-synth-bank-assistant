@@ -135,9 +135,15 @@ public participants cannot invoke them. Development preview has no judges.
    verdicts and reasoning, and open their native evaluator/answer links. Accepted
    results must be EVAL source on the exact delivered assistant observation,
    with this rule's evaluator ID, version ID and rule ID in native execution
-   metadata. API fixtures, human scores, another observation/version or duplicate
-   ambiguous results do not fill coverage. An `unknown` verdict is a scored
-   uncertainty, not a pass. Aggregate conduct decisions are a subsequent feature.
+   metadata. API fixtures, human scores and another observation/version do not
+   fill coverage. Later native updates supersede earlier results; identical
+   duplicates collapse. Equal-time conflicting labels require review, while any
+   known failure remains conclusive. An `unknown` verdict is scored uncertainty.
+   Inspect the derived headline: all known passes are compliant (1); P3-only
+   minor is minor-issue (0.5); any known fail is violation (0). Missing results
+   remain pending; unknown/invalid require review; both have no numeric headline
+   unless another policy establishes a violation. Fully unscored answers have
+   no numeric headline.
 4. Send the deterministic prompt-injection refusal. Refresh to inspect excluded
    blocked controls. The rule requires this live deployment ID, live environment,
    assistant name/type, supported trace name and completed eligible-answer
@@ -197,3 +203,59 @@ model generations on the same trace, including the managed classification prompt
 The draft does not claim an operational banking action. Two selected-model calls
 are chargeable per completed execution. See [workflow operation](docs/N8N.md) for
 limits, failure handling, retention and stop/reset behaviour.
+
+## Managed-result reconciliation
+
+The protected **Policy judges** page shows the local **Reconciliation** state and
+per-answer headline/coverage. A single owned task starts with the Companion and
+replays the previous 24 hours every 30 seconds. **Reconcile results** performs an
+immediate model-free pass; it does not enable a rule or request another model.
+The current deployment ID, exact assistant subject, presentation `live_run_id`,
+rubric, evaluator/version IDs and rule ID identify each derived record. Participant
+reset starts a new presentation run; earlier live runs from this deployment remain
+eligible for delayed results within that 24-hour window. Seeded historical API
+fixtures, another deployment and guardrail-blocked refusals are excluded. Old
+remote rules can continue after a deployment is stopped; pause those rules in
+Langfuse independently.
+
+Coverage counts answers with at least one managed result, fully unscored answers,
+excluded blocked answers, answers awaiting one or more results, and answers with
+unknown/invalid/ambiguous verdicts or paused evaluators. These populations overlap;
+no average or denominator silently drops unscored answers. Missing results do not
+prove a job failed. Read errors appear separately from policy failures.
+
+For a delivered rehearsal, send a new eligible answer after explicit activation.
+Observe pending/unscored, wait for the native EVAL scores, then watch the headline
+and derived `banking-compliance-status`, `banking-compliance-coverage` and optional
+`banking-compliance` scores appear on the exact assistant. Confirm the native API
+scores carry `origin=northwind-managed-policy-reducer-v1` and the same run/rubric.
+Change an owned policy evaluation in the authorised test target and read it back:
+late results update the same ID/timestamp; unresolved re-evaluation removes only
+the reducer-owned obsolete numeric headline. Human, legacy and historical scores
+remain untouched. This rehearsal requires an actual authorised target; local HTTP
+fixtures do not establish live managed execution.
+
+Each pass has a 180-second deadline, up to five 100-row pages per scan, 25-subject
+managed-score batches and 100-score write batches. Exceeding a bound or encountering
+a nonadvancing cursor produces an error instead of writing from an incomplete
+population. A project/deployment lease excludes another Companion worker in the
+same container; Depot runs one container for this live component. Do not run
+replicas of that same deployment with separate filesystems.
+
+Accepted asynchronous writes remain **pending** until exact native readback.
+**Confirmed** requires the expected ID, timestamp, subject, provenance and value.
+A partial rejection or uncertain write stops automatic mutation. Inspect native
+scores, then use **Retry reconciliation**; unchanged confirmed replay is a no-op.
+The local retry hold survives worker/process restart. Native readback may clear it
+when the complete outcome is proven. Partial native score groups remain unresolved.
+The seed mount remains read-only; container replacement loses the local retry hold.
+After an uncertain write, inspect native outcomes before replacing that container
+and explicitly reconcile unresolved groups; do not infer failure from absence.
+Stable IDs and timestamps are retained across replacement, without creating new
+owned score identities. Beyond the 24-hour catch-up window, inspect older results
+in Langfuse; this worker does not silently expand its replay scope.
+
+Stopping the Companion cancels further local actions and drains its current bounded
+request before SDK shutdown. No local daemon remains. Already submitted API writes
+and remote managed judges can finish later; aggregation waits for the next Companion
+start. Pause the owned paid rule before teardown and inspect queued work separately.
