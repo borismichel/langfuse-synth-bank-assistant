@@ -131,10 +131,30 @@ def test_delivered_provider_comparison_freezes_inputs_and_attributes_both_bindin
             summary=measured['measurements']
             assert summary['candidate']['application']['usage']=={'input':480,'output':320}
             assert abs(summary['candidate']['application']['native_cost_usd']-0.064)<1e-8
+            assert summary['candidate']['application']['requested_model']=='gpt-4.1-mini'
+            assert summary['candidate']['application']['resolved_models']==['gpt-4.1-mini-2025-04-14']
+            assert summary['candidate']['judges']['requested_model']=='fixture-judge'
+            assert summary['candidate']['judges']['resolved_models']==['fixture-judge']
             assert summary['candidate']['judges']['generations']==80
             assert len({r['trace_id'] for arm in measured['arms'].values() for r in arm['rows']})==32
             assert browser.post('/manage/experiments/providers/start',json=body).json()['id']==run['id']
             assert len(target['openai_calls'])==32
+            for mismatch in (('model','gpt-4.1-2025-04-14'),('model','gpt-4.1-mini-2099-01-01'),
+                             ('model','gpt-4.1-mini-2025-04-14-extra'),('model',None),
+                             ('application_provider','anthropic'),('application_role','primary'),
+                             ('application_model','gpt-4.1')):
+                target['readback_identity']=mismatch
+                invalid=browser.post('/manage/experiments/'+run['id']+'/readback',json={}).json()
+                assert invalid['gate']['status']=='incomplete',mismatch
+                account=invalid['measurements']['candidate']['application']
+                assert account['missing']>0 and account['usage'] is None and account['native_cost_usd'] is None,mismatch
+                assert invalid['scope']['bindings']['candidate']['model']=='gpt-4.1-mini'
+            target['readback_identity']=('model','gpt-4.1-mini')
+            exact=browser.post('/manage/experiments/'+run['id']+'/readback',json={}).json()
+            assert exact['gate']['status']=='passed'
+            assert exact['measurements']['candidate']['application']['resolved_models']==['gpt-4.1-mini']
+            target.pop('readback_identity')
+            assert len(target['openai_calls'])==32 and len(target['calls'])==192,'Readback dispatched a model'
             for kind in ('application','judge'):
                 target['missing_generation']=kind
                 partial=browser.post('/manage/experiments/'+run['id']+'/readback',json={}).json()
