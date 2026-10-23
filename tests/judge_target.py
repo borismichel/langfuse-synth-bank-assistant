@@ -45,8 +45,10 @@ def judge_target():
         def do_GET(self):
             u=urlparse(self.path);q=parse_qs(u.query);p=u.path
             data['reads'].append((p,q))
+            extra=data.get('extension',lambda *args:None)('GET',p,q,None)
+            if extra is not None:return self.reply(extra[1],extra[0])
             if data['fail']==p:return self.reply({'message':'Permission denied'},403)
-            if p.endswith('/projects'):return self.reply({'data':[{'id':'bank-project','name':'bank-demo'}]})
+            if p.endswith('/projects'):return self.reply({'data':[{'id':'bank-project','name':'bank-demo','metadata':{},'organization':{'id':'fixture-org','name':'Fixture organization'}}]})
             if p.endswith('/health'):return self.reply({'version':'4.68.0'})
             for part in ('evaluators','evaluation-rules'):
                 if '/'+part+'/' in p:
@@ -72,7 +74,18 @@ def judge_target():
             return self.reply({'data':rows,'meta':{'page':1,'limit':100,'totalItems':total,'totalPages':1,'cursor':cursor}})
         def body(self):return json.loads(self.rfile.read(int(self.headers['Content-Length'])))
         def do_POST(self):
-            p=urlparse(self.path).path;b=self.body();data['writes'].append(('POST',p,b))
+            p=urlparse(self.path).path
+            if p.endswith('/otel/v1/traces'):
+                import gzip
+                from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTraceServiceRequest
+                raw=self.rfile.read(int(self.headers['Content-Length']))
+                if self.headers.get('Content-Encoding')=='gzip':raw=gzip.decompress(raw)
+                batch=ExportTraceServiceRequest.FromString(raw)
+                data.setdefault('exports',[]).extend(span for resource in batch.resource_spans for scope in resource.scope_spans for span in scope.spans)
+                return self.reply({})
+            b=self.body();data['writes'].append(('POST',p,b))
+            extra=data.get('extension',lambda *args:None)('POST',p,{},b)
+            if extra is not None:return self.reply(extra[1],extra[0])
             if p.endswith('/scores'):
                 accepted=b[:1] if data.get('partial_batch') else b
                 for item in accepted:
