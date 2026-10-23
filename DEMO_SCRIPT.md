@@ -326,6 +326,74 @@ Open **Presenter actions** in the assistant footer, then **Review and calibratio
 
 **Recovery:** Cancel calibration to stop new calls, then inspect emitted native evidence. Repeating Start for the same action never pays for it again. Process restart recovers local action receipts and marks unfinished work interrupted; those actions cannot be resumed. Before replacing the whole container, save its experiment links and inspect uncertain outcomes: local receipts are ephemeral while Langfuse records remain. Preparing a new action explicitly permits another paid run. At most 20 calibration actions are retained in one Companion; do not delete existing reviews to work around a limit. Stop owned managed evaluation rules separately before retiring a disposable target. Retain the qualification evidence, then remove this kit's admission projects and their dedicated keys.
 
+## Application comparisons: required stories and controls
+
+Open **Application experiments** with Depot management access. Select **Prepare
+control and regression prompt versions** and record the returned **Control v…**
+and **regression v…**, content hashes and native links. Preparation creates
+unlabelled versions; it does not move production. Use these actual target versions,
+not the retained upstream examples' v1/v3/v5 numbers, URLs or measured results.
+
+For each comparison, select **Cohort**, enter **Baseline prompt version** and
+**Candidate prompt version**, select **Candidate policy**, and enter the exact
+available **Judge model**. Keep the primary application model, judge, rubric and
+criteria matched between arms. Acknowledge application and judge costs, select
+**Start comparison** once, then **Refresh native evidence** after completion.
+Record the action ID, configuration, expected/scored/missing/error/failed counts,
+raw answers and tool receipts, measured usage and both native experiment links.
+The following mappings are required story coverage, not claims of passing results
+or a full Cartesian matrix of every cohort, prompt and policy.
+
+| Story | Exact cohort and candidate policy | Comparison and required evidence |
+| --- | --- | --- |
+| English prompt quality and selling/language regression | **english**; **Current: 60 days, 3 retrieved articles** | Complete 16-item control evidence and the returned regression candidate. Inspect actual language, unsolicited-selling, source, fact and policy checks, not only average correctness. |
+| Spanish prompt quality and language/formal-register regression | **spanish**; **Current: 60 days, 3 retrieved articles** | Complete 10-item control and returned regression evidence, including Spanish outputs, formal-register, source, fact and policy checks. |
+| Red-team refusals | **redteam**; **Current: 60 days, 3 retrieved articles** | Complete 10-item current/control refusal evidence. The source story does not require a separate deliberately failing red-team prompt comparison. |
+| Dispute lookup regression and recovery | **disputes**; **Regression: 30-day transaction lookback**, then **Current: 60 days, 3 retrieved articles** for recovery/control | Use the same exact tested prompt in both arms against the fixed current baseline. Inspect all 10 cases: eight older payments and two recent controls. Accepted transactions and actual confirmation/tool receipts determine task success; an honest lookup failure can pass conduct while failing the banking task. |
+| Retrieval-cost regression and recovery | **english**; **Regression: up to 8 retrieved articles**, then **Current: 60 days, 3 retrieved articles** for control | Use the same exact tested prompt in both arms. Inspect actual retrieval settings, application input/output tokens and quality per item. The live current baseline retrieves up to three articles at minimum score .08; the historical cost fixture uses two. A cost increase or gate failure must be measured, not assumed from the selected policy. |
+| Prompt release and restoration | A complete passed application comparison using **Current: 60 days, 3 retrieved articles** | Use the actual candidate intended for promotion and record distinct previous/new native versions. A control compared with itself does not demonstrate a changed prompt; a regression-policy, judge or provider comparison cannot authorise promotion. Follow **Prompt releases → Promote tested prompt**, validate a fresh answer, then **Restore previous prompt** and validate another fresh answer. |
+
+These mappings retain the EN/ES and dispute stories from the upstream evals-first
+Acts 3–5, its security/refusal cases and its retrieval-cost chapter. Retained
+upstream chapters are provenance; their aggregate hard deterministic thresholds
+and soft judge-average warnings are not the current gate. The delivered gate
+requires exact cohort membership, complete native verification and **every
+required check equal to 1 in both arms**. Both arms need valid measured token
+counts, and candidate application input plus output tokens must be **no more than
+1.25 times baseline per case** (the denominator is floored at one token). Judge
+usage is accounted for separately. Missing evidence is `incomplete`, runner
+errors are `runner_failed`, and a violated check or token bound is `failed`.
+A failed baseline cannot pass; an average does not override a failing case. No
+upstream numerical outcome is promised for the current provider or target.
+
+### Comparison capacity and phase transitions
+
+Record the intended comparison schedule and action identities before spending.
+Each live instance retains at most **eight actions shared by application, judge
+and provider comparisons**. **New comparison** selects a new action identity;
+acknowledge costs and choose **Start comparison** to start another paid run.
+**Cancel pending work** stops further dispatch,
+while an in-flight call may finish and remain billable. Readback retries do not
+rerun models. No fixed number of repeated controls or full Cartesian schedule is
+required; retain the measured evidence for each required story above.
+
+If the planned comparisons exceed eight actions, use an explicitly planned live
+instance replacement with the **same signed image and imported project/history,
+without reimport**. Before stopping the current instance, finish promotion,
+fresh-answer validation and rollback while its passed comparison and promotion
+receipts are still owned. Save exact native links, action/configuration records
+and unresolved outcomes. Select **Pause policy judges** and verify the owned
+remote rule is disabled; stopping local processes does not pause remote rules.
+
+Record the next phase's new live-instance/run identifiers and actual options and
+models. Native evidence remains, but replacing the instance loses local receipts:
+the new instance cannot adopt the previous promotion receipt or silently resume
+paid work. Re-activation and subsequent paid actions require explicit current-phase
+acknowledgement. **New conversation** and **Reset demo state** do not free comparison
+capacity or restore these receipts. A phase transition cannot turn incomplete
+prior evidence into a pass. Do not confuse this live-only replacement with a new
+history import; append-only history must not be imported again into the project.
+
 ## Matched single and split judges
 
 Open **Application experiments → Judge comparison** with Depot management access. This chapter judges the fixed 22 conduct answers; it does not rerun banking actions or change retrieval. Both matched arms receive the same query, approved evidence and answer, with the same primary provider, selected judge model, five criteria and request bounds. The optional legacy rubric is a separately labelled, unmatched arm that omits approved context.
