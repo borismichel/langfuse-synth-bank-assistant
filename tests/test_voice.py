@@ -34,7 +34,7 @@ def run_voice_fixture(extra_env=None):
     try:
         out, err = child.communicate(timeout=60)
         assert child.returncode == 0, out + err
-        assert ('bounded_shutdown=true' if extra_env else '"duplicate_replay": true') in out
+        assert ('pending_media_capacity=true' if (extra_env or {}).get('VOICE_CAPACITY') else 'bounded_shutdown=true' if extra_env else '"duplicate_replay": true') in out
     finally:
         try: os.killpg(child.pid,signal.SIGKILL)
         except ProcessLookupError: pass
@@ -60,3 +60,7 @@ def test_voice_uses_owned_conversation_and_independent_speech_roles():
 
 def test_voice_shutdown_does_not_wait_for_remote_media():
     run_voice_fixture({"VOICE_SHUTDOWN":"1"})
+
+
+def test_pending_media_keeps_capacity_reserved_across_new_conversations():
+    run_voice_fixture({'VOICE_CAPACITY':'1'})

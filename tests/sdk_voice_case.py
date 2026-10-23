@@ -32,6 +32,7 @@ deny_provider=None
 media_healthy = Event()
 media_release=Event()
 class ShutdownProbe(Exception): pass
+class CapacityProbe(Exception): pass
 shutdown_begin=None
 speech_waiting=Event()
 speech_release=Event(); speech_release.set()
@@ -88,7 +89,7 @@ class API(BaseHTTPRequestHandler):
                     'subject':{'kind':'observation','id':score['observationId'],'traceId':score['traceId']}}
             return self.reply({'message':'Accepted'},202)
         if self.path.endswith('/media'):
-            if os.environ.get('VOICE_SHUTDOWN') == '1': media_release.wait(15)
+            if os.environ.get('VOICE_SHUTDOWN') == '1' or os.environ.get('VOICE_CAPACITY') == '1': media_release.wait(30)
             if not media_healthy.is_set(): return self.reply({'message':'Fixture media unavailable'},503)
             record=json.loads(body);ident=record['sha256Hash'].replace('+','-').replace('/','_')[:22]
             media_records.setdefault(ident,record)
@@ -203,6 +204,34 @@ with tempfile.TemporaryDirectory() as directory:
             wav=io.BytesIO()
             with wave.open(wav,'wb') as out:
                 out.setnchannels(1);out.setsampwidth(2);out.setframerate(24000);out.writeframes(b'\0\0'*2400)
+            if os.environ.get('VOICE_CAPACITY') == '1':
+                large=io.BytesIO()
+                with wave.open(large,'wb') as out:
+                    out.setnchannels(1);out.setsampwidth(2);out.setframerate(24000);out.writeframes(b'\0\0'*(9*1024*1024//2))
+                for number in range(6):
+                    own=browser.post('/api/session').json()['session_id']
+                    before=requests.count('transcription')
+                    response=browser.post('/api/voice/process',data={'session_id':own,'request_id':f'pending-media-{number}','lang':'en'},files={'file':('large.wav',large.getvalue(),'audio/wav')})
+                    if number==5:
+                        assert response.status_code==429, 'Conversation replacement bypassed pending media storage limit'
+                        assert requests.count('transcription')==before
+                        break
+                    assert response.status_code==202,response.text
+                    deadline=time.monotonic()+10
+                    while time.monotonic()<deadline:
+                        result=browser.get(response.json()['status_url']).json()
+                        if result['status']!='running': break
+                        time.sleep(.02)
+                    assert result['status']=='completed',result
+                media_healthy.set();media_release.set()
+                deadline=time.monotonic()+10
+                while time.monotonic()<deadline:
+                    response=browser.post('/api/voice/process',data={'session_id':own,'request_id':'after-media-drain','lang':'en'},files={'file':('large.wav',large.getvalue(),'audio/wav')})
+                    if response.status_code==202: break
+                    assert response.status_code==429,response.text
+                    time.sleep(.05)
+                assert response.status_code==202,response.text
+                raise CapacityProbe()
             fields={'session_id':session,'request_id':'voice-one','lang':'en'}
             response=browser.post('/api/voice/process',data=fields,files={'file':('fixture.wav',wav.getvalue(),'audio/wav')})
             assert response.status_code == 202, response.text
@@ -313,6 +342,8 @@ with tempfile.TemporaryDirectory() as directory:
 
 
             print(json.dumps({'voice':'completed','separate_roles':True,'same_conversation':True,'duplicate_replay':True,'media_verification':'pending_fixture_outage'}))
+    except CapacityProbe:
+        print('pending_media_capacity=true')
     except ShutdownProbe:
         assert time.monotonic()-shutdown_begin<6, 'Shutdown waited for remote media delivery'
         print('bounded_shutdown=true')

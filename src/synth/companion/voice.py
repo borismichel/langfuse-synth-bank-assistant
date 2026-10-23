@@ -112,6 +112,9 @@ class VoiceService:
         self.flush_task = None
         self.receipts = {}
         self.reservations = {}
+        self.retired = set()
+        self.release_task = None
+        self.closing = False
         self.active = set()
         self.error = None
         if enabled:
@@ -141,20 +144,39 @@ class VoiceService:
     def reserve(self, session, input_size):
         # Reserve the maximum reply before STT; retain the charge until reset so
         # pending SDK media deliveries cannot cause unlimited accepted uploads.
+        self.release_cleared()
         size=input_size+MAX_AUDIO+44
         if len(self.active)>=2:
             raise ValueError('Two voice requests are running; retry when one finishes')
         if len(self.reservations)>=128 or sum(r[1] for r in self.reservations.values())+size>MAX_STORED:
-            raise ValueError('Voice storage capacity reached; reset demo state')
+            raise ValueError('Voice storage capacity reached; reset demo state and wait for pending media delivery')
         token=secrets.token_hex(16)
         self.reservations[token]=(session,size)
         self.active.add(token)
         return token
 
+    def release_cleared(self):
+        # Reset removes local ownership, but queued SDK jobs still retain bytes.
+        # A public flush drains the captured batch before its budget is released.
+        if self.closing or not self.retired or self.release_task is not None:
+            return
+        from northwind import config
+        batch=set(self.retired)
+        self.release_task=start_delivery(config.flush)
+        def drained(future):
+            self.release_task=None
+            if self.closing or not future.result(): return
+            for token in batch:
+                self.reservations.pop(token,None)
+                self.retired.discard(token)
+            self.release_cleared()
+        self.release_task.add_done_callback(drained)
+
     def clear_session(self, session):
         for token in [key for key,r in self.reservations.items() if r[0]==session]:
-            self.reservations.pop(token)
+            self.retired.add(token)
             self.active.discard(token)
+        self.release_cleared()
         for ident in [i for i,r in self.receipts.items() if r['session_id']==session]:
             receipt=self.receipts.pop(ident)
             if receipt.get('task'): receipt['task'].cancel()
@@ -162,12 +184,14 @@ class VoiceService:
 
     def store(self, session, data, mime):
         if sum(len(m['data']) for m in self.media.values())+len(data)>MAX_STORED:
-            raise ValueError('Voice storage capacity reached; reset demo state')
+            raise ValueError('Voice storage capacity reached; reset demo state and wait for pending media delivery')
         ident = secrets.token_urlsafe(24)
         self.media[ident] = {'session_id':session,'data':data,'mime':mime}
         return paths.local('/api/voice/media/'+ident)
 
     async def close(self):
+        self.closing=True
+        self.retired.clear()
         self.media.clear()
         self.reservations.clear()
         self.active.clear()
