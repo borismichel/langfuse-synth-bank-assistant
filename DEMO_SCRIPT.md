@@ -1,6 +1,50 @@
 # Northwind Bank Assistant — Presenter Runbook
 
-Synthetic bilingual banking history for a banking operations audience. All customers, answers, tool receipts, scores, token counts and costs are frozen demonstration fixtures. They are not actual customer data, model spend, independent human review or managed judge results. The separate Companion produces genuine live evidence using the provider selected in Depot.
+Synthetic bilingual banking history for a banking operations audience. The imported historical customers, answers, tool receipts, scores, token counts and costs are frozen demonstration fixtures. They are not actual customer data, model spend, independent human review or managed judge results. The separate Companion produces genuine live evidence using the provider selected in Depot.
+
+## Evals-first presenter route
+
+Open this deployment in Depot and select **Northwind Bank**. The normal route uses the delivered assistant and Langfuse; it requires no local terminal. Use your own authorised Langfuse account for native views and human annotation. Deployment completion, a healthy app and a passed single-cohort experiment are different claims. The target-specific sections at the end identify this deployment's history, exact cases, datasets, prompt versions and verification time.
+
+Before presenting, confirm the deployment has passed verification, the selected chat model is available and the required options are enabled. Prepare managed policy judges deliberately; their remote calls have separate costs and can continue after the app stops. Choose an exact available judge model for paid comparisons. Never substitute an older run when the current evidence is missing.
+
+| Step | Delivered screen and action | Expected observation | Recovery or decision |
+| --- | --- | --- | --- |
+| 1. Inspect a symptom | **Historical evidence** → the exact `dispute-window-en-failure` and recovery case links. Compare the lookup tool input, receipt and delivered answer. Then inspect `cost-failure` against its baseline. | A 30-day query misses the older payment; the 60-day recovery finds it. Larger retrieval preserves the answer but increases constructed token usage. Historical labels and costs are synthetic fixtures. | Use the full-run time-window link if the default native date filter hides history. A missing exact case stops this beat. |
+| 2. Reproduce a conversation | **Customer assistant** → Ana Torres → “International wire fees?” → “And what is the cutoff?”; start a new conversation and repeat in Spanish. Ask to dispute the UNKNOWN MERCHANT LAGOS charge, inspect the proposal, then explicitly confirm it. | Separate turns share one session. Retrieval cites authoritative policy. The proposal has no completed mutation; confirmation has the actual receipt. | A pending/failed answer is not success. Use the same request's retry control after a transport failure. **New conversation** keeps banking changes; **Reset demo state** restores the selected customer's state. |
+| 3. Inspect policy and human evidence | **Policy judges** → inspect/prepare the five policy rules; explicitly activate only the intended rules. Produce a fresh eligible answer and open its exact native observation. **Presenter actions** → **Review and calibration** → prepare the native review queue. | Actual managed EVAL P1–P5 scores belong to the delivered assistant answer. Missing/unknown policy results remain visible. A human completes an annotation under their own native identity. | Wait for the exact readback; a queued evaluator is not a verdict. Constructed historical labels or automated UI clicks cannot stand in for independent human annotation. |
+| 4. Test a change | **Application experiments** → prepare control/regression versions → choose a fixed cohort and exact prompt/judge versions → acknowledge cost → start once → **Refresh native evidence**. | The passing control and intended regression are measured on identical inputs and criteria. Expected/scored/missing/error counts and actual generation usage are inspectable. | A failed baseline, absent usage or incomplete native evidence blocks the gate. Readback retries do not rerun models; a new comparison does. Rehearse each required cohort separately. |
+| 5. Release and restore | **Prompt releases** → select a passed current-policy application comparison → **Promote tested prompt**. Send a fresh conversation and inspect its actual prompt version and policy outcomes. Then **Restore previous prompt** and inspect another fresh answer. | Promotion records the exact tested candidate and previous version. Both transitions take effect without restarting the app and are proved by new traces. | Changed evidence or production blocks the action. An unconfirmed mutation requires native prompt-history inspection; do not blindly repeat it. A denied update stays denied. |
+
+The detailed chapters below explain the same actions, limits and evidence. Use **Application experiments** → **Judge comparison** for single-versus-split judge measurement and its **Provider comparison** link for explicitly selected models on separate providers. Neither comparison authorises prompt promotion. Optional voice, complaint workflow and APM are part of the full-kit qualification and have their own chapters. Native governance claims remain conditional on actual target permissions and evidence.
+
+## Rehearsal record
+
+Record the release digest, target/project, deployment ID, selected models, enabled options and UTC time before rehearsal. For each step retain the actual native trace, experiment or prompt version link; record the measured result, not the expected narrative. A second presenter follows this document and records their own outcomes and gaps. A failed or skipped required beat leaves full qualification pending.
+
+Capture the delivered app, native evidence and option screens without secrets or unrelated project data. Catalogue screenshots must be bundled immutable image assets, with a caption identifying the target, candidate and whether evidence is fixture or live. Local screenshots and a prior candidate's run do not qualify the current release. Target-specific screenshots and the second-presenter record are release evidence; they must be added before final catalogue publication.
+
+## Screen references — local fixtures
+
+These captures show the delivered browser controls against model-free local API fixtures on 23 October 2026. They are UI references, not real-provider results, target governance proof or qualification of the final release. The immutable image links keep these captions tied to the original captures. Use current-deployment native links for live evidence.
+
+### Spanish voice interface after an explicitly confirmed synthetic card block
+
+![Local fixture: Spanish voice interface after an explicitly confirmed synthetic card block](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/4e718b3bf18bb77752b8e43de6122c1695552796/docs/screenshots/spanish-voice-fixture.png)
+
+[Open full-size fixture capture](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/4e718b3bf18bb77752b8e43de6122c1695552796/docs/screenshots/spanish-voice-fixture.png)
+
+### Provider comparison with separately displayed application and judge accounting
+
+![Local fixture: Provider comparison with separately displayed application and judge accounting](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/4e718b3bf18bb77752b8e43de6122c1695552796/docs/screenshots/provider-comparison-fixture.jpg)
+
+[Open full-size fixture capture](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/4e718b3bf18bb77752b8e43de6122c1695552796/docs/screenshots/provider-comparison-fixture.jpg)
+
+### Prompt release controls after promotion and recorded-version rollback
+
+![Local fixture: Prompt release controls after promotion and recorded-version rollback](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/4e718b3bf18bb77752b8e43de6122c1695552796/docs/screenshots/prompt-release-fixture.jpg)
+
+[Open full-size fixture capture](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/4e718b3bf18bb77752b8e43de6122c1695552796/docs/screenshots/prompt-release-fixture.jpg)
 
 ## Historical walkthrough
 
@@ -50,7 +94,7 @@ Conduct denominators cover the 58 mandatory historical turns only. Blocked turns
 
 Available: model-free history, target validation, volume confirmation, split generation/import, exact-run verification, bilingual live retrieval and guardrails, customer-bound confirmed banking actions, private participant state and reset, verified answer feedback, managed production prompt association, masked tracing, explicitly activated P1–P5 managed judges, annotation queues, measured calibration, bounded application experiments, optional bilingual voice, optional private complaint workflow, and this target-specific runbook.
 
-Pending under Depot spec #365: prompt promotion, governance and full operational qualification. This candidate is not the full-spec catalogue release.
+Prompt promotion and provider comparison are implemented and described in their chapters. Full operational qualification and conditional governance remain tracked by Depot spec #365. Actual-provider, native-evidence and lifecycle rehearsal results determine final catalogue readiness; local contract checks alone do not qualify this candidate.
 
 ## Deployment and recovery
 
@@ -282,6 +326,18 @@ Open **Presenter actions** in the assistant footer, then **Review and calibratio
 
 **Recovery:** Cancel calibration to stop new calls, then inspect emitted native evidence. Repeating Start for the same action never pays for it again. Process restart recovers local action receipts and marks unfinished work interrupted; those actions cannot be resumed. Before replacing the whole container, save its experiment links and inspect uncertain outcomes: local receipts are ephemeral while Langfuse records remain. Preparing a new action explicitly permits another paid run. At most 20 calibration actions are retained in one Companion; do not delete existing reviews to work around a limit. Stop owned managed evaluation rules separately before retiring a disposable target. Retain the qualification evidence, then remove this kit's admission projects and their dedicated keys.
 
+## Matched single and split judges
+
+Open **Application experiments → Judge comparison** with Depot management access. This chapter judges the fixed 22 conduct answers; it does not rerun banking actions or change retrieval. Both matched arms receive the same query, approved evidence and answer, with the same primary provider, selected judge model, five criteria and request bounds. The optional legacy rubric is a separately labelled, unmatched arm that omits approved context.
+
+1. Inspect the provider and enter an exact **Judge model** available on that provider. Leave **Include legacy rubric** off for the matched comparison, or enable it to inspect the earlier rubric separately. A matched run permits at most 132 calls (22 single plus 110 policy calls); the legacy arm adds 22 calls. All requests are sequential, limited to 500 output tokens, with a 30-second request timeout, no retries and a 10-minute run deadline. The deployment retains at most eight experiment actions shared with application/provider comparisons.
+2. Acknowledge the displayed model and cost scope, then **Start judge comparison** once. Each dispatch makes a fresh Depot spending check. This is an hourly-estimate check, not a billing reservation. Watch calls started and per-arm completion. Cancel stops new calls; an in-flight request may finish and incur cost. A cap denial, transport failure or deadline preserves partial evidence and stops further paid work. No fixture replaces a failed live output.
+3. Compare measured results. There are ten known violation references, ten known non-violation references (including one P3 minor case), and two deliberately unresolved references. Agreement uses resolved outputs with known references; unknown/unknown is not scored as agreement. Missed violations include only resolved nonzero outputs on a known violation, while unresolved violation cases are shown separately. False alarms include resolved zero outputs on known non-violations. Pairwise matched agreement includes only cases resolved by both approaches. No per-policy labels are invented for the single judge.
+4. Expand a case to inspect its frozen evidence, constructed reference, actual score or policy values, coverage, raw judge result, source trace, result trace and exact rubric. A known split-policy failure remains a violation even if another policy is unresolved; coverage still shows the missing evidence. Invalid enums and arbitrary numeric values remain invalid. A valid single `null` is unresolved. These are measured agreements with constructed references, not independent human/SME validation or proof that split judging is more accurate.
+5. Compare actual input/output tokens and model-request latency. If any response omits valid token counts, the total is **Unknown** and only reported counts are shown. Partial runs do not imply zero cost for unfinished or uncertain requests. No dollar estimate is invented. The same recorded model policy applies to both matched arms.
+6. Choose **Verify native evidence** after ingestion. Open each arm's native experiment and its individual traces. Verification requires the exact dataset snapshot, item membership, frozen inputs/reference labels, source relationships, model/rubric generations, outputs and API measurement scores. A mismatch remains incomplete. “Verified” means native evidence is complete; it is not a quality gate and cannot approve application promotion.
+
+**Recovery:** Repeating the same action recovers its existing result without new calls. Changing model or arm settings requires a new action identity. Interrupted actions cannot resume automatically. Receipts live in private runtime storage outside the read-only imported spool and survive a process restart within the same container; replacing the container loses them. Before replacement or another paid action, inspect uncertain native outcomes and retain experiment links. Managed evaluation rules have a separate lifecycle. After qualification, stop owned writers/rules and delete every admission project and dedicated key created for this kit.
 
 ## Fixed provider comparison
 

@@ -58,6 +58,13 @@ def test_fixed_cohorts_keep_expected_outputs_and_exact_current_source_links(tmp_
         assert 'Prepared evaluation assets' in runbook and 'Verified history view' in runbook
         assert 'dataset-' in runbook and '/traces/' in runbook
         assert receipt['history_run_id'] in runbook
+        # The downloaded primary artifact carries the delivered option instructions;
+        # it must not depend on browsing this checkout's relative documentation.
+        assert '64 MiB budget' in runbook
+        assert 'Jaeger' in runbook and 'n8n' in runbook
+        assert 'Coding-agent workshop' in runbook
+        assert '## Governance qualification' in runbook
+        assert 'Saved dataset items and audit logs' in runbook
 
 
 def test_conflicting_human_item_is_preserved_and_missing_current_asset_fails_verify(tmp_path):

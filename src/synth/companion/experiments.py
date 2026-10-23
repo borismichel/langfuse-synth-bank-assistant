@@ -180,4 +180,6 @@ def mount_experiments(app, adapter, banking, preview=False):
     async def start(body: ExperimentRequest): return await controls.start(body)
     @app.get('/manage/experiments/status')
     async def status(): return controls.status()
+    from .conduct_comparison import mount_conduct
+    mount_conduct(app,controls)
     return controls
