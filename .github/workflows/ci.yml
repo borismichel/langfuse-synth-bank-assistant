@@ -21,10 +21,10 @@ jobs:
       - name: Install locked runtime and authoring dependencies
         run: uv sync --frozen --extra dev
       - name: Offline package checks
-        # Hosted diagnostic 39940386326 passed successive SDK scenarios through
-        # 294 seconds, then the old total-stage limit interrupted remaining tests.
-        # Keep each fixture's own deadline; allow ten minutes for the full suite.
-        run: .venv/bin/synth-authoring check . --python .venv/bin/python --timeout 600 --json
+        # Release 39974766580 needed 574 seconds for the prior 92-test suite;
+        # the expanded suite exceeded 600 seconds in hosted run 40024654105.
+        # Allow fifteen minutes total; individual fixture and live deadlines stay unchanged.
+        run: .venv/bin/synth-authoring check . --python .venv/bin/python --timeout 900 --json
       - name: Install browser for voice rehearsal
         run: .venv/bin/python -m playwright install --with-deps chromium
       - name: Verify review controls handle proxy errors
