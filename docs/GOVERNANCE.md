@@ -20,7 +20,7 @@ attestations are accepted or persisted.
 A native settings link is an inspection location, not availability or permission
 proof. Check time applies only to displayed readback. New targets, deployments,
 versions, accounts or permissions require fresh qualification. Never reuse old
- disposable-project observations.
+disposable-project observations.
 
 ## Retention
 

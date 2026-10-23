@@ -121,6 +121,7 @@ def create_app(adapter, *, preview=False):
                 task.cancel()
             if tasks:
                 await asyncio.gather(*tasks, return_exceptions=True)
+            await release_controls.stop()
             await experiment_controls.stop()
             await review_controls.stop()
             await judge_controls.stop()
@@ -148,6 +149,10 @@ def create_app(adapter, *, preview=False):
     mount_workflow(app, workflow)
     from .experiments import mount_experiments
     experiment_controls = mount_experiments(app, adapter, banking, preview=preview)
+    from .provider_comparison import mount_provider_comparison
+    mount_provider_comparison(app, experiment_controls)
+    from .releases import mount_releases
+    release_controls = mount_releases(app, experiment_controls)
     from .review_routes import mount_reviews
     review_controls = mount_reviews(app, adapter, banking, preview=preview)
     from .governance import mount_governance
@@ -180,6 +185,7 @@ def create_app(adapter, *, preview=False):
         content = content.replace('<nav class="tabs" role="tablist">', '<nav class="tabs" role="tablist"><a class="history-link" style="padding:12px 16px;color:inherit" href="' + escape(prefix) + '/manage/governance">Governance</a>')
         if not preview:
             content = content.replace('<nav class="tabs" role="tablist">', '<nav class="tabs" role="tablist"><a class="history-link" style="padding:12px 16px;color:inherit" href="' + escape(prefix) + '/manage/experiments">Application experiments</a>')
+            content = content.replace('<nav class="tabs" role="tablist">', '<nav class="tabs" role="tablist"><a class="history-link" style="padding:12px 16px;color:inherit" href="' + escape(prefix) + '/manage/releases">Prompt releases</a>')
             content = content.replace('<nav class="tabs" role="tablist">', '<nav class="tabs" role="tablist"><a class="history-link" style="padding:12px 16px;color:inherit" href="' + escape(prefix) + '/manage/judges">Policy judges</a>')
         if not preview:
             content = content.replace('</main>', '<footer style="padding:16px;color:#64748b"><details><summary>Presenter actions</summary><a href="' + escape(prefix) + '/manage/reviews">Review and calibration</a></details></footer></main>')
@@ -609,6 +615,6 @@ def main(argv=None):
     adapter = CompanionAdapter(load_config(invocation.config), requires_secrets=REQUIRES_SECRETS,
         health_path=HEALTH_PATH, llm_model_default=config.AGENT_MODEL,
         langfuse_factory=config.langfuse_factory, native_llm_factory=config.native_llm_factory,
-        role_factories={'speech_to_text':speech_factory,'text_to_speech':speech_factory})
+        role_factories={'comparison':config.native_llm_factory,'speech_to_text':speech_factory,'text_to_speech':speech_factory})
     adapter.run(create_app, host=invocation.host, port=invocation.port)
     return 0

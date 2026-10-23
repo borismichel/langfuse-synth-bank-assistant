@@ -19,7 +19,7 @@ COPY pyproject.toml uv.lock .python-version ./
 COPY src ./src
 COPY config ./config
 COPY usecase.yaml DEMO_SCRIPT.md LICENSE ./
-COPY docs/DEPOT_KIT.md docs/DEPOT_PROVENANCE.md docs/APM.md docs/N8N.md docs/VOICE.md docs/GOVERNANCE.md docs/JAEGER_LICENSE docs/JAEGER_NOTICE ./docs/
+COPY docs/DEPOT_KIT.md docs/DEPOT_PROVENANCE.md docs/APM.md docs/N8N.md docs/VOICE.md docs/GOVERNANCE.md docs/PROMPT_RELEASES.md docs/JAEGER_LICENSE docs/JAEGER_NOTICE ./docs/
 # Only the banking subtree is retained, including the preserved Companion assets.
 COPY demos/bank-assistant ./demos/bank-assistant
 RUN uv sync --frozen --no-dev --no-editable \
