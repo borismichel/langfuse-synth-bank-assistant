@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prompt releases · Northwind Bank</title>
+<style>
+body{font:16px/1.5 system-ui,sans-serif;background:#f5f6f7;color:#18202b;margin:0}main{max-width:1100px;margin:auto;padding:28px}a{color:#174a86}h1,h2{line-height:1.2}section{background:white;border:1px solid #d9dee5;border-radius:8px;padding:20px;margin:20px 0}button,select{font:inherit;padding:9px 12px;border:1px solid #9aa7b8;border-radius:5px;background:white;color:inherit;max-width:100%}button{cursor:pointer}button:disabled{cursor:default;opacity:.5}label{display:block;margin:12px 0 6px}table{border-collapse:collapse;width:100%;font-size:14px}th,td{text-align:left;vertical-align:top;border-bottom:1px solid #e2e6ec;padding:10px}th{white-space:nowrap}.scroll{overflow:auto}.status{white-space:pre-wrap;overflow-wrap:anywhere}p{max-width:85ch}#message{min-height:1.5em}small{display:block;color:#526075}nav{display:flex;gap:20px;flex-wrap:wrap}
+</style></head>
+<body><main><nav><a href="__PREFIX__/">Northwind Bank</a><a href="__PREFIX__/manage/experiments">Application experiments</a></nav>
+<h1>Prompt releases</h1>
+<p>Promote the exact candidate from a completed, passed application comparison. Native results, prompt versions, cohort and model policy are checked again before changing production.</p>
+<p id="current">Loading production version…</p><button id="refresh">Refresh status</button>
+<p id="message" role="status" aria-live="polite"></p>
+<section><h2>Promotion</h2><label for="comparison">Passed comparison</label><select id="comparison"></select>
+<p id="selection"></p><button id="promote">Promote tested prompt</button>
+<p>Each decision covers only the recorded cohort. Coordinate production-label changes with other presenters; concurrent external edits can affect the result.</p></section>
+<section><h2>Rollback</h2><label for="release">Recorded promotion</label><select id="release"></select>
+<p>Rollback restores that promotion’s recorded previous version. It refuses if production has since changed.</p><button id="rollback">Restore previous prompt</button></section>
+<section><h2>Recorded actions</h2><div class="scroll"><table><thead><tr><th>Time</th><th>Action</th><th>Versions</th><th>Outcome</th><th>Evidence</th></tr></thead><tbody id="records"></tbody></table></div>
+<p>Unconfirmed means the target may have applied a change. Inspect native prompt history before another action; refreshing status does not repeat a label update.</p></section>
+<section><h2>Validation</h2><p>After promotion or rollback, open a new banking conversation. Inspect the answer’s Langfuse trace for the actual prompt version and policy results. A label update alone does not prove that a response used it.</p>
+<p>Depot protects these presenter controls. Langfuse project API keys are different from user roles and may change protected labels. Native role enforcement needs a separately qualified restricted user.</p></section>
+</main><script>
+const prefix=__PREFIX_JSON__;
+const el=id=>document.getElementById(id);
+let data={records:[],comparisons:[]},busy=false;
+function text(tag,value){const n=document.createElement(tag);n.textContent=value;return n}
+function link(label,url){const n=text('a',label);n.href=url;n.target='_blank';n.rel='noopener';return n}
+function eligible(){return data.comparisons.filter(r=>r.eligible)}
+function selection(){const r=eligible().find(r=>r.id===el('comparison').value);el('selection').textContent=r?`${r.cohort}: production v${r.production_at_start.version} → candidate v${r.candidate.version}. ${r.gate.scored}/${r.gate.expected} cases scored; ${r.gate.missing} missing; ${r.gate.errors} errors.`:'No passed comparison matches current production. Complete an application comparison and read back its native results.';el('promote').disabled=busy||!r;el('rollback').disabled=busy||!el('release').value;el('refresh').disabled=busy}
+function options(id,rows,label){const node=el(id),old=node.value;node.replaceChildren();if(!rows.length){const o=text('option','None available');o.value='';node.append(o)}for(const r of rows){const o=text('option',label(r));o.value=r.id;node.append(o)}if(rows.some(r=>r.id===old))node.value=old}
+function render(){
+ options('comparison',eligible(),r=>`${r.cohort} · v${r.production_at_start.version} → v${r.candidate.version} · ${r.id.slice(0,8)}`);
+ options('release',data.records.filter(r=>r.rollback_eligible),r=>`v${r.old.version} → v${r.new.version} · ${r.created_at}`);
+ el('current').replaceChildren(text('span',data.production?.version?`Production: v${data.production.version}. `:'Production readback unavailable. '));if(data.prompt_url)el('current').append(link('Native prompt history',data.prompt_url));
+ el('records').replaceChildren();for(const r of [...data.records].reverse()){const row=document.createElement('tr');row.append(text('td',r.created_at),text('td',r.kind==='rollback'?'Rollback':'Promotion'),text('td',`v${r.old.version} → v${r.new.version}`));const outcome=text('td',r.status.replaceAll('_',' '));if(r.detail)outcome.append(text('small',r.detail));row.append(outcome);const evidence=document.createElement('td');for(const [arm,url]of Object.entries(r.evidence)){evidence.append(link(`${arm} experiment`,url),document.createElement('br'))}row.append(evidence);el('records').append(row)}selection();
+}
+async function call(path,body){const response=await fetch(prefix+'/manage/releases/'+path,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});const value=await response.json();if(!response.ok)throw Error(typeof value.detail==='string'?value.detail:'Release request failed');return value}
+async function refresh(){data=await call('status');render()}
+async function action(kind){busy=true;selection();el('message').textContent='Checking native evidence and prompt labels…';try{const body={request_id:crypto.randomUUID()};body[kind==='promote'?'comparison_id':'release_id']=el(kind==='promote'?'comparison':'release').value;const r=await call(kind,body);el('message').textContent=`Recorded outcome: ${r.status.replaceAll('_',' ')}. v${r.old.version} → v${r.new.version}.`}catch(error){el('message').textContent=error.message}finally{try{await refresh()}catch(error){el('message').textContent+=' Status refresh failed.'}busy=false;selection()}}
+el('comparison').addEventListener('change',selection);el('release').addEventListener('change',selection);el('promote').onclick=()=>action('promote');el('rollback').onclick=()=>action('rollback');el('refresh').onclick=()=>refresh().catch(error=>el('message').textContent=error.message);refresh().catch(error=>el('message').textContent=error.message);
+</script></body></html>

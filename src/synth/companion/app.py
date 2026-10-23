@@ -121,6 +121,7 @@ def create_app(adapter, *, preview=False):
                 task.cancel()
             if tasks:
                 await asyncio.gather(*tasks, return_exceptions=True)
+            await release_controls.stop()
             await experiment_controls.stop()
             await review_controls.stop()
             await judge_controls.stop()
@@ -150,6 +151,8 @@ def create_app(adapter, *, preview=False):
     experiment_controls = mount_experiments(app, adapter, banking, preview=preview)
     from .provider_comparison import mount_provider_comparison
     mount_provider_comparison(app, experiment_controls)
+    from .releases import mount_releases
+    release_controls = mount_releases(app, experiment_controls)
     from .review_routes import mount_reviews
     review_controls = mount_reviews(app, adapter, banking, preview=preview)
 
@@ -179,6 +182,7 @@ def create_app(adapter, *, preview=False):
         content = content.replace('<nav class="tabs" role="tablist">', '<nav class="tabs" role="tablist"><a class="history-link" style="padding:12px 16px;color:inherit" href="' + escape(prefix) + '/history">Historical evidence</a>')
         if not preview:
             content = content.replace('<nav class="tabs" role="tablist">', '<nav class="tabs" role="tablist"><a class="history-link" style="padding:12px 16px;color:inherit" href="' + escape(prefix) + '/manage/experiments">Application experiments</a>')
+            content = content.replace('<nav class="tabs" role="tablist">', '<nav class="tabs" role="tablist"><a class="history-link" style="padding:12px 16px;color:inherit" href="' + escape(prefix) + '/manage/releases">Prompt releases</a>')
             content = content.replace('<nav class="tabs" role="tablist">', '<nav class="tabs" role="tablist"><a class="history-link" style="padding:12px 16px;color:inherit" href="' + escape(prefix) + '/manage/judges">Policy judges</a>')
         if not preview:
             content = content.replace('</main>', '<footer style="padding:16px;color:#64748b"><details><summary>Presenter actions</summary><a href="' + escape(prefix) + '/manage/reviews">Review and calibration</a></details></footer></main>')

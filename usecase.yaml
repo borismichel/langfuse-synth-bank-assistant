@@ -117,6 +117,8 @@ assets:
   docs:
   - path: docs/DEPOT_KIT.md
     title: Overview
+  - path: docs/PROMPT_RELEASES.md
+    title: Prompt promotion and rollback
   - path: docs/VOICE.md
     title: Voice
 teardown:
@@ -159,6 +161,8 @@ live_components:
   - LLM_API_KEY
   health_path: /api/health
   protected_paths:
+  - path: /manage/releases
+    access: manage
   - path: /manage/experiments
     access: manage
   - path: /manage/judges
