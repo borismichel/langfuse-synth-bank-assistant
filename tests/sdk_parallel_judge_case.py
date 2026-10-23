@@ -1,5 +1,7 @@
-"""An invalid external judge result stops the delivered comparison without retry."""
+"""Concurrent judge cancellation preserves completed and unknown usage by policy."""
 import json
+import os
+import re
 from test_assets import seeded_run
 from test_pipeline import invoke
 
@@ -19,12 +21,19 @@ def test_two_judges_share_one_serial_row_and_cancel_without_orphan_calls(tmp_pat
         from threading import Event, Lock
         first, second, third, release_first, release_rest = (Event() for _ in range(5))
         lock=Lock(); seen=[]
+        first_policy=os.environ.get('BANK_TEST_FIRST_POLICY','P1')
         original=target['extension']
         def external(method,path,query,body):
+            is_judge=path.endswith('/messages') and body['model']=='fixture-judge'
+            if is_judge:
+                # Control only the external HTTP receiver, not the scheduler.
+                policy=re.search(r'Evaluate ONLY (P[1-5]):',body['messages'][0]['content'])[1]
+                if policy in ('P1','P2') and policy!=first_policy:
+                    assert first.wait(5),'Selected first policy never arrived'
             result=original(method,path,query,body)
-            if path.endswith('/messages') and body['model']=='fixture-judge':
+            if is_judge:
                 with lock:
-                    seen.append(body);number=len(seen)
+                    seen.append(policy);number=len(seen)
                 (first if number==1 else second if number==2 else third).set()
                 assert (release_first if number==1 else release_rest).wait(10), 'Fixture release missing'
             return result
@@ -44,12 +53,13 @@ def test_two_judges_share_one_serial_row_and_cancel_without_orphan_calls(tmp_pat
                 started=browser.post('/manage/experiments/start',json=body)
                 assert started.status_code==202
                 assert first.wait(5) and second.wait(2), 'Two policies must reach real provider HTTP concurrently'
+                assert seen[0]==first_policy
                 assert len(target['calls'])==4 and not third.is_set(), 'At most two judges; no next application row'
                 release_first.set()
                 assert third.wait(3), 'An available judge slot must take the next policy'
                 assert len(target['calls'])==5
                 assert browser.post('/manage/experiments/cancel',json={}).status_code==200
-                release_rest.set()
+                # Keep unanswered requests held until terminal status proves drainage.
                 deadline=time.monotonic()+5
                 while time.monotonic()<deadline:
                     run=browser.get('/manage/experiments/status').json()['runs'][0]
@@ -59,7 +69,11 @@ def test_two_judges_share_one_serial_row_and_cancel_without_orphan_calls(tmp_pat
                 assert run['dispatches']==len(target['calls'])==5
                 assert len(run['arms']['baseline']['rows'])==1 and not run['arms']['candidate']['rows']
                 row=run['arms']['baseline']['rows'][0]
-                assert row['judge_results']['P1']['usage']['output']==12
+                assert row['judge_results'][first_policy]['usage']['output']==12
+                assert row['judge_results'][first_policy]['output_valid'] is True
+                for policy in {'P1','P2','P3'}-{first_policy}:
+                    assert row['judge_results'][policy]['usage'] is None
+                    assert row['judge_results'][policy]['error']=='cancelled'
                 assert set(row['judge_results'])=={'P1','P2','P3'}
                 assert all(r['generation_id'] and r['generation_trace_id']==row['trace_id'] for r in row['judge_results'].values())
                 observations={o['id']:o for o in target['observations']}

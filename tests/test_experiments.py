@@ -56,9 +56,11 @@ def test_async_judge_total_deadline_closes_dripping_provider_request(provider):
     assert result.returncode==0,result.stdout+result.stderr
 
 
-def test_parallel_judges_cancel_through_delivered_controls():
+@pytest.mark.parametrize('first_policy',['P1','P2'])
+def test_parallel_judges_cancel_through_delivered_controls(first_policy):
     env = {k: v for k, v in os.environ.items() if k in ('PATH','HOME','TMPDIR','LANG')}
     env['PYTHONPATH']=os.pathsep.join(['src','tests','demos/bank-assistant'])
+    env['BANK_TEST_FIRST_POLICY']=first_policy
     result=subprocess.run([sys.executable,'-m','pytest','tests/sdk_parallel_judge_case.py','-q'],env=env,capture_output=True,text=True,timeout=30)
     assert result.returncode==0,result.stdout+result.stderr
 
