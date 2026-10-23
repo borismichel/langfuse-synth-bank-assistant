@@ -111,6 +111,8 @@ assets:
   docs:
   - path: docs/DEPOT_KIT.md
     title: Overview
+  - path: docs/CODING_AGENT_WORKSHOP.md
+    title: Coding-agent workshop
   - path: docs/VOICE.md
     title: Voice
 teardown:

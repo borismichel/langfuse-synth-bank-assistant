@@ -116,8 +116,8 @@ def run_import(cfg, *, spool_path=None, output_dir=None) -> int:
     project_url = cfg.target.base_url + '/project/' + quote(project_id, safe='')
     links = '\n'.join(f'- [{e["case_id"]}]({project_url}/traces/{e["trace_id"]}) — session `{e["session_id"]}`'
                       for e in receipt.history_anchors['cases'])
-    from .runbook import write_runbook
-    write_runbook(Path('DEMO_SCRIPT.md').read_text() +
+    from .runbook import write_runbook, presenter_runbook
+    write_runbook(presenter_runbook() +
         f'\n\n## This deployment\n\nTarget: {project_url}\n\nHistory run: {receipt.history_run_id} — {pending["run_date"]}\n\n{links}\n\nVerification runs next; import alone does not prove visibility.\n', output_dir=out)
     print(f'Imported {sent} records; verification receipt and target runbook saved', flush=True)
     return 0
