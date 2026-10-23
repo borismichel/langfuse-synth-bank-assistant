@@ -720,7 +720,7 @@
       : V.data.error;
     const list = $('#voiceList'); list.replaceChildren();
     for (const sample of V.data.samples.filter(sample => sample.customer_id === S.customer)) {
-      const card = document.createElement('div'); card.className = 'card call';
+      const card = document.createElement('div'); card.className = 'card call lf-frame corner-box-corners';
       card.innerHTML = `<div class="call-title">${esc(LANG === 'es' ? sample.title_es : sample.title)}</div><p>${esc(sample.lang.toUpperCase())} · ${esc(vt('Synthetic upstream recording', 'Grabación sintética original'))}</p><audio controls preload="none" src="${esc(sample.url)}"></audio><button class="btn btn-sm" ${S.busy || !V.data.available ? 'disabled' : ''}>${esc(vt('Use recording', 'Usar grabación'))}</button>`;
       $('button',card).onclick = async () => {
         if (S.busy) return;
@@ -862,7 +862,7 @@
 
   async function loadActs() {
     let d;
-    try { d = await api("/api/acts"); } catch (e) { $("#acts").innerHTML = `<div class="card placeholder">${esc(t("con.loadFail", { e: e.message }))}</div>`; return; }
+    try { d = await api("/api/acts"); } catch (e) { $("#acts").innerHTML = `<div class="card placeholder lf-frame corner-box-corners">${esc(t("con.loadFail", { e: e.message }))}</div>`; return; }
     C.data = d;
     renderActs();
     if (d.job && (!C.job || C.job.job_id !== d.job.job_id)) attachJob(d.job, true);
@@ -884,7 +884,7 @@
       const show = multi ? t(`group.${g.id}.show`, null, gm.show || a0.show) : actText(a0.id, "show", a0.show);
       const es = !multi && a0.lang === "es" ? `<span class="lang-badge lang-es" title="${esc(t("con.langTitle"))}">ES</span>` : "";
       const btn = (a) => esc(t(`btn.${a.button}`, null, a.button));
-      return `<div class="card act ${anyAvail ? "" : "unavailable"}" data-group="${esc(g.id)}">
+      return `<div class="card act lf-frame corner-box-corners ${anyAvail ? "" : "unavailable"}" data-group="${esc(g.id)}">
         <div class="act-head"><span class="act-num">${esc(g.id)}</span><span class="act-title">${esc(title)}</span>${es}</div>
         <div class="act-blurb">${esc(blurb)}</div>
         <div class="act-show"><b>${esc(t("con.show"))}</b> ${esc(show)}</div>

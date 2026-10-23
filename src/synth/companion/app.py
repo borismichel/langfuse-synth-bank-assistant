@@ -188,13 +188,13 @@ def create_app(adapter, *, preview=False):
             content = content.replace('<nav class="tabs" role="tablist">', '<nav class="tabs" role="tablist"><a class="history-link" style="padding:12px 16px;color:inherit" href="' + escape(prefix) + '/manage/releases">Prompt releases</a>')
             content = content.replace('<nav class="tabs" role="tablist">', '<nav class="tabs" role="tablist"><a class="history-link" style="padding:12px 16px;color:inherit" href="' + escape(prefix) + '/manage/judges">Policy judges</a>')
         if not preview:
-            content = content.replace('</main>', '<footer style="padding:16px;color:#64748b"><details><summary>Presenter actions</summary><a href="' + escape(prefix) + '/manage/reviews">Review and calibration</a></details></footer></main>')
+            content = content.replace('</main>', '<footer class="presenter-footer"><details><summary>Presenter actions</summary><a href="' + escape(prefix) + '/manage/reviews">Review and calibration</a></details></footer></main>')
         setting = json.dumps(prefix).replace('<', '\\u003c')
         content = content.replace('<head>', '<head><script>window.NORTHWIND_BASE_PATH=' + setting + ';</script>')
         notice = ('Development preview — fixture responses only; no target or provider connection.' if preview
                   else 'Synthetic banking state is private to this participant. Confirm each banking action before it runs.')
         content = content.replace('id="labelSel"', 'id="labelSel" disabled title="Only the production prompt is enabled"').replace('data-ch="app"', 'data-ch="app" disabled').replace('data-ch="whatsapp"', 'data-ch="whatsapp" disabled')
-        content = content.replace('<body>', '<body><aside role="status" style="padding:12px;text-align:center">' + escape(notice) + '</aside>')
+        content = content.replace('<body class="langfuse-theme bank-customer">', '<body class="langfuse-theme bank-customer"><aside role="status" class="deployment-notice">' + escape(notice) + '</aside>')
         if preview:
             import re
             content = re.sub(r'\s*<link[^>]+(?:fonts.googleapis.com|fonts.gstatic.com)[^>]*>', '', content)
