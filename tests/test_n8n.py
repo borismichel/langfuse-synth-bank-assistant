@@ -1,5 +1,6 @@
 """Optional workflow lifecycle and delivered configuration contract."""
 import asyncio
+import pytest
 
 
 def test_disabled_workflow_starts_nothing():
@@ -30,12 +31,13 @@ def test_n8n_option_uses_separate_runtime_state_without_changing_history(tmp_pat
     assert (tmp_path/'state/events.ndjson').read_bytes() == spool
 
 
-def test_complaint_http_and_real_sdk_contract():
+@pytest.mark.parametrize('mode', [[], ['--deny-reply']])
+def test_complaint_http_and_real_sdk_contract(mode):
     import os
     import subprocess
     import sys
     env = {k: v for k, v in os.environ.items() if k in ('PATH', 'HOME', 'TMPDIR', 'LANG')}
     env['PYTHONPATH'] = 'src:demos/bank-assistant'
-    result = subprocess.run([sys.executable, 'tests/n8n_bridge_case.py'], env=env,
+    result = subprocess.run([sys.executable, 'tests/n8n_bridge_case.py', *mode], env=env,
                             capture_output=True, text=True, timeout=60)
     assert result.returncode == 0, result.stdout + result.stderr
