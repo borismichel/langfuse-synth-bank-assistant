@@ -34,7 +34,8 @@ def two_providers(env,data,monkeypatch):
                     b=blocks[0];message={'role':'assistant','content':None,'tool_calls':[{'id':b['id'],'type':'function','function':{'name':b['name'],'arguments':json.dumps(b['input'])}}]}
                 else:message={'role':'assistant','content':blocks[0]['text']}
                 answered='tool_calls' not in message
-            result={'id':'chat-'+str(len(data['openai_calls'])),'object':'chat.completion','created':123456,'model':body['model'],
+            # The real OpenAI response resolves the configured alias to a dated model.
+            result={'id':'chat-'+str(len(data['openai_calls'])),'object':'chat.completion','created':123456,'model':'gpt-4.1-mini-2025-04-14',
                 'choices':[{'index':0,'message':message,'finish_reason':'stop' if answered else 'tool_calls'}],
                 'usage':{'prompt_tokens':20 if answered else 10,'completion_tokens':12 if answered else 8,'total_tokens':32 if answered else 18}}
             if data.get('missing_usage') and not answered:result.pop('usage')
@@ -47,7 +48,11 @@ def two_providers(env,data,monkeypatch):
                 row['parentObservationId']=span.parent_span_id.hex() or None
                 row['model']=attrs.get('langfuse.observation.model.name')
                 row['usageDetails']=json.loads(attrs.get('langfuse.observation.usage_details','{}'))
-                if row['type']=='GENERATION':row['totalCost']=0.002 if row['model']=='gpt-4.1-mini' else 0.003
+                if row['type']=='GENERATION':row['totalCost']=0.002 if row['model']=='gpt-4.1-mini-2025-04-14' else 0.003
+                if row['name']=='generate-response' and row['model']=='gpt-4.1-mini-2025-04-14' and data.get('readback_identity'):
+                    key,value=data['readback_identity']
+                    if key=='model':row['model']=value
+                    else:row['metadata']={**row['metadata'],key:value}
                 if data.get('missing_cost'):row.pop('totalCost',None)
             if data.get('missing_generation')=='application':
                 rows=[r for r in rows if r['name']!='generate-response']
