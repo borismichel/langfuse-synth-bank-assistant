@@ -23,7 +23,7 @@ def write_runbook(text, *, output_dir=None):
 def presenter_runbook():
     """Deliver option instructions inside the downloaded primary Markdown."""
     chapters = [Path('DEMO_SCRIPT.md')] + [Path('docs') / name for name in (
-        'PROMPT_RELEASES.md', 'VOICE.md', 'N8N.md', 'APM.md', 'CODING_AGENT_WORKSHOP.md')]
+        'PROMPT_RELEASES.md', 'VOICE.md', 'N8N.md', 'APM.md', 'CODING_AGENT_WORKSHOP.md', 'GOVERNANCE.md')]
     parts = [chapters[0].read_text()]
     for chapter in chapters[1:]:
         # Nest each complete chapter without changing its instructions or links.
