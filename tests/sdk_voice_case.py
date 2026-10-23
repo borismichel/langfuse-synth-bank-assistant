@@ -36,6 +36,8 @@ media_healthy = Event()
 media_release=Event()
 class ShutdownProbe(Exception): pass
 class CapacityProbe(Exception): pass
+class FailedMediaProbe(Exception): pass
+class ForeignMediaProbe(Exception): pass
 shutdown_begin=None
 speech_waiting=Event()
 speech_release=Event(); speech_release.set()
@@ -56,13 +58,22 @@ class API(BaseHTTPRequestHandler):
             from northwind.prompts import V5_RELEASE
             return self.reply({'name':'northwind-assistant-system','version':1,'prompt':V5_RELEASE,'labels':['production'],'tags':[],'config':{},'type':'text'})
         if '/observations' in self.path:
+            from urllib.parse import parse_qs
+            if 'parseIoAsJson' in parse_qs(urlparse(self.path).query):
+                return self.reply({'message':'parseIoAsJson is deprecated'},400)
             return self.reply({'data':[{'id':s.span_id.hex(),'traceId':s.trace_id.hex(),'name':s.name,'startTime':'2026-10-23T09:00:00Z','projectId':'fixture-project','type':attrs(s).get('langfuse.observation.type','span').upper(),
-                'input':attrs(s).get('langfuse.observation.input'),'output':attrs(s).get('langfuse.observation.output')}
+                'input':(attrs(s).get('langfuse.observation.input') or '').replace('|id=','|id=wrong-') if os.environ.get('VOICE_MEDIA_REFERENCE_MISMATCH') and s.name=='northwind-voice-call' else attrs(s).get('langfuse.observation.input'),'output':attrs(s).get('langfuse.observation.output')}
                 for s in exports], 'meta':{'cursor':None}})
         if '/media/' in self.path:
-            ident=self.path.rsplit('/',1)[1];record=media_records.get(ident)
-            if not record or not record.get('uploadedAt'): return self.reply({'message':'Not uploaded'},404)
-            return self.reply({**record,'mediaId':ident,'url':base+'/download/'+ident,'urlExpiry':'2099-01-01T00:00:00Z'})
+            ident=self.path.rsplit('/',1)[1];record=media_records.get(ident.removeprefix('wrong-'))
+            if not record or not record.get('uploadedAt'): return self.reply({'message':'Media not yet uploaded'},404)
+            if record.get('uploadHttpStatus') not in (200,201):
+                return self.reply({'message':f"Media upload failed with status {record['uploadHttpStatus']}: signed-secret-must-not-escape"},404)
+            # The public response omits the internal uploadHttpStatus, even
+            # though the server gates this success on that status above.
+            return self.reply({'mediaId':ident,'contentType':record['contentType'],
+                'contentLength':record['contentLength'],'uploadedAt':record['uploadedAt'],
+                'url':base+'/download/'+ident,'urlExpiry':'2099-01-01T00:00:00Z'})
         return self.reply({'data':[{'id':'fixture-project','name':'Voice fixture'}]})
     def do_POST(self):
         body = self.rfile.read(int(self.headers.get('Content-Length','0')))
@@ -105,11 +116,11 @@ class API(BaseHTTPRequestHandler):
         assert base64.b64encode(hashlib.sha256(body).digest()).decode()==record['sha256Hash']
         assert len(body)==record['contentLength'] and self.headers['Content-Type']==record['contentType']
         record['received']=True
-        self.reply({})
+        self.reply({},403 if os.environ.get('VOICE_MEDIA_FAILURE') else 200)
     def do_PATCH(self):
         ident=self.path.rsplit('/',1)[1];record=media_records[ident]
         body=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
-        assert record['received'] and body['uploadHttpStatus']==200
+        assert record['received'] and body['uploadHttpStatus']==(403 if os.environ.get('VOICE_MEDIA_FAILURE') else 200)
         record.update(body);self.reply({})
 
 class ChatProvider(BaseChatModel):
@@ -246,7 +257,7 @@ with tempfile.TemporaryDirectory() as directory:
             assert result['status'] == 'completed', result
             assert result['answer'] == spoken and result['transcript'] == 'International wire fees?', result
             assert result['session_id'] == session and result['observation_id'] != result['voice_observation_id']
-            assert result['speech_status'] == 'completed' and result['media_status'] != 'verified'
+            assert result['speech_status'] == 'completed' and result['media_status'] == 'pending'
             if os.environ.get('VOICE_SHUTDOWN') == '1':
                 Timer(10,lambda:(media_healthy.set(),media_release.set())).start()
                 shutdown_begin=time.monotonic()
@@ -271,8 +282,18 @@ with tempfile.TemporaryDirectory() as directory:
             media_healthy.set()
             for _ in range(150):
                 uploaded=browser.get(result['status_url']).json()
-                if uploaded.get('media_status')=='uploaded': break
+                if uploaded.get('media_status')==('failed' if os.environ.get('VOICE_MEDIA_FAILURE') else 'uploaded'): break
                 time.sleep(.1)
+            if os.environ.get('VOICE_MEDIA_REFERENCE_MISMATCH'):
+                assert uploaded['media_status']=='pending', 'Accepted a media reference belonging to different bytes'
+                assert requests.count('transcription')==requests.count('banking')==requests.count('speech')==1
+                raise ForeignMediaProbe()
+            if os.environ.get('VOICE_MEDIA_FAILURE'):
+                assert uploaded['media_status']=='failed', uploaded
+                assert 'signed-secret-must-not-escape' not in json.dumps(uploaded)
+                assert requests.count('transcription')==requests.count('banking')==requests.count('speech')==1
+                assert browser.get(result['reply_audio_url']).status_code==200
+                raise FailedMediaProbe()
             assert uploaded['media_status']=='uploaded', uploaded
             assert len(media_records)==2 and all(m.get('uploadedAt') for m in media_records.values())
             outer=[s for s in exports if s.name=='northwind-voice-call']
@@ -348,6 +369,10 @@ with tempfile.TemporaryDirectory() as directory:
 
 
             print(json.dumps({'voice':'completed','separate_roles':True,'same_conversation':True,'duplicate_replay':True,'media_verification':'pending_fixture_outage'}))
+    except ForeignMediaProbe:
+        print('foreign_media_reference_rejected=true')
+    except FailedMediaProbe:
+        print('failed_media_preserves_answer=true')
     except CapacityProbe:
         print('pending_media_capacity=true')
     except ShutdownProbe:
