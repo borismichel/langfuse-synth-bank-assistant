@@ -131,6 +131,8 @@ class Calibration:
                     self.cancelled.set() # No automatic retry or more paid work after an uncertain dispatch.
                 plan['outcomes'].append(outcome);plan['completed']+=1
                 plan['metrics']=metrics(plan['outcomes']);self.save(plan)
+                from northwind.masking import CALIBRATION_EVIDENCE_SCHEMA
+                r.adapter.langfuse().update_current_span(metadata={'northwind_evidence_schema':CALIBRATION_EVIDENCE_SCHEMA})
                 return {k:v for k,v in outcome.items() if k not in ('expected_output','reviewer_ids','score_ids')}
             def evaluate(*,output,expected_output,**_):
                 actual=label(output.get('actual'));expected=label(expected_output)
@@ -147,10 +149,11 @@ class Calibration:
             from opentelemetry import context
             token=context.attach(context.Context())
             try:
+                from northwind.masking import CALIBRATION_EVIDENCE_SCHEMA
                 result=r.adapter.langfuse().run_experiment(name='Northwind faithfulness calibration',
                     run_name='Calibration '+plan['request_id'],experiment_id=plan['experiment_id'],data=data,
                     task=task,evaluators=[evaluate],run_evaluators=[aggregate],max_concurrency=1,
-                    metadata={'owner':'northwind-depot','snapshot_hash':plan['snapshot_hash'],'rubric':str(plan['rubric_version']),
+                    metadata={'northwind_evidence_schema':CALIBRATION_EVIDENCE_SCHEMA,'owner':'northwind-depot','snapshot_hash':plan['snapshot_hash'],'rubric':str(plan['rubric_version']),
                         'judge_model':plan['model'],'judge_provider':plan['provider'],'reference_scope':'constructed-and-native-annotations-separated'})
             finally:context.detach(token)
             r.adapter.langfuse().flush()

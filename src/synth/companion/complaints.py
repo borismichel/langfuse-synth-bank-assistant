@@ -223,7 +223,8 @@ class ComplaintBridge:
             'trace_url': await asyncio.to_thread(config.trace_url, run['trace_id']),
             'n8n_execution_url': self.base_path + '/workflow/northwindComplaint/executions/' + run['execution_id'],
             'pii_masked': run['masked']}
-        run['root'].update(output=result)
+        from northwind.masking import COMPLAINT_EVIDENCE_SCHEMA
+        run['root'].update(output=result, metadata={'northwind_evidence_schema':COMPLAINT_EVIDENCE_SCHEMA})
         run['root'].end()
         await asyncio.to_thread(self.adapter.langfuse().flush)
         return result

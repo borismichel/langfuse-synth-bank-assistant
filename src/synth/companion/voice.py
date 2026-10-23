@@ -282,8 +282,9 @@ class VoiceService:
                     receipt['expected']['output']=('audio/wav',len(audio),hashlib.sha256(audio).hexdigest())
                     result.update(reply_audio_url=self.store(session_id,audio,'audio/wav'),reply_mime='audio/wav',
                                   speech_status='completed',spoken_transcript=spoken,tts_ms=round((time.monotonic()-t)*1000))
+                    from northwind.masking import VOICE_EVIDENCE_SCHEMA
                     root.update(output={'transcript':transcript,'answer':result['answer'],'reply_audio':reply},
-                                metadata={'assistant_observation_id':result['observation_id']})
+                                metadata={'northwind_evidence_schema':VOICE_EVIDENCE_SCHEMA,'assistant_observation_id':result['observation_id']})
                 except asyncio.CancelledError:
                     # The banking response is already committed. Cancelling audio
                     # must not discard it or encourage repeating a confirmed action.
