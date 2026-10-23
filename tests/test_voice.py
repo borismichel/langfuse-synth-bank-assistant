@@ -1,0 +1,40 @@
+"""Voice configuration and delivered HTTP behavior; no live credentials."""
+import json
+
+from test_pipeline import invoke
+
+
+def test_voice_option_is_model_free_and_preserves_history(tmp_path):
+    args = ('--set', 'generation.as_of_date=2026-10-20')
+    off = invoke(tmp_path, 'generate-spool', *args)
+    assert off.returncode == 0, off.stderr
+    spool = (tmp_path / 'state/events.ndjson').read_bytes()
+    on = invoke(tmp_path, 'generate-spool', *args, '--set', 'runtime.voice_enabled=true')
+    assert on.returncode == 0, on.stderr
+    runtime = json.loads((tmp_path / 'state/runtime-config.json').read_text())
+    assert runtime['voice_enabled'] is True
+    assert (tmp_path / 'state/events.ndjson').read_bytes() == spool
+
+
+def test_voice_option_rejects_non_boolean_before_generation(tmp_path):
+    result = invoke(tmp_path, 'generate-spool', '--set', 'runtime.voice_enabled=enabled')
+    assert result.returncode != 0
+    assert not (tmp_path / 'state/events.ndjson').exists()
+
+
+def test_voice_uses_owned_conversation_and_independent_speech_roles():
+    import os
+    import signal
+    import subprocess
+    import sys
+    env = {k:v for k,v in os.environ.items() if k in ('PATH','HOME','TMPDIR','LANG')}
+    env['PYTHONPATH']='src:demos/bank-assistant'
+    child = subprocess.Popen([sys.executable,'tests/sdk_voice_case.py'],env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,start_new_session=True)
+    try:
+        out, err = child.communicate(timeout=60)
+        assert child.returncode == 0, out + err
+        assert '"duplicate_replay": true' in out
+    finally:
+        try: os.killpg(child.pid,signal.SIGKILL)
+        except ProcessLookupError: pass
+        child.wait(timeout=5)

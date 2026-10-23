@@ -520,7 +520,7 @@ wheels = [
 [[package]]
 name = "langfuse-synth-core"
 version = "5.0.0"
-source = { git = "https://github.com/borismichel/langfuse-synth-core?rev=6458f89991b518234a61ed001e98a46d539a725a#6458f89991b518234a61ed001e98a46d539a725a" }
+source = { git = "https://github.com/borismichel/langfuse-synth-core?rev=220ffccfdf02a4594478e7f214ac9950f5a25ff3#220ffccfdf02a4594478e7f214ac9950f5a25ff3" }
 dependencies = [
     { name = "langfuse" },
     { name = "pyyaml" },
@@ -677,8 +677,8 @@ requires-dist = [
     { name = "langchain-core", specifier = ">=1,<2" },
     { name = "langchain-openai", specifier = ">=1,<2" },
     { name = "langfuse", specifier = "==5.0.4" },
-    { name = "langfuse-synth-core", extras = ["authoring"], marker = "extra == 'dev'", git = "https://github.com/borismichel/langfuse-synth-core?rev=6458f89991b518234a61ed001e98a46d539a725a" },
-    { name = "langfuse-synth-core", extras = ["companion"], git = "https://github.com/borismichel/langfuse-synth-core?rev=6458f89991b518234a61ed001e98a46d539a725a" },
+    { name = "langfuse-synth-core", extras = ["authoring"], marker = "extra == 'dev'", git = "https://github.com/borismichel/langfuse-synth-core?rev=220ffccfdf02a4594478e7f214ac9950f5a25ff3" },
+    { name = "langfuse-synth-core", extras = ["companion"], git = "https://github.com/borismichel/langfuse-synth-core?rev=220ffccfdf02a4594478e7f214ac9950f5a25ff3" },
     { name = "langgraph", specifier = ">=1,<2" },
     { name = "mcp", specifier = ">=1.12,<2" },
     { name = "packaging", specifier = ">=24" },
