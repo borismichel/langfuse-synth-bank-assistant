@@ -125,7 +125,10 @@ live_components:
   - LANGFUSE_SECRET_KEY
   - LLM_API_KEY
   health_path: /api/health
+  spending_check: {version: 1}
   protected_paths:
+  - path: /manage/experiments
+    access: manage
   - path: /manage/judges
     access: manage
   - path: /apm
