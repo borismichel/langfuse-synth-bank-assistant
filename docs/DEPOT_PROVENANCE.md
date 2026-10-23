@@ -47,10 +47,13 @@ catalogue readiness.
 
 ## Retained intermediate history
 
-The `0.7.0` release attempt did not publish an image: its hosted optional
-complaint-workflow image check failed after the offline package checks passed.
-It is a historical source release, not a qualified image. The `0.7.1` candidate
-requires its own successful checks, signed image and target qualification evidence.
+The `0.7.0` release attempt did not publish an image. The publish workflow
+failed conduct native-evidence readback because a source observation identifier
+was masked. A separate CI run on the same source passed the offline package
+checks, then failed the complaint-workflow image check because its test fixture
+omitted the required operation permit. These are distinct hosted failures, not a
+qualified image. The `0.7.1` candidate requires its own successful checks, signed
+image and target qualification evidence.
 
 The original shared-core baseline was v5.0.0 at
 `5f56e75f9a8b5d160ddf54a8fcde380d0d15a205`. Early banking integration used
