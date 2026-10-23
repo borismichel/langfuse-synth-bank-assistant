@@ -247,7 +247,7 @@ class State(TypedDict):
 
 
 def _build_tools(langfuse, session: Optional[ClientSession], customer_id: str, evidence: list, used: list,
-                 trace_attrs: dict, banking_binding: str | None = None, actions: list | None = None):
+                 trace_attrs: dict, banking_binding: str | None = None, actions: list | None = None, run_policy: dict | None = None):
     """Tools bound to the AUTHENTICATED customer. The model never sees or chooses the id.
 
     `trace_attrs` go to the MCP server as W3C baggage, so its spans carry this
@@ -256,15 +256,20 @@ def _build_tools(langfuse, session: Optional[ClientSession], customer_id: str, e
     and only injected into that request — never into model-provider calls.
     """
 
+    policy = run_policy or {}
+    retrieval_k = policy.get('retrieval_k', RETRIEVAL_K)
+    min_score = policy.get('retrieval_min_score', RETRIEVAL_MIN_SCORE)
+    tx_days = policy.get('tx_default_days', TX_DEFAULT_DAYS)
+
     @tool
     async def search_knowledge_base(query: str, callbacks: Callbacks = None) -> str:
         """Search Northwind Bank's help-center articles (products, fees, limits, policies).
         Returns articles with ids like KB-102 that you must cite."""
         used.append("search_knowledge_base")
         with _nest(callbacks), langfuse.start_as_current_observation(as_type="retriever", name="kb-retrieval",
-                                                   input={"query": query, "k": RETRIEVAL_K,
-                                                          "min_score": RETRIEVAL_MIN_SCORE}) as r:
-            docs = knowledge.search(query, k=RETRIEVAL_K, min_score=RETRIEVAL_MIN_SCORE)
+                                                   input={"query": query, "k": retrieval_k,
+                                                          "min_score": min_score}) as r:
+            docs = knowledge.search(query, k=retrieval_k, min_score=min_score)
             r.update(output={"documents": [{k: d[k] for k in ("id", "title", "source", "score", "effective_date")}
                                            for d in docs]},
                      metadata={"index": "help-center-tfidf", "documents_returned": len(docs)})
@@ -308,7 +313,7 @@ def _build_tools(langfuse, session: Optional[ClientSession], customer_id: str, e
         return await _mcp("list_accounts", {}, callbacks)
 
     @tool
-    async def get_recent_transactions(account_id: str, days: int = TX_DEFAULT_DAYS,
+    async def get_recent_transactions(account_id: str, days: int = tx_days,
                                       callbacks: Callbacks = None) -> dict:
         """Recent transactions of one of the customer's accounts. Use list_accounts first to get ids."""
         return await _mcp("get_recent_transactions", {"account_id": account_id, "days": days}, callbacks)
@@ -335,7 +340,7 @@ def _build_tools(langfuse, session: Optional[ClientSession], customer_id: str, e
 
 
 def _graph(langfuse, llm, tools, system_text: str, customer_id: str, check: dict, outcome: dict,
-           language: str = "en"):
+           language: str = "en", before_model_call=None):
     llm_with_tools = llm.bind_tools(tools).with_config(run_name=GENERATION_NAME)
 
     async def input_guardrail(state: State, config: RunnableConfig) -> dict:
@@ -349,6 +354,8 @@ def _graph(langfuse, llm, tools, system_text: str, customer_id: str, check: dict
 
     async def assistant(state: State, config: RunnableConfig) -> dict:  # noqa: F811 — LangGraph injects by name
         msgs = [SystemMessage(content=system_text)] + state["messages"]
+        if before_model_call is not None:
+            await before_model_call()
         # LangChain owns generation, prompt and usage accounting for this call.
         with propagate_attributes(metadata={"generation_owner": "langchain"}):
             ai = await llm_with_tools.ainvoke(msgs, config)
@@ -402,12 +409,25 @@ async def run_turn(message: str, *, customer_id: str = "C-1001", session_id: Opt
                    history: Optional[list] = None, channel: str = "web", model: Optional[str] = None,
                    prompt_label: Optional[str] = None, tags: Optional[list] = None,
                    extra_metadata: Optional[dict] = None, trace_name: str = TRACE_NAME,
-                   banking_binding: str | None = None, confirmation: dict | None = None) -> dict:
+                   banking_binding: str | None = None, confirmation: dict | None = None,
+                   before_model_call=None, exact_prompt=None, run_policy: dict | None = None) -> dict:
     """One customer turn = one trace. Returns the answer plus links into Langfuse and the APM."""
     langfuse = config.get_langfuse()
     selected_llm = make_llm(model)
     model = getattr(selected_llm, "model", None) or getattr(selected_llm, "model_name", None) or model or config.AGENT_MODEL
-    system_text, lf_prompt = prompts.get_system_prompt(langfuse, prompt_label)
+    if run_policy is not None:
+        if (set(run_policy) != {'retrieval_k','retrieval_min_score','tx_default_days'} or
+            type(run_policy['retrieval_k']) is not int or not 1 <= run_policy['retrieval_k'] <= 8 or
+            type(run_policy['tx_default_days']) is not int or run_policy['tx_default_days'] not in (30,60) or
+            run_policy['retrieval_min_score'] not in (0,0.08)):
+            raise ValueError('Unsupported per-run banking policy')
+    if exact_prompt is None:
+        system_text, lf_prompt = prompts.get_system_prompt(langfuse, prompt_label)
+    else:
+        if exact_prompt.is_fallback or not isinstance(exact_prompt.prompt,str):
+            raise ValueError('An exact published text prompt is required')
+        lf_prompt = exact_prompt
+        system_text = exact_prompt.compile(bank_name='Northwind Bank')
     if not config.MCP_ENABLED:
         system_text += "\nOnly knowledge lookup is enabled. Account information and banking actions are unavailable. Never claim to have blocked a card, opened a dispute or booked a callback."
     if channel == "voice":  # channel modifier: the answer will be spoken, not read
@@ -456,7 +476,7 @@ async def run_turn(message: str, *, customer_id: str = "C-1001", session_id: Opt
 
             async def _invoke(session):
                 tools = _build_tools(langfuse, session, customer_id, evidence, used, trace_attrs,
-                                     banking_binding, actions)
+                                     banking_binding, actions, run_policy)
                 turn_system = system_text
                 if confirmation and not check['blocked']:
                     selected_tool = next(t for t in tools if t.name == confirmation['tool'])
@@ -464,7 +484,7 @@ async def run_turn(message: str, *, customer_id: str = "C-1001", session_id: Opt
                     turn_system += "\nThe customer explicitly confirmed the exact pending action. " + \
                         "The banking service returned this authoritative result; report it accurately, " + \
                         "without executing any further action: " + json.dumps(receipt)
-                graph = _graph(langfuse, llm, tools, turn_system, customer_id, check, outcome, language)
+                graph = _graph(langfuse, llm, tools, turn_system, customer_id, check, outcome, language, before_model_call)
                 return await graph.ainvoke({"messages": _history(history) + [HumanMessage(content=message)],
                                             "blocked": False}, run_cfg)
 
@@ -546,7 +566,12 @@ async def run_turn(message: str, *, customer_id: str = "C-1001", session_id: Opt
                        business.evidence_tool_results(evidence), check["blocked"], answer)
     if error is not None:
         config.flush()
-    return {"answer": answer, "observation_id": obs_id, "trace_id": trace_id, "trace_url": config.trace_url(trace_id),
+    generations = [m for m in state['messages'] if isinstance(m, AIMessage) and getattr(m,'usage_metadata',None)]
+    usage = ({key: sum(m.usage_metadata[source] for m in generations) for key,source in
+              (('input','input_tokens'),('output','output_tokens'))} if generations else
+             {'input':0,'output':0} if check['blocked'] else None)
+    return {"context": context, "query": message, "usage": usage, "latency_ms": round(_now_ms()-t0),
+            "answer": answer, "observation_id": obs_id, "trace_id": trace_id, "trace_url": config.trace_url(trace_id),
             "apm_url": config.apm_url(trace_id), "sources": cited, "retrieved": retrieved,
             "tools_used": used, "blocked": check["blocked"], "risks": check["risks"],
             "prompt_version": getattr(lf_prompt, "version", None), "model": model, "business": biz,
