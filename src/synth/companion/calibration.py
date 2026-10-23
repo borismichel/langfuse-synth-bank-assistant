@@ -15,13 +15,6 @@ def label(value):
     return value if isinstance(value,(float,int)) and value in (0,0.5,1) else None
 
 
-def verdict(text):
-    try:
-        value=json.loads(text)
-        return label(value.get('score')) if isinstance(value,dict) else None
-    except (ValueError,TypeError):return None
-
-
 def metrics(rows):
     result={}
     for group in ('constructed','native_annotation'):
@@ -118,8 +111,8 @@ class Calibration:
                     # Count attempted calls separately from successful results; permits can deny a dispatch.
                     def dispatched():
                         plan['model_calls']+=1;self.save(plan)
-                    result=call_judge(r.adapter,model=plan['model'],prompt=prompt,inputs=dict(row['input']),check=check,on_dispatch=dispatched)
-                    actual=verdict(result['text'])
+                    result=call_judge(r.adapter,model=plan['model'],prompt=prompt,inputs=dict(row['input']),check=check,on_dispatch=dispatched,score_values=[0,0.5,1])
+                    actual=result['score'] if result['output_valid'] else None
                     outcome.update(actual=actual,status='scored' if actual is not None else 'invalid_label',**result)
                 except Exception as exc:
                     # Do not return provider bodies, inputs embedded in diagnostics, or credentials.

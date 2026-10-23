@@ -7,23 +7,16 @@ class ConductRequest(BaseModel):
     include_legacy:bool=False
     cost_acknowledged:bool=False
 
-import json,re,time
+import json,time
 from datetime import datetime,timezone,timedelta
 from urllib.parse import quote,urlencode
 from northwind.compliance import POLICIES,aggregate,RUBRIC_VERSION
 from synth.assets import corpus,fingerprint,owned_target,state_path,REQUEST,OWNER
 from synth.receipt import RunReceipt
 from synth.cohorts import identities,expected_cohorts,read_items,item_matches
-from .experiment_runner import exact_prompt,verdict
+from .experiment_runner import exact_prompt
 from .judge_execution import call_judge
 from .judges import pages,plain,scalar
-
-
-def single_verdict(text):
-    """The original exact rubric requests one terminal score, possibly after reasoning."""
-    terminal=re.search(r'(?:^|\n|\b(?:score|verdict)\s*:\s*)(0(?:\.0)?|0\.5|1(?:\.0)?|null)[ \t]*$',text.strip(),re.I)
-    if not terminal:return None,False
-    return json.loads(terminal[1].lower()),True
 
 
 def freeze(adapter):
@@ -115,16 +108,18 @@ class ConductReplay:
             for key in keys:
                 self.check();prompt=rubrics[key]
                 call=call_judge(self.adapter,model=self.body.judge_model,prompt=prompt,inputs=frozen['input'],
-                    name='comparison-'+key,check=self.check,on_dispatch=dispatched)
+                    name='comparison-'+key,check=self.check,on_dispatch=dispatched,
+                    **({'categories':next(p.categories for p in POLICIES if key=='conduct-v2-'+p.id.lower())}
+                       if arm=='split' else {'score_values':[0,0.5,1,None] if arm=='single' else [0,0.5,1]}))
                 row['calls'][key]={**call,'prompt_name':prompt.name,'prompt_version':prompt.version,
                     'prompt_input_hash':fingerprint(prompt.compile(**frozen['input']))}
                 self.control.persist()
             if arm=='split':
-                labels={p.id:verdict(row['calls']['conduct-v2-'+p.id.lower()]['text'],p.categories) for p in POLICIES}
+                labels={p.id:row['calls']['conduct-v2-'+p.id.lower()]['verdict'] for p in POLICIES}
                 result=aggregate(labels);row.update(score=result.score,valid=all(v is not None for v in labels.values()),
                     policies=labels,status=result.status,coverage=result.coverage)
             else:
-                value,valid=single_verdict(row['calls'][keys[0]]['text']);row.update(score=value,valid=valid,
+                measured=row['calls'][keys[0]];value,valid=measured['score'],measured['output_valid'];row.update(score=value,valid=valid,
                     policies={},status='invalid' if not valid else 'unresolved' if value is None else 'resolved')
             row['usage']={k:sum(c['usage'][k] for c in row['calls'].values()) for k in ('input','output')} if all(c['usage'] is not None for c in row['calls'].values()) else None
             row['finished']=True

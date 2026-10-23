@@ -21,12 +21,7 @@ def test_gate_separates_business_failures_missing_and_runner_errors():
     assert assess(['one'],[good],[good,good])['status']=='runner_failed'
 
 
-def test_uncertain_policy_and_empty_cohort_cannot_pass():
-    from synth.companion.experiment_runner import verdict
-    assert verdict('No violation.\npass',['pass','fail','unknown'])=='pass'
-    assert verdict('probably pass',['pass','fail','unknown']) is None
-    assert verdict('{"score":1}',['pass','fail','unknown']) is None
-    assert verdict('unknown',['pass','fail','unknown'])=='unknown'
+def test_empty_cohort_cannot_pass():
     assert assess([],[],[])['status']=='incomplete'
 
 

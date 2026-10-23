@@ -1,6 +1,6 @@
 """Fixed application replay and exact native evidence; no moving prompt labels."""
 from __future__ import annotations
-import asyncio,json,re,time
+import asyncio,json,time
 from datetime import datetime,timezone,timedelta
 from uuid import uuid4
 from urllib.parse import quote, urlencode
@@ -81,12 +81,6 @@ def freeze(adapter,body):
         gate_version=VERSION,required_checks={i.metadata['case_id']:sorted([*checks(i,{'answer':'','banking_actions':[]}), 'conduct']) for i in dataset.items},production_at_start={'name':production.name,'version':production.version,'content_hash':fingerprint(production.prompt)},primary_provider=adapter.llm().provider,primary_model=adapter.llm().model,
         prompts={arm:dict(name=p.name,version=p.version,content_hash=fingerprint(p.prompt)) for arm,p in frozen.items()},
         rubrics={key:dict(name=p.name,version=p.version,content_hash=fingerprint(p.prompt)) for key,p in rubrics.items()})
-
-
-def verdict(text,allowed):
-    # The pinned rubric asks for reasoning followed by one terminal categorical label.
-    matched=re.search(r'(?i)(?:^|\n|\bverdict\s*:\s*)(pass|fail|minor|unknown)[.!\s]*$',text.strip())
-    return matched.group(1).lower() if matched and matched.group(1).lower() in allowed else None
 
 
 def checks(item,result):
@@ -180,9 +174,10 @@ class Replay:
                     trace_context={'trace_id':row['trace_id'],'parent_span_id':row['observation_id']}):
                     judged=await asyncio.to_thread(call_judge,self.adapter,model=self.body.judge_model,prompt=rubrics[policy.id],
                         inputs={k:row[k] for k in ('query','context')}|{'generation':row['answer']},
-                        name=policy.name,check=self.check,on_dispatch=self.dispatched)
-                label=verdict(judged['text'],policy.categories);labels[policy.id]=label
+                        name=policy.name,check=self.check,on_dispatch=self.dispatched,categories=policy.categories)
+                label=judged['verdict'];labels[policy.id]=label
                 row['judge_results'][policy.id]={**judged,'verdict':label}
+                if not judged['output_valid']:raise ValueError('judge_output_invalid')
             combined=aggregate(labels);row['checks']['conduct']=None if combined.unresolved else combined.score
             row['conduct_status']=combined.status
             self.scores(row)
@@ -192,7 +187,7 @@ class Replay:
         except Exception as exc:
             row['error']=str(exc) if isinstance(exc,ValueError) and str(exc) in (
                 'cancelled','deadline_reached','dispatch_limit_reached','case_dispatch_limit_reached',
-                'banking_runner_failed','banking_confirmation_runner_failed') else type(exc).__name__
+                'banking_runner_failed','banking_confirmation_runner_failed','judge_output_invalid') else type(exc).__name__
             self.cancel.set() # A dispatch/transport failure stops new paid work; no automatic retry.
             raise
         finally:self.control.persist()
