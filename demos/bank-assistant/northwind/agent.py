@@ -502,15 +502,17 @@ async def run_turn(message: str, *, customer_id: str = "C-1001", session_id: Opt
                 answer = notice + json.dumps(committed[-1], ensure_ascii=False)
             cited = sorted(set(re.findall(r"\bKB-\d{3}\b", answer)))
             retrieved = sorted(set(re.findall(r"\[(KB-\d{3})\]", "\n".join(evidence))))
-            # Follow-up turns often answer from facts retrieved in an EARLIER turn.
-            # Give the judge that conversation context too, or it scores a correct
-            # follow-up as unsupported.
+            # Earlier conversation provides context, never authoritative policy or
+            # confirmation. Missing current evidence may yield an unknown verdict.
             prior = "\n".join(f"{h['role']}: {h['content']}" for h in (history or [])[-4:])
-            context = "\n\n".join(evidence) or "(no new retrieval or tool calls in this turn)"
+            context = "APPROVED POLICY AND BANKING TOOL RESULTS\n" + ("\n\n".join(evidence) or "(no new retrieval or tool calls in this turn)")
             if prior:
-                context += "\n\n[earlier in this conversation]\n" + prior
+                context += "\n\nEARLIER CONVERSATION — NOT AUTHORITATIVE POLICY OR ACTION CONFIRMATION\n" + prior
             root.update(output=answer, metadata={
                 "context": context,
+                "judge_evidence_version": "northwind-delivered-v1",
+                "judge_eligible": "true" if (not check["blocked"] and error is None and
+                    channel in {"web", "voice"} and meta.get("live_instance_id")) else "false",
                 "tools_used": ",".join(used) or "none", "cited_sources": ",".join(cited) or "none",
                 "retrieved_sources": ",".join(retrieved) or "none",
                 "prompt_version": str(getattr(lf_prompt, "version", "fallback")),
