@@ -16,6 +16,11 @@ base_config:
 config_schema:
   type: object
   properties:
+    runtime.comparison_enabled:
+      type: boolean
+      default: false
+      title: OpenAI comparison
+      description: Enable the OpenAI gpt-4.1-mini comparison binding. Application and judge calls start only from presenter controls.
     runtime.n8n_enabled:
       type: boolean
       default: false
@@ -54,6 +59,7 @@ config_schema:
 setup:
   version: 1
   fields:
+    runtime.comparison_enabled: {group: scenario}
     runtime.n8n_enabled: {group: scenario}
     runtime.apm_enabled: {group: scenario}
     generation.target_traces: {group: volume}
@@ -110,6 +116,13 @@ teardown:
     Use a fresh disposable project or an explicitly authorised project reset before
     importing again.
 llm:
+  roles:
+    version: 1
+    bindings:
+      comparison:
+        provider: openai
+        models: {openai: gpt-4.1-mini}
+        enabled_by: runtime.comparison_enabled
   providers:
   - anthropic
   - openai
@@ -126,6 +139,7 @@ live_components:
   - LLM_API_KEY
   health_path: /api/health
   spending_check: {version: 1}
+  llm_roles: [comparison]
   protected_paths:
   - path: /manage/experiments
     access: manage

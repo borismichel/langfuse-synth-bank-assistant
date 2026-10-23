@@ -5,7 +5,7 @@ VERSION='northwind-application-gate-v1'
 TOKEN_RATIO=1.25
 
 
-def assess(expected, baseline, candidate, *, required=None):
+def assess(expected, baseline, candidate, *, required=None, max_token_ratio=TOKEN_RATIO):
     """Both arms need exact membership, mandatory scores and measured usage."""
     ids=set(expected)
     counts={'expected':len(ids),'scored':0,'missing':0,'errors':0,'failed':0}
@@ -30,9 +30,9 @@ def assess(expected, baseline, candidate, *, required=None):
             counts['missing']+=1;continue
         counts['scored']+=1
         if (any(v<1 for v in left['checks'].values()) or any(v<1 for v in right['checks'].values()) or
-                sum(right['usage'].values())>max(1,sum(left['usage'].values()))*TOKEN_RATIO):
+                (max_token_ratio is not None and sum(right['usage'].values())>max(1,sum(left['usage'].values()))*max_token_ratio)):
             counts['failed']+=1
     status=('runner_failed' if counts['errors'] else 'incomplete' if counts['missing'] else
             'failed' if counts['failed'] else 'passed')
-    return {**counts,'status':status,'gate_version':VERSION,'max_token_ratio':TOKEN_RATIO,
+    return {**counts,'status':status,'gate_version':VERSION,'max_token_ratio':max_token_ratio,
         'cost_measure':'Actual application input plus output tokens; same primary model. Judge costs are separate.'}

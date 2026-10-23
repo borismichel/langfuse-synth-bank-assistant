@@ -47,6 +47,7 @@ class Generation:
 class Runtime:
     apm_enabled: bool = False
     n8n_enabled: bool = False
+    comparison_enabled: bool = False
 
 
 @dataclass
@@ -77,8 +78,11 @@ def _model_factory(raw: dict) -> Config:
     n8n = (raw.get('runtime') or {}).get('n8n_enabled', False)
     if type(n8n) is not bool:
         raise ValueError('runtime.n8n_enabled must be a boolean')
+    comparison = (raw.get('runtime') or {}).get('comparison_enabled', False)
+    if type(comparison) is not bool:
+        raise ValueError('runtime.comparison_enabled must be a boolean')
     return Config(
-        runtime=Runtime(apm_enabled=enabled, n8n_enabled=n8n),
+        runtime=Runtime(apm_enabled=enabled, n8n_enabled=n8n, comparison_enabled=comparison),
         target=Target(
             host=str(target.get("host", "http://localhost:3000")),
             project_hint=str(target.get("project_hint", "demo")),
