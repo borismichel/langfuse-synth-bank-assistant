@@ -94,7 +94,7 @@ Conduct denominators cover the 58 mandatory historical turns only. Blocked turns
 
 Available: model-free history, target validation, volume confirmation, split generation/import, exact-run verification, bilingual live retrieval and guardrails, customer-bound confirmed banking actions, private participant state and reset, verified answer feedback, managed production prompt association, masked tracing, explicitly activated P1–P5 managed judges, annotation queues, measured calibration, bounded application experiments, optional bilingual voice, optional private complaint workflow, and this target-specific runbook.
 
-Pending under Depot spec #365: prompt promotion, governance and full operational qualification. This candidate is not the full-spec catalogue release.
+Prompt promotion and provider comparison are implemented and described in their chapters. Full operational qualification and conditional governance remain tracked by Depot spec #365. Actual-provider, native-evidence and lifecycle rehearsal results determine final catalogue readiness; local contract checks alone do not qualify this candidate.
 
 ## Deployment and recovery
 
