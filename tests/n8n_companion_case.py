@@ -8,7 +8,7 @@ from threading import Thread
 import httpx
 from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTraceServiceRequest
 
-exports, model_calls = [], []
+exports, model_calls, dispatch_events = [], [], []
 class Target(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
@@ -22,7 +22,13 @@ class Target(BaseHTTPRequestHandler):
         raw = self.rfile.read(int(self.headers['content-length']))
         if self.headers.get('content-encoding') == 'gzip':
             raw = gzip.decompress(raw)
+        from operation_fixture import respond
+        if self.path.endswith('/operation-permit'):
+            dispatch_events.append('permit')
+        if respond(self, raw):
+            return
         if self.path == '/chat/completions':
+            dispatch_events.append('model')
             request = json.loads(raw)
             model_calls.append(request)
             answer = (json.dumps({'category': 'fees', 'severity': 'medium', 'regulatory_escalation': False,
@@ -41,6 +47,8 @@ class Target(BaseHTTPRequestHandler):
 server = ThreadingHTTPServer(('127.0.0.1', 0), Target)
 thread = Thread(target=server.serve_forever, daemon=True); thread.start()
 base = f'http://127.0.0.1:{server.server_port}'
+from operation_fixture import configure
+configure(server.server_port)
 os.environ.update(LANGFUSE_BASE_URL=base, LANGFUSE_PUBLIC_KEY='pk-fixture', LANGFUSE_SECRET_KEY='sk-fixture',
     OPENAI_BASE_URL=base, OPENAI_API_KEY='fixture-key', LLM_PROVIDER='openai', LLM_MODEL='gpt-4o')
 from langfuse_synth_core.companion import CompanionAdapter
@@ -60,7 +68,7 @@ import uvicorn
 
 async def delivered():
     proof = 'a' * 64
-    os.environ.update(PORTAL_LIVE_PROOF=proof, PORTAL_LIVE_INSTANCE_ID='proof-instance',
+    os.environ.update(PORTAL_LIVE_PROOF=proof,
         PORTAL_LIVE_PUBLIC_ORIGIN='http://localhost:3009', LIVE_BASE_PATH='/live/proof',
         PORTAL_LIVE_PROTECTED_PATHS=json.dumps([{'path': '/n8n', 'access': 'presenter'}]))
     service = WorkflowService(adapter, enabled=True)
@@ -93,6 +101,7 @@ async def delivered():
             assert response.status_code == 200, response.text
             result = response.json()
             assert result['category'] == 'fees' and len(model_calls) == 2, result
+            assert dispatch_events == ['permit', 'model', 'permit', 'model'], dispatch_events
             assert result['n8n_execution_url'].startswith('/live/proof/n8n/')
             assert result['trace_url'].startswith(base + '/project/fixture-project/traces/')
             async with client.stream('GET', local + '/n8n/rest/push?pushRef=fixture', headers=headers) as stream:
@@ -121,7 +130,8 @@ async def delivered():
     assert len(model_calls) == 2
     assert 'ana@example.com' not in str(exports) and '4111 1111' not in str(exports)
     print(json.dumps({'delivered_editor': True, 'asset': True, 'private_access': True,
-        'native_and_generations_same_trace': True, 'sse_over_30s': True, 'cleanup': True}))
+        'native_and_generations_same_trace': True, 'sse_over_30s': True, 'cleanup': True,
+        'fresh_permission_per_model_call': True}))
 
 try:
     asyncio.run(delivered())
