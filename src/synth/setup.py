@@ -24,6 +24,10 @@ def run_setup_prompts(cfg):
                 print(f'Created initial banking prompt: version {prompt.version}', flush=True)
             else:
                 raise ValueError('Existing banking prompt has no production label; assign it explicitly before deploying.')
+        if cfg.runtime.n8n_enabled:
+            from .complaint_prompt import setup
+            print('Preparing the complaint workflow prompt', flush=True)
+            setup(client)
         from .history_prompts import setup_history_prompts
         setup_history_prompts(cfg, client)
     finally:

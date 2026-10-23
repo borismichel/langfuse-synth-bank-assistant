@@ -1,0 +1,6 @@
+{
+  "name": "northwind-managed-workflow-runtime",
+  "private": true,
+  "version": "1.0.0",
+  "dependencies": { "n8n": "2.42.4" }
+}

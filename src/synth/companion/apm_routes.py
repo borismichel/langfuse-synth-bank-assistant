@@ -1,24 +1,13 @@
 """Private read-only Jaeger route; no portal credentials forwarded to the child."""
-import json
-from pathlib import Path
-
 import httpx
 from fastapi import HTTPException, Request
 from fastapi.responses import RedirectResponse, StreamingResponse
 from langfuse_synth_core.live import paths
-from synth.receipt import RunReceipt
 
 
 def apm_enabled():
-    path = Path(RunReceipt.state_dir()) / 'runtime-config.json'
-    if not path.exists():
-        return False
-    if path.stat().st_size > 4096:
-        raise ValueError('Invalid runtime configuration')
-    config = json.loads(path.read_text())
-    if not isinstance(config, dict) or set(config) != {'apm_enabled'} or type(config['apm_enabled']) is not bool:
-        raise ValueError('Invalid runtime configuration')
-    return config['apm_enabled']
+    from .runtime_options import enabled
+    return enabled('apm_enabled')
 
 
 def mount_apm(app, service):

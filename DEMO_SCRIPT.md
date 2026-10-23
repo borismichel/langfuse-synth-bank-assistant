@@ -48,9 +48,9 @@ Conduct denominators cover the 58 mandatory historical turns only. Blocked turns
 
 ## Candidate capabilities
 
-Available: model-free history, target validation, volume confirmation, split generation/import, exact-run verification, bilingual live retrieval and guardrails, customer-bound confirmed banking actions, private participant state and reset, verified answer feedback, managed production prompt association, masked tracing, explicitly activated P1–P5 managed judges, and this target-specific runbook.
+Available: model-free history, target validation, volume confirmation, split generation/import, exact-run verification, bilingual live retrieval and guardrails, customer-bound confirmed banking actions, private participant state and reset, verified answer feedback, managed production prompt association, masked tracing, explicitly activated P1–P5 managed judges, optional private complaint workflow, and this target-specific runbook.
 
-Pending under Depot spec #365: conduct aggregation, annotations, experiments, prompt promotion, provider comparisons, voice, n8n, governance and full operational qualification. This candidate is not the full-spec catalogue release.
+Pending under Depot spec #365: conduct aggregation, annotations, experiments, prompt promotion, provider comparisons, voice, governance and full operational qualification. This candidate is not the full-spec catalogue release.
 
 ## Deployment and recovery
 
@@ -185,3 +185,15 @@ Seed setup, generation, import and verification never call these controls,
 activate paid evaluation or receive model credentials. Live qualification must
 record the actual selected provider/model, five native managed results on new
 English/Spanish answers, negative controls, and the final paused rule state.
+
+## Complaint workflow (optional)
+
+Enable **Complaint workflow** before deployment and open its private link as a
+presenter. In n8n, open **Complaint** to inspect the synthetic input, then select
+**Execute workflow**. Follow **Mask PII**, **Classify complaint** and **Draft reply**.
+The last output contains the classification, draft and links to the execution and
+Langfuse trace. In Langfuse, inspect the native workflow/node spans and the two
+model generations on the same trace, including the managed classification prompt.
+The draft does not claim an operational banking action. Two selected-model calls
+are chargeable per completed execution. See [workflow operation](docs/N8N.md) for
+limits, failure handling, retention and stop/reset behaviour.

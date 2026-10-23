@@ -80,6 +80,9 @@ def create_app(adapter, *, preview=False):
     from .apm_routes import apm_enabled, mount_apm
     apm = JaegerService(enabled=False if preview else apm_enabled())
     banking = None if preview else BankingService(adapter)
+    from .runtime_options import enabled
+    from .workflows import WorkflowService, mount_workflow
+    workflow = WorkflowService(adapter, enabled=not preview and enabled('n8n_enabled'))
     if not preview:
         config.bind_adapter(adapter)
 
@@ -106,6 +109,7 @@ def create_app(adapter, *, preview=False):
                     await banking.stop()
                 config.MCP_ENABLED = True
                 config.MCP_URL = banking.url
+            await workflow.start()
             yield
         finally:
             tasks = [r['task'] for s in sessions.values() for group in ('requests', 'resets')
@@ -115,6 +119,7 @@ def create_app(adapter, *, preview=False):
             if tasks:
                 await asyncio.gather(*tasks, return_exceptions=True)
             await judge_controls.stop()
+            await workflow.stop()
             if banking:
                 await banking.stop()
             try:
@@ -128,6 +133,7 @@ def create_app(adapter, *, preview=False):
     mount_apm(app, apm)
     from .judge_routes import mount_judges
     judge_controls = mount_judges(app, adapter, banking, preview=preview)
+    mount_workflow(app, workflow)
 
     @app.middleware('http')
     async def same_origin(request, call_next):
@@ -179,6 +185,9 @@ def create_app(adapter, *, preview=False):
         report['banking_ready'] = banking.ready
         report['ready'] = report['ready'] and banking.ready
         report['detail']['banking'] = {'ok': banking.ready}
+        report['detail']['workflow'] = workflow.detail()
+        if workflow.enabled:
+            report['ready'] = report['ready'] and workflow.ready
         if not banking.ready:
             report['detail']['banking']['error'] = banking.error or 'BankingProcessExited'
         report['detail']['apm'] = {'enabled': apm.enabled, 'ok': apm.ready if apm.enabled else True}
@@ -207,7 +216,8 @@ def create_app(adapter, *, preview=False):
                 'project_id': pid, 'project_url': project_url, 'prompt_name': prompts.PROMPT_NAME,
                 'prompt_label': 'production', 'production_prompt': prompt, 'model': model, 'release': config.RELEASE,
                 'links': ([{'label': 'Langfuse project', 'url': project_url}] if project_url else []) +
-                         ([{'label': 'APM', 'url': paths.base_path() + '/apm/'}] if apm.ready else []),
+                         ([{'label': 'APM', 'url': paths.base_path() + '/apm/'}] if apm.ready else []) +
+                         ([{'label': 'Complaint workflow', 'url': paths.base_path() + '/n8n/workflow/northwindComplaint'}] if workflow.ready else []),
                 'customers': CUSTOMERS, 'channels': ['web'], 'preview': preview,
                 'capabilities': {'feedback': not preview, 'banking_actions': bool(banking and banking.ready)}}
 
