@@ -16,8 +16,8 @@ score_values = None
 
 class API(BaseHTTPRequestHandler):
     def log_message(self, *_): pass
-    def send_json(self, payload):
-        self.send_response(200); self.send_header('Content-Type', 'application/json'); self.end_headers()
+    def send_json(self, payload, status=200):
+        self.send_response(status); self.send_header('Content-Type', 'application/json'); self.end_headers()
         self.wfile.write(json.dumps(payload).encode())
     def do_GET(self):
         from northwind.compliance import POLICIES
@@ -38,6 +38,11 @@ class API(BaseHTTPRequestHandler):
         if provider == 'anthropic':
             schema = request['output_config']['format']['schema']
             assert request['output_config']['format']['type'] == 'json_schema'
+            # Captured live provider rejection; generic JSON Schema validity did not catch it.
+            if schema['properties'].get('score', {}).get('type') == ['number', 'null']:
+                self.send_json({'type':'error','error':{'type':'invalid_request_error',
+                    'message':"output_config.format.schema: Invalid schema: Enum value 0 does not match declared type '['number', 'null']'"}}, 400)
+                return
         else:
             fmt = request['response_format']
             assert fmt['type'] == 'json_schema' and fmt['json_schema']['strict'] is True
@@ -47,8 +52,10 @@ class API(BaseHTTPRequestHandler):
                 'verdict':{'type':'string','enum':categories}},
                 'required':['reasoning','verdict'],'additionalProperties':False}
         else:
+            score_schema=({'anyOf':[{'type':'number','enum':[0,0.5,1]},{'type':'null'}]}
+                          if None in score_values else {'type':'number','enum':[0,0.5,1]})
             expected={'type':'object','properties':{'reason':{'type':'string'},
-                'score':{'type':['number','null'] if None in score_values else 'number','enum':score_values}},
+                'score':score_schema},
                 'required':['reason','score'],'additionalProperties':False}
         assert schema == expected
         if provider == 'anthropic':
@@ -116,6 +123,7 @@ try:
             reply['text']=json.dumps({'reason':'Supplied evidence.', 'score':value})
             result=call_judge(adapter,model='fixture-judge',prompt=prompt,inputs=inputs,score_values=score_values)
             assert result['output_valid'] is True and result['score']==value, result
+            assert result['usage']=={'input':31,'output':17}
         for text in ('{"reason":"Evidence", "score":true}', '{"reason":"Evidence", "score":"1"}',
                      '{"reason":"Evidence", "score":0.7}', '{"reason":"Evidence", "score":NaN}',
                      '{"reason":"Evidence", "score":1,"score":0}', '{"score":1}',
@@ -123,9 +131,16 @@ try:
             reply['text']=text
             result=call_judge(adapter,model='fixture-judge',prompt=prompt,inputs=inputs,score_values=score_values)
             assert result['output_valid'] is False and result['score'] is None, result
+            assert result['text']==text and result['usage']=={'input':31,'output':17}
         reply['text']='{"reason":"Evidence", "score":null}'
         result=call_judge(adapter,model='fixture-judge',prompt=prompt,inputs=inputs,score_values=score_values)
         assert result['output_valid'] is (None in score_values) and result['score'] is None
+        reply['text']='{"reason":"Evidence", "score":1}'
+        reply['finish']='max_tokens' if provider=='anthropic' else 'length'
+        result=call_judge(adapter,model='fixture-judge',prompt=prompt,inputs=inputs,score_values=score_values)
+        assert result['output_valid'] is False and result['score'] is None
+        assert result['usage']=={'input':31,'output':17}
+        reply['finish']=None
     client.flush()
     assert len(permits) == len(calls) == len(exports), (len(permits),len(calls),len(exports))
     assert all(span.name == 'faithfulness-judge' for span in exports)

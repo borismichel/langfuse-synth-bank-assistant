@@ -24,8 +24,13 @@ def call_judge(adapter,*,model,prompt,inputs,name='faithfulness-judge',check=lam
         if not score_values or any(v is not None and (type(v) not in (int,float) or v not in (0,0.5,1)) for v in score_values):
             raise ValueError('Judge scores must be explicit rubric values')
         field,reason,values='score','reason',list(score_values)
-        kind=['number','null'] if None in values else 'number'
-    schema={'type':'object','properties':{reason:{'type':'string'},field:{'type':kind,'enum':values}},
+        kind='number'
+    result_schema={'type':kind,'enum':values}
+    if categories is None and None in values:
+        # Anthropic rejects a mixed type-array with an enum. Keep unresolved null
+        # distinct from the exact numeric rubric values using supported branches.
+        result_schema={'anyOf':[{'type':'number','enum':[v for v in values if v is not None]}, {'type':'null'}]}
+    schema={'type':'object','properties':{reason:{'type':'string'},field:result_schema},
             'required':[reason,field],'additionalProperties':False}
     check()
     adapter.check_spending(provider)
