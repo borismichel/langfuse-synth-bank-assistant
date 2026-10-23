@@ -26,6 +26,14 @@ The delivered banking interface retains the upstream bilingual LangGraph retriev
 
 For credential-free development, run `.venv/bin/python -m synth.companion.preview`. This separate process clears inherited credentials, blocks outgoing connections and serves labelled fixture answers on loopback. Preview readiness is always false; it cannot qualify a live deployment.
 
+## Governance
+
+The protected **Governance** page reads target connectivity and the exact 4.68
+retention setting. It labels unproven native roles, audit access and protected-label
+enforcement as unavailable, with documentation and native inspection links. See
+[Governance qualification](GOVERNANCE.md) for capability states, project-key limits
+and the authorized actual-target rehearsal record.
+
 ## Historical fixture contract
 
 The portable corpus is `src/synth/history.json`, frozen from upstream revision `513efb14fda3efeb61179285354fb9a63ebc36d1` plus explicitly constructed scenario controls. It preserves four upstream customers, the complete knowledge corpus and 22 upstream conduct examples. Expected labels are author-supplied synthetic fixtures, not independent human review. Recipe generation makes no network/model calls and the golden records full output at the 58-turn mandatory floor.

@@ -167,6 +167,8 @@ live_components:
   - LLM_API_KEY
   health_path: /api/health
   protected_paths:
+  - path: /manage/governance
+    access: manage
   - path: /manage/releases
     access: manage
   - path: /manage/experiments

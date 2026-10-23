@@ -22,11 +22,12 @@ def call_judge(adapter,*,model,prompt,inputs,name='faithfulness-judge',check=lam
         if provider=='anthropic':
             response=client.messages.create(model=model,max_tokens=500,messages=[{'role':'user','content':text}])
             output=''.join(block.text for block in response.content if block.type=='text')
-            usage={'input':response.usage.input_tokens,'output':response.usage.output_tokens}
+            usage={'input':getattr(response.usage,'input_tokens',None),'output':getattr(response.usage,'output_tokens',None)}
         elif provider=='openai':
             response=client.chat.completions.create(model=model,max_tokens=500,messages=[{'role':'user','content':text}])
             output=response.choices[0].message.content or ''
-            usage={'input':response.usage.prompt_tokens,'output':response.usage.completion_tokens}
+            usage={'input':getattr(response.usage,'prompt_tokens',None),'output':getattr(response.usage,'completion_tokens',None)}
         else:raise ValueError('Unsupported selected judge provider')
-        generation.update(output=output,usage_details=usage)
-    return {'text':output,'usage':usage,'latency_ms':round((time.monotonic()-started)*1000,2)}
+        if any(type(value) is not int or value<0 for value in usage.values()):usage=None
+        generation.update(output=output,usage_details=usage,metadata={'judge_provider':provider,'provider_usage_reported':usage is not None})
+    return {'text':output,'usage':usage,'generation_id':generation.id,'generation_trace_id':generation.trace_id,'latency_ms':round((time.monotonic()-started)*1000,2)}
