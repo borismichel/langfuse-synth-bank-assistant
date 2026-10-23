@@ -83,7 +83,7 @@ def test_fixture_reply_precedes_owned_confirmation_without_oracle_input(tmp_path
                 assert all(r['verified'] for r in rows.values())
             assert run['gate']['status'] == ('passed' if mode == 'conversation' else 'failed'), run['gate']
             assert run['limits'] == dict(cases_per_arm=16, arms=2, application_dispatches_per_case=10,
-                judge_calls_per_case=5, total_dispatches=480, deadline_seconds=600, concurrency=1)
+                judge_calls_per_case=5, total_dispatches=480, deadline_seconds=600, concurrency=1, judge_concurrency=2, scheduler='serial-application-two-judges-v1')
             assert run['dispatches'] == len(target['calls']) == len(target['permits'])
             # Provider HTTP bodies expose what the app actually received; oracle metadata
             # must never be inserted into its messages or system prompt.

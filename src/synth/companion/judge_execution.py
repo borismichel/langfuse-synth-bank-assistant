@@ -124,6 +124,8 @@ async def call_judge_async(adapter,*,model,prompt,inputs,deadline,name='faithful
                 if any(type(value) is not int or value<0 for value in usage.values()):usage=None
                 generation.update(output=output,usage_details=usage,metadata={'judge_provider':provider,'provider_usage_reported':usage is not None})
         except BaseException as exc:
+            generation.update(level='ERROR',status_message='cancelled' if isinstance(exc,asyncio.CancelledError) else type(exc).__name__,
+                metadata={'judge_provider':provider,'provider_usage_reported':False})
             record({'output_valid':False,'verdict':None,'usage':None,
                 'generation_id':generation.id,'generation_trace_id':generation.trace_id,
                 'latency_ms':round((time.monotonic()-started)*1000,2),

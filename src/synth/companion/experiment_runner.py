@@ -207,7 +207,9 @@ class Replay:
         policies=iter(POLICIES)
         inputs={k:row[k] for k in ('query','context')}|{'generation':row['answer']}
         labels={}
+        failure=None
         async def worker():
+            nonlocal failure
             try:
                 for policy in policies:
                     self.check()
@@ -223,7 +225,8 @@ class Replay:
                         self.cancel.set()
                         raise ValueError('judge_output_invalid')
                     labels[policy.id]=judged['verdict']
-            except BaseException:
+            except BaseException as exc:
+                if failure is None and not isinstance(exc,asyncio.CancelledError):failure=exc
                 self.cancel.set()
                 raise
         async def stopped():
@@ -236,6 +239,7 @@ class Replay:
         try:
             done,_=await asyncio.wait((work,stop),return_when=asyncio.FIRST_COMPLETED)
             if work in done:await work
+            elif failure is not None:raise failure
             else:await stop
             return labels
         except BaseException:

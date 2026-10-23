@@ -62,6 +62,16 @@ def test_two_judges_share_one_serial_row_and_cancel_without_orphan_calls(tmp_pat
                 assert row['judge_results']['P1']['usage']['output']==12
                 assert set(row['judge_results'])=={'P1','P2','P3'}
                 assert all(r['generation_id'] and r['generation_trace_id']==row['trace_id'] for r in row['judge_results'].values())
+                observations={o['id']:o for o in target['observations']}
+                parents=set()
+                for policy,judged in row['judge_results'].items():
+                    generation=observations[judged['generation_id']]
+                    parent=observations[generation['parentObservationId']]
+                    assert parent['name']=='experiment-policy-evaluation' and parent['parentObservationId']==row['observation_id']
+                    assert generation['promptName']==run['scope']['rubrics'][policy]['name']
+                    assert generation['promptVersion']==run['scope']['rubrics'][policy]['version']
+                    parents.add(parent['id'])
+                assert len(parents)==3,'Every policy has its own context'
                 assert run['limits']['concurrency']==1 and run['limits']['judge_concurrency']==2
                 assert browser.post('/manage/experiments/start',json=body).json()==run
                 assert len(target['calls'])==5

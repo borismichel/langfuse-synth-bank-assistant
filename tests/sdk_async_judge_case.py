@@ -69,14 +69,26 @@ async def main():
         until=time.monotonic()+1
         while not disconnected.is_set() and time.monotonic()<until:await asyncio.sleep(.01)
         assert disconnected.is_set(),'Timeout returned while provider connection was still receiving bytes'
-        assert len(calls)==len(permits)==3,'No retry or extra paid request'
+        disconnected.clear()
+        pending=asyncio.create_task(judge())
+        until=time.monotonic()+2
+        while len(calls)<4 and time.monotonic()<until:await asyncio.sleep(.01)
+        assert len(calls)==4
+        pending.cancel()
+        try:await pending
+        except asyncio.CancelledError:pass
+        else:raise AssertionError('Explicit cancellation was swallowed')
+        until=time.monotonic()+1
+        while not disconnected.is_set() and time.monotonic()<until:await asyncio.sleep(.01)
+        assert disconnected.is_set(),'Cancelled request still owns a receiving socket'
+        assert len(calls)==len(permits)==4,'No retry or extra paid request' 
     finally:
         await config.close_native_clients()
     assert adapter.native_llm().judge.is_closed,'Owned judge client must close before completion'
 try:
     asyncio.run(main());client.flush()
     generations=[s for s in exports if s.name=='faithfulness-judge']
-    assert len(generations)==3,'Exactly one generation per admitted request, including deadline failure'
+    assert len(generations)==4,'Exactly one generation per admitted request, including deadline failure'
     for span in generations:
         attrs={a.key:a.value for a in span.attributes}
         assert attrs['langfuse.observation.prompt.name'].string_value=='fixture-policy'
