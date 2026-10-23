@@ -114,9 +114,15 @@ artifacts:
   render: markdown
   title: Presenter Runbook
 assets:
+  screenshots:
+  - docs/screenshots/spanish-voice-fixture.png
+  - docs/screenshots/provider-comparison-fixture.png
+  - docs/screenshots/prompt-release-fixture.png
   docs:
   - path: docs/DEPOT_KIT.md
     title: Overview
+  - path: docs/CODING_AGENT_WORKSHOP.md
+    title: Coding-agent workshop
   - path: docs/PROMPT_RELEASES.md
     title: Prompt promotion and rollback
   - path: docs/VOICE.md

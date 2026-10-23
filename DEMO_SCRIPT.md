@@ -1,6 +1,50 @@
 # Northwind Bank Assistant — Presenter Runbook
 
-Synthetic bilingual banking history for a banking operations audience. All customers, answers, tool receipts, scores, token counts and costs are frozen demonstration fixtures. They are not actual customer data, model spend, independent human review or managed judge results. The separate Companion produces genuine live evidence using the provider selected in Depot.
+Synthetic bilingual banking history for a banking operations audience. The imported historical customers, answers, tool receipts, scores, token counts and costs are frozen demonstration fixtures. They are not actual customer data, model spend, independent human review or managed judge results. The separate Companion produces genuine live evidence using the provider selected in Depot.
+
+## Evals-first presenter route
+
+Open this deployment in Depot and select **Northwind Bank**. The normal route uses the delivered assistant and Langfuse; it requires no local terminal. Use your own authorised Langfuse account for native views and human annotation. Deployment completion, a healthy app and a passed single-cohort experiment are different claims. The target-specific sections at the end identify this deployment's history, exact cases, datasets, prompt versions and verification time.
+
+Before presenting, confirm the deployment has passed verification, the selected chat model is available and the required options are enabled. Prepare managed policy judges deliberately; their remote calls have separate costs and can continue after the app stops. Choose an exact available judge model for paid comparisons. Never substitute an older run when the current evidence is missing.
+
+| Step | Delivered screen and action | Expected observation | Recovery or decision |
+| --- | --- | --- | --- |
+| 1. Inspect a symptom | **Historical evidence** → the exact `dispute-window-en-failure` and recovery case links. Compare the lookup tool input, receipt and delivered answer. Then inspect `cost-failure` against its baseline. | A 30-day query misses the older payment; the 60-day recovery finds it. Larger retrieval preserves the answer but increases constructed token usage. Historical labels and costs are synthetic fixtures. | Use the full-run time-window link if the default native date filter hides history. A missing exact case stops this beat. |
+| 2. Reproduce a conversation | **Customer assistant** → Ana Torres → “International wire fees?” → “And what is the cutoff?”; start a new conversation and repeat in Spanish. Ask to dispute the UNKNOWN MERCHANT LAGOS charge, inspect the proposal, then explicitly confirm it. | Separate turns share one session. Retrieval cites authoritative policy. The proposal has no completed mutation; confirmation has the actual receipt. | A pending/failed answer is not success. Use the same request's retry control after a transport failure. **New conversation** keeps banking changes; **Reset demo state** restores the selected customer's state. |
+| 3. Inspect policy and human evidence | **Policy judges** → inspect/prepare the five policy rules; explicitly activate only the intended rules. Produce a fresh eligible answer and open its exact native observation. **Presenter actions** → **Review and calibration** → prepare the native review queue. | Actual managed EVAL P1–P5 scores belong to the delivered assistant answer. Missing/unknown policy results remain visible. A human completes an annotation under their own native identity. | Wait for the exact readback; a queued evaluator is not a verdict. Constructed historical labels or automated UI clicks cannot stand in for independent human annotation. |
+| 4. Test a change | **Application experiments** → prepare control/regression versions → choose a fixed cohort and exact prompt/judge versions → acknowledge cost → start once → **Refresh native evidence**. | The passing control and intended regression are measured on identical inputs and criteria. Expected/scored/missing/error counts and actual generation usage are inspectable. | A failed baseline, absent usage or incomplete native evidence blocks the gate. Readback retries do not rerun models; a new comparison does. Rehearse each required cohort separately. |
+| 5. Release and restore | **Prompt releases** → select a passed current-policy application comparison → **Promote tested prompt**. Send a fresh conversation and inspect its actual prompt version and policy outcomes. Then **Restore previous prompt** and inspect another fresh answer. | Promotion records the exact tested candidate and previous version. Both transitions take effect without restarting the app and are proved by new traces. | Changed evidence or production blocks the action. An unconfirmed mutation requires native prompt-history inspection; do not blindly repeat it. A denied update stays denied. |
+
+The detailed chapters below explain the same actions, limits and evidence. Use **Application experiments** → **Judge comparison** for single-versus-split judge measurement and its **Provider comparison** link for explicitly selected models on separate providers. Neither comparison authorises prompt promotion. Optional voice, complaint workflow and APM are part of the full-kit qualification and have their own chapters. Native governance claims remain conditional on actual target permissions and evidence.
+
+## Rehearsal record
+
+Record the release digest, target/project, deployment ID, selected models, enabled options and UTC time before rehearsal. For each step retain the actual native trace, experiment or prompt version link; record the measured result, not the expected narrative. A second presenter follows this document and records their own outcomes and gaps. A failed or skipped required beat leaves full qualification pending.
+
+Capture the delivered app, native evidence and option screens without secrets or unrelated project data. Catalogue screenshots must be bundled immutable image assets, with a caption identifying the target, candidate and whether evidence is fixture or live. Local screenshots and a prior candidate's run do not qualify the current release. Target-specific screenshots and the second-presenter record are release evidence; they must be added before final catalogue publication.
+
+## Screen references — local fixtures
+
+These captures show the delivered browser controls against model-free local API fixtures on 23 October 2026. They are UI references, not real-provider results, target governance proof or qualification of the final release. The immutable image links keep these captions tied to the original captures. Use current-deployment native links for live evidence.
+
+### Spanish voice interface after an explicitly confirmed synthetic card block
+
+![Local fixture: Spanish voice interface after an explicitly confirmed synthetic card block](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/3323283acac8a1edbd4cbfddf10eb868597fb7ab/docs/screenshots/spanish-voice-fixture.png)
+
+[Open full-size fixture capture](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/3323283acac8a1edbd4cbfddf10eb868597fb7ab/docs/screenshots/spanish-voice-fixture.png)
+
+### Provider comparison with separately displayed application and judge accounting
+
+![Local fixture: Provider comparison with separately displayed application and judge accounting](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/3323283acac8a1edbd4cbfddf10eb868597fb7ab/docs/screenshots/provider-comparison-fixture.png)
+
+[Open full-size fixture capture](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/3323283acac8a1edbd4cbfddf10eb868597fb7ab/docs/screenshots/provider-comparison-fixture.png)
+
+### Prompt release controls after promotion and recorded-version rollback
+
+![Local fixture: Prompt release controls after promotion and recorded-version rollback](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/3323283acac8a1edbd4cbfddf10eb868597fb7ab/docs/screenshots/prompt-release-fixture.png)
+
+[Open full-size fixture capture](https://raw.githubusercontent.com/borismichel/langfuse-synth-bank-assistant/3323283acac8a1edbd4cbfddf10eb868597fb7ab/docs/screenshots/prompt-release-fixture.png)
 
 ## Historical walkthrough
 
@@ -50,7 +94,7 @@ Conduct denominators cover the 58 mandatory historical turns only. Blocked turns
 
 Available: model-free history, target validation, volume confirmation, split generation/import, exact-run verification, bilingual live retrieval and guardrails, customer-bound confirmed banking actions, private participant state and reset, verified answer feedback, managed production prompt association, masked tracing, explicitly activated P1–P5 managed judges, annotation queues, measured calibration, bounded application experiments, optional bilingual voice, optional private complaint workflow, and this target-specific runbook.
 
-Pending under Depot spec #365: prompt promotion, governance and full operational qualification. This candidate is not the full-spec catalogue release.
+Prompt promotion and provider comparison are implemented and described in their chapters. Full operational qualification and conditional governance remain tracked by Depot spec #365. Actual-provider, native-evidence and lifecycle rehearsal results determine final catalogue readiness; local contract checks alone do not qualify this candidate.
 
 ## Deployment and recovery
 
