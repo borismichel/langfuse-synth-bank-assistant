@@ -62,6 +62,21 @@ def experiment_target(*, barrier=None):
                 return self.reply({'data':rows,'meta':{'page':1,'limit':100,'totalItems':len(rows),'totalPages':1}})
             return self.reply(row if row else {'message':'not found'},200 if row else 404)
 
+        def do_PATCH(self):
+            path = unquote(urlparse(self.path).path)
+            body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+            data['writes'].append((path,body))
+            if data.get('patch_mode')=='denied':return self.reply({'message':'label denied'},403)
+            name, version = path.split('/v2/prompts/',1)[1].rsplit('/versions/',1)
+            row = data['versions'].get((name,int(version)))
+            if not row:return self.reply({'message':'not found'},404)
+            for label in body['newLabels']:
+                for (n,v), other in data['versions'].items():
+                    if n==name and label in other.get('labels',[]):other['labels'].remove(label)
+                row.setdefault('labels',[]).append(label)
+            if data.get('patch_mode')=='lost':return self.reply({'message':'upstream unavailable'},503)
+            return self.reply(row)
+
         def do_POST(self):
             path = urlparse(self.path).path
             raw = self.rfile.read(int(self.headers['Content-Length']))

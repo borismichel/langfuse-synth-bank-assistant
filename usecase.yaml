@@ -105,6 +105,8 @@ assets:
   docs:
   - path: docs/DEPOT_KIT.md
     title: Overview
+  - path: docs/PROMPT_RELEASES.md
+    title: Prompt promotion and rollback
 teardown:
   note: Depot removes local containers and state. Seeded Langfuse observations remain.
     Use a fresh disposable project or an explicitly authorised project reset before
@@ -127,6 +129,8 @@ live_components:
   health_path: /api/health
   spending_check: {version: 1}
   protected_paths:
+  - path: /manage/releases
+    access: manage
   - path: /manage/experiments
     access: manage
   - path: /manage/judges

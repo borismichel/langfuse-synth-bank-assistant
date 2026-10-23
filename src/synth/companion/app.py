@@ -139,6 +139,8 @@ def create_app(adapter, *, preview=False):
     mount_workflow(app, workflow)
     from .experiments import mount_experiments
     experiment_controls = mount_experiments(app, adapter, banking, preview=preview)
+    from .releases import mount_releases
+    mount_releases(app, experiment_controls)
     from .review_routes import mount_reviews
     review_controls = mount_reviews(app, adapter, banking, preview=preview)
 
@@ -162,6 +164,7 @@ def create_app(adapter, *, preview=False):
         content = content.replace('<nav class="tabs" role="tablist">', '<nav class="tabs" role="tablist"><a class="history-link" style="padding:12px 16px;color:inherit" href="' + escape(prefix) + '/history">Historical evidence</a>')
         if not preview:
             content = content.replace('<nav class="tabs" role="tablist">', '<nav class="tabs" role="tablist"><a class="history-link" style="padding:12px 16px;color:inherit" href="' + escape(prefix) + '/manage/experiments">Application experiments</a>')
+            content = content.replace('<nav class="tabs" role="tablist">', '<nav class="tabs" role="tablist"><a class="history-link" style="padding:12px 16px;color:inherit" href="' + escape(prefix) + '/manage/releases">Prompt releases</a>')
             content = content.replace('<nav class="tabs" role="tablist">', '<nav class="tabs" role="tablist"><a class="history-link" style="padding:12px 16px;color:inherit" href="' + escape(prefix) + '/manage/judges">Policy judges</a>')
         if not preview:
             content = content.replace('</main>', '<footer style="padding:16px;color:#64748b"><details><summary>Presenter actions</summary><a href="' + escape(prefix) + '/manage/reviews">Review and calibration</a></details></footer></main>')
