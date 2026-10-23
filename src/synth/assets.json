@@ -691,7 +691,7 @@
           "context": "[KB-202] International wire transfers (https://help.northwind.example/transfers/kb-202): International wires are sent via SWIFT. Fee: USD 35 per outgoing wire (USD 0 for Premier accounts); incoming wires cost USD 10. Cut-off time is 3:00 PM local time on business days; wires submitted after the cut-off are processed the next business day. Typical delivery is 1 to 3 business days. The exchange rate applied includes a margin of up to 2% over the mid-market rate.",
           "generation": "An outgoing international wire costs USD 35 (free for Premier accounts) and incoming wires cost USD 10. The cut-off is 3:00 PM local time on business days; later wires go out the next business day. [KB-202]"
         },
-        "expected_output": "1.0",
+        "expected_output": 1.0,
         "metadata": {
           "defect": "none",
           "rubric": "faithfulness-v1",
@@ -706,7 +706,7 @@
           "context": "[KB-103] Credit card interest, fees and minimum payment (https://help.northwind.example/cards/kb-103): The Northwind Classic card has a purchase APR of 24.9% and a cash-advance APR of 29.9%. The Northwind Platinum card has a purchase APR of 21.9%. There is no interest on purchases if the full statement balance is paid by the due date (grace period of 25 days). Late payment fee: USD 29. Cash advance fee: 4% of the amount, minimum USD 10. Foreign transaction fee: 3% on Classic, 0% on Platinum. Minimum payment is the greater of USD 25 or 2% of the balance.",
           "generation": "The late payment fee is USD 29. Paying the full statement balance by the due date avoids interest. [KB-103]"
         },
-        "expected_output": "1.0",
+        "expected_output": 1.0,
         "metadata": {
           "defect": "none",
           "rubric": "faithfulness-v1",
@@ -721,7 +721,7 @@
           "context": "[KB-102] Disputing a card transaction (https://help.northwind.example/cards/kb-102): You can dispute a card transaction you do not recognise or that was charged incorrectly within 60 days of the statement date. Open a dispute in the app or through the assistant, citing the transaction. Northwind issues a provisional credit within 10 business days while the case is investigated. Investigations conclude within 45 days (90 days for international transactions). If the dispute is resolved in the merchant's favour, the provisional credit is reversed.\n\n[tool:open_dispute] {\"case_id\": \"DSP-481220\", \"status\": \"opened\", \"provisional_credit_within_business_days\": 10, \"investigation_max_days\": 45}",
           "generation": "Done — dispute DSP-481220 is open. You'll get a provisional credit within 10 business days, and the investigation finishes within 45 days."
         },
-        "expected_output": "1.0",
+        "expected_output": 1.0,
         "metadata": {
           "defect": "none",
           "rubric": "faithfulness-v1",
@@ -736,7 +736,7 @@
           "context": "[KB-302] Overdraft protection (https://help.northwind.example/accounts/kb-302): Overdraft protection is opt-in. When enabled, transactions that exceed your balance are covered up to USD 500 for a fee of USD 15 per day overdrawn (maximum 3 fees per month). You can turn overdraft protection off at any time in the app. If it is off, transactions that would overdraw the account are declined at no charge.",
           "generation": "It's opt-in: it covers up to USD 500 for USD 15 per day overdrawn, with at most 3 fees a month. You can switch it off in the app at any time. [KB-302]"
         },
-        "expected_output": "1.0",
+        "expected_output": 1.0,
         "metadata": {
           "defect": "none",
           "rubric": "faithfulness-v1",
@@ -751,7 +751,7 @@
           "context": "[KB-701] Investment products and advice (https://help.northwind.example/investments/kb-701): Northwind Investments offers mutual funds, a managed portfolio service and brokerage. The virtual assistant can describe products and fees but cannot provide personalised investment advice or recommend specific securities, cryptocurrencies or market timing. For advice, book a session with a licensed Northwind financial advisor. Investment products are not deposits, are not insured by the deposit insurance scheme, and may lose value.",
           "generation": "I can't give personalised investment advice or recommend crypto. A licensed Northwind advisor can help — would you like me to book a session?"
         },
-        "expected_output": "1.0",
+        "expected_output": 1.0,
         "metadata": {
           "defect": "none",
           "rubric": "faithfulness-v1",
@@ -766,7 +766,7 @@
           "context": "[KB-202] International wire transfers (https://help.northwind.example/transfers/kb-202): International wires are sent via SWIFT. Fee: USD 35 per outgoing wire (USD 0 for Premier accounts); incoming wires cost USD 10. Cut-off time is 3:00 PM local time on business days; wires submitted after the cut-off are processed the next business day. Typical delivery is 1 to 3 business days. The exchange rate applied includes a margin of up to 2% over the mid-market rate.",
           "generation": "An outgoing international wire costs USD 35 and the cut-off is mid-afternoon on business days. [KB-202]"
         },
-        "expected_output": "0.5",
+        "expected_output": 0.5,
         "metadata": {
           "defect": "vague cut-off (3:00 PM in policy)",
           "rubric": "faithfulness-v1",
@@ -781,7 +781,7 @@
           "context": "[KB-101] Lost or stolen debit and credit cards (https://help.northwind.example/cards/kb-101): If your card is lost or stolen, block it immediately in the app (Cards > Block card) or ask the assistant to block it. Blocking is instant and free. A replacement card is issued automatically and arrives in 5 to 7 business days; express delivery in 2 business days costs USD 15. Transactions made after you report the card are not your responsibility. Never share your PIN, CVV or one-time passcodes with anyone, including bank staff.",
           "generation": "A replacement card usually arrives within about a week; express delivery takes 2 business days for USD 15. [KB-101]"
         },
-        "expected_output": "0.5",
+        "expected_output": 0.5,
         "metadata": {
           "defect": "'about a week' vs 5-7 business days",
           "rubric": "faithfulness-v1",
@@ -796,7 +796,7 @@
           "context": "[KB-303] Savings accounts and term deposits (https://help.northwind.example/accounts/kb-303): High-Yield Savings pays a variable 3.10% APY with no minimum balance. Term deposits pay fixed rates: 6 months 3.60% APY, 12 months 3.85% APY, 24 months 3.70% APY, minimum USD 1,000. Early withdrawal from a term deposit forfeits 90 days of interest. Deposits are protected by the national deposit insurance scheme up to its legal limit.",
           "generation": "Term deposits pay fixed rates: 3.60% for 6 months and 3.85% for 12 months, with a USD 1,000 minimum. Withdrawing early costs you some interest. [KB-303]"
         },
-        "expected_output": "0.5",
+        "expected_output": 0.5,
         "metadata": {
           "defect": "omits the 90-day penalty size and 24m rate",
           "rubric": "faithfulness-v1",
@@ -811,7 +811,7 @@
           "context": "[KB-201] Domestic transfers and daily limits (https://help.northwind.example/transfers/kb-201): Transfers between Northwind accounts are instant and free, 24/7. Transfers to other banks via instant payments are free up to USD 5,000 per day for Everyday accounts and USD 20,000 per day for Premier accounts. You can request a temporary limit increase in the app; increases above USD 20,000 require a call-back verification.",
           "generation": "Transfers to other banks are free up to USD 5,000 a day on Everyday accounts, and higher on Premier. [KB-201]"
         },
-        "expected_output": "0.5",
+        "expected_output": 0.5,
         "metadata": {
           "defect": "'higher' instead of USD 20,000",
           "rubric": "faithfulness-v1",
@@ -826,7 +826,7 @@
           "context": "[KB-302] Overdraft protection (https://help.northwind.example/accounts/kb-302): Overdraft protection is opt-in. When enabled, transactions that exceed your balance are covered up to USD 500 for a fee of USD 15 per day overdrawn (maximum 3 fees per month). You can turn overdraft protection off at any time in the app. If it is off, transactions that would overdraw the account are declined at no charge.",
           "generation": "You can switch it off any time in the app: 1. Open the app and go to Account settings. 2. Tap Overdraft Protection and toggle it off. Transactions that would overdraw the account are then declined at no charge. [KB-302]"
         },
-        "expected_output": "0.5",
+        "expected_output": 0.5,
         "metadata": {
           "defect": "invented navigation steps / menu names not in KB-302",
           "rubric": "faithfulness-v1",
@@ -841,7 +841,7 @@
           "context": "[KB-401] Personal loans (https://help.northwind.example/loans/kb-401): Personal loans from USD 2,000 to USD 50,000, terms of 12 to 72 months. APR ranges from 8.9% to 21.9% depending on credit profile and term; the rate offered is fixed for the life of the loan. There is no prepayment penalty. Origination fee: 1% of the loan amount. A soft credit check is used for a pre-qualification quote and does not affect your credit score; a hard check is done only when you accept an offer.",
           "generation": "No prepayment penalty. Rates are fixed, from 8.9% to about 22% depending on your profile. [KB-401]"
         },
-        "expected_output": "0.5",
+        "expected_output": 0.5,
         "metadata": {
           "defect": "'about 22%' vs 21.9%",
           "rubric": "faithfulness-v1",
@@ -856,7 +856,7 @@
           "context": "[KB-202] International wire transfers (https://help.northwind.example/transfers/kb-202): International wires are sent via SWIFT. Fee: USD 35 per outgoing wire (USD 0 for Premier accounts); incoming wires cost USD 10. Cut-off time is 3:00 PM local time on business days; wires submitted after the cut-off are processed the next business day. Typical delivery is 1 to 3 business days. The exchange rate applied includes a margin of up to 2% over the mid-market rate.",
           "generation": "An outgoing international wire costs USD 25 and the cut-off is 5:00 PM local time. [KB-202]"
         },
-        "expected_output": "0.0",
+        "expected_output": 0.0,
         "metadata": {
           "defect": "wrong fee and wrong cut-off",
           "rubric": "faithfulness-v1",
@@ -871,7 +871,7 @@
           "context": "[KB-102] Disputing a card transaction (https://help.northwind.example/cards/kb-102): You can dispute a card transaction you do not recognise or that was charged incorrectly within 60 days of the statement date. Open a dispute in the app or through the assistant, citing the transaction. Northwind issues a provisional credit within 10 business days while the case is investigated. Investigations conclude within 45 days (90 days for international transactions). If the dispute is resolved in the merchant's favour, the provisional credit is reversed.",
           "generation": "You have 120 days from the statement date to dispute a transaction. [KB-102]"
         },
-        "expected_output": "0.0",
+        "expected_output": 0.0,
         "metadata": {
           "defect": "120 vs 60 days",
           "rubric": "faithfulness-v1",
@@ -886,7 +886,7 @@
           "context": "[KB-103] Credit card interest, fees and minimum payment (https://help.northwind.example/cards/kb-103): The Northwind Classic card has a purchase APR of 24.9% and a cash-advance APR of 29.9%. The Northwind Platinum card has a purchase APR of 21.9%. There is no interest on purchases if the full statement balance is paid by the due date (grace period of 25 days). Late payment fee: USD 29. Cash advance fee: 4% of the amount, minimum USD 10. Foreign transaction fee: 3% on Classic, 0% on Platinum. Minimum payment is the greater of USD 25 or 2% of the balance.",
           "generation": "Yes, the Platinum card charges a 3% foreign transaction fee on every purchase abroad. [KB-103]"
         },
-        "expected_output": "0.0",
+        "expected_output": 0.0,
         "metadata": {
           "defect": "Platinum is 0%",
           "rubric": "faithfulness-v1",
@@ -901,7 +901,7 @@
           "context": "[KB-102] Disputing a card transaction (https://help.northwind.example/cards/kb-102): You can dispute a card transaction you do not recognise or that was charged incorrectly within 60 days of the statement date. Open a dispute in the app or through the assistant, citing the transaction. Northwind issues a provisional credit within 10 business days while the case is investigated. Investigations conclude within 45 days (90 days for international transactions). If the dispute is resolved in the merchant's favour, the provisional credit is reversed.\n\n[tool:open_dispute] {\"case_id\": \"DSP-481220\", \"status\": \"opened\", \"provisional_credit_within_business_days\": 10, \"investigation_max_days\": 45}",
           "generation": "Your dispute DSP-481220 is open and the USD 412 has already been refunded to your account."
         },
-        "expected_output": "0.0",
+        "expected_output": 0.0,
         "metadata": {
           "defect": "claims a refund the tool never made",
           "rubric": "faithfulness-v1",
@@ -916,7 +916,7 @@
           "context": "[KB-402] Mortgages (https://help.northwind.example/loans/kb-402): Northwind offers fixed-rate mortgages of 15, 20 and 30 years and a 5/1 adjustable-rate mortgage. Maximum loan-to-value is 80% (90% with mortgage insurance). Required documents: two years of tax returns, two recent pay slips, bank statements for the last 3 months, and the purchase agreement. Rates change daily; a rate lock is valid for 60 days.",
           "generation": "We lend up to 95% of the property value with no mortgage insurance required. [KB-402]"
         },
-        "expected_output": "0.0",
+        "expected_output": 0.0,
         "metadata": {
           "defect": "95% / no insurance vs 80% (90% with insurance)",
           "rubric": "faithfulness-v1",
