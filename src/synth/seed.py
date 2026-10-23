@@ -34,6 +34,9 @@ def run_seed(cfg: Config, *, dry_run=False, do_import=True, spool_path=None,
     ingestor.open_spool()
     ingestor.extend(events)
     ingestor.close_spool()
+    # Nonsecret runtime options use the existing read-only live spool mount.
+    (spool.parent / 'runtime-config.json').write_text(json.dumps(
+        {'apm_enabled': cfg.runtime.apm_enabled}, sort_keys=True))
     pending = dict(base_url=cfg.target.base_url, public_key=os.environ.get('LANGFUSE_PUBLIC_KEY', ''),
                    seed=cfg.generation.seed, target_traces=cfg.generation.target_traces,
                    as_of_date=str(cfg.generation.as_of_date or ''),

@@ -27,7 +27,7 @@ Verification reads every required trace and root, current-run timestamp/session,
 
 Available: model-free history, target validation, volume confirmation, split generation/import, exact-run verification, bilingual live retrieval and guardrails, customer-bound confirmed banking actions, private participant state and reset, verified answer feedback, managed production prompt association, masked tracing, and this target-specific runbook.
 
-Pending under Depot spec #365: managed judges and conduct aggregation, annotations, experiments, prompt promotion, provider comparisons, voice, n8n, APM, governance and full operational qualification. This candidate is not the full-spec catalogue release.
+Pending under Depot spec #365: managed judges and conduct aggregation, annotations, experiments, prompt promotion, provider comparisons, voice, n8n, governance and full operational qualification. This candidate is not the full-spec catalogue release.
 
 ## Deployment and recovery
 
@@ -66,3 +66,12 @@ Browser reload validates the saved conversation with the server before displayin
 Reset, cancellation and feedback operate only on the participant's owned subjects. Sharing the customer interface does not grant promotion or paid bulk-work permissions; those presenter routes and streams remain unavailable until their protected access path is integrated. The Depot proxy controls access to the deployment. Browser write requests must also match its complete origin; a valid cookie is required even when using direct HTTP clients without an Origin header.
 
 Developer preview: `.venv/bin/python -m synth.companion.preview` in a separate process. Preview clears credentials and blocks outgoing connections; its labelled replies are fixtures and its readiness is false.
+
+## APM
+
+If **APM** was enabled during configuration, submit a banking turn and open its
+**Open in APM** link while signed in as a presenter. Compare its trace ID with
+**Open in Langfuse**, then inspect the banking service and MCP timings. APM keeps
+operational structure and removes customer payloads; Langfuse retains the masked
+AI context. Public participants cannot open the APM view. Stopping the live
+instance clears its APM history. See [APM configuration and troubleshooting](docs/APM.md).

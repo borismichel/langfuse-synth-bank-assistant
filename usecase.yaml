@@ -16,6 +16,11 @@ base_config:
 config_schema:
   type: object
   properties:
+    runtime.apm_enabled:
+      type: boolean
+      default: false
+      title: APM
+      description: Start a private Jaeger view with this live instance. Trace data resets when it stops.
     generation.seed:
       type: integer
       default: 42
@@ -74,7 +79,7 @@ llm:
 live_components:
 - name: companion
   description: Bilingual banking assistant with retrieval, guardrails, confirmed
-    banking actions, participant reset and answer feedback. Voice, managed evaluations
+    banking actions, participant reset, answer feedback and optional private APM. Voice, managed evaluations
     and advanced workshop capabilities remain unavailable in this candidate.
   command: synth companion --config {config} --host 0.0.0.0 --port 8080
   port: 8080
@@ -83,6 +88,9 @@ live_components:
   - LANGFUSE_SECRET_KEY
   - LLM_API_KEY
   health_path: /api/health
+  protected_paths:
+  - path: /apm
+    access: presenter
   routes:
   - path: /
     title: Northwind Bank

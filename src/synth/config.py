@@ -10,7 +10,7 @@ golden gate holds).
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
@@ -51,9 +51,15 @@ class Generation:
 
 
 @dataclass
+class Runtime:
+    apm_enabled: bool = False
+
+
+@dataclass
 class Config:
     target: Target
     generation: Generation
+    runtime: Runtime = field(default_factory=Runtime)
 
 
 def _model_factory(raw: dict) -> Config:
@@ -63,7 +69,11 @@ def _model_factory(raw: dict) -> Config:
     generation = raw.get("generation") or {}
     if not 58 <= int(generation.get("target_traces", 64)) <= 256:
         raise ValueError("Banking history requires 58–256 traces")
+    enabled = (raw.get('runtime') or {}).get('apm_enabled', False)
+    if type(enabled) is not bool:
+        raise ValueError('runtime.apm_enabled must be a boolean')
     return Config(
+        runtime=Runtime(apm_enabled=enabled),
         target=Target(
             host=str(target.get("host", "http://localhost:3000")),
             project_hint=str(target.get("project_hint", "demo")),

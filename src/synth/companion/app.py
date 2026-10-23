@@ -76,6 +76,9 @@ def create_app(adapter, *, preview=False):
     from northwind import agent, config, knowledge, lang, prompts
     sessions = {}
     from .supervisor import BankingService
+    from .jaeger import JaegerService
+    from .apm_routes import apm_enabled, mount_apm
+    apm = JaegerService(enabled=False if preview else apm_enabled())
     banking = None if preview else BankingService(adapter)
     if not preview:
         config.bind_adapter(adapter)
@@ -83,6 +86,17 @@ def create_app(adapter, *, preview=False):
     @asynccontextmanager
     async def lifespan(app):
         try:
+            if apm.enabled:
+                import os
+                from langfuse_synth_core.companion.access import route_access, validate_protected_paths
+                policy = validate_protected_paths(json.loads(os.environ.get('PORTAL_LIVE_PROTECTED_PATHS', '[]')))
+                if not route_access('/apm', policy) or not os.environ.get('PORTAL_LIVE_PROOF'):
+                    apm.error = 'APMProtectionMissing'
+                else:
+                    await apm.start()
+                if apm.ready:
+                    config.configure_apm(apm.otlp_url, paths.base_path() + '/apm/trace/{trace_id}')
+                    banking.apm_endpoint = apm.otlp_url
             if banking:
                 try:
                     await banking.start()
@@ -102,11 +116,15 @@ def create_app(adapter, *, preview=False):
                 await asyncio.gather(*tasks, return_exceptions=True)
             if banking:
                 await banking.stop()
-            if not preview:
-                await asyncio.to_thread(config.shutdown)
+            try:
+                if not preview:
+                    await asyncio.to_thread(config.shutdown)
+            finally:
+                await apm.stop()
 
     app = FastAPI(title='Northwind Bank', lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.mount('/static', StaticFiles(directory=STATIC), name='static')
+    mount_apm(app, apm)
 
     @app.middleware('http')
     async def same_origin(request, call_next):
@@ -147,6 +165,10 @@ def create_app(adapter, *, preview=False):
         report['detail']['banking'] = {'ok': banking.ready}
         if not banking.ready:
             report['detail']['banking']['error'] = banking.error or 'BankingProcessExited'
+        report['detail']['apm'] = {'enabled': apm.enabled, 'ok': apm.ready if apm.enabled else True}
+        if apm.enabled and not apm.ready:
+            report['ready'] = False
+            report['detail']['apm']['error'] = apm.error or 'APMProcessExited'
         return report
 
     @app.get('/api/info')
@@ -168,7 +190,8 @@ def create_app(adapter, *, preview=False):
                 'langfuse_base_url': base, 'langfuse_target': 'Fixture preview' if preview else 'Configured Langfuse target',
                 'project_id': pid, 'project_url': project_url, 'prompt_name': prompts.PROMPT_NAME,
                 'prompt_label': 'production', 'production_prompt': prompt, 'model': model, 'release': config.RELEASE,
-                'links': [{'label': 'Langfuse project', 'url': project_url}] if project_url else [],
+                'links': ([{'label': 'Langfuse project', 'url': project_url}] if project_url else []) +
+                         ([{'label': 'APM', 'url': paths.base_path() + '/apm/'}] if apm.ready else []),
                 'customers': CUSTOMERS, 'channels': ['web'], 'preview': preview,
                 'capabilities': {'feedback': not preview, 'banking_actions': bool(banking and banking.ready)}}
 
