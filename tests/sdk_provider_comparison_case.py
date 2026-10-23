@@ -1,4 +1,5 @@
 import json,time
+import pytest
 from experiment_target import experiment_target
 from provider_comparison_target import two_providers
 from test_assets import seeded_run
@@ -74,7 +75,8 @@ def pause_provider_transition(target, monkeypatch):
     target['extension'] = gated
     return baseline_done, release_baseline, next_arm, candidate, release_candidate
 
-def test_delivered_provider_comparison_freezes_inputs_and_attributes_both_bindings(tmp_path,monkeypatch,request):
+@pytest.fixture
+def provider_browser(tmp_path,monkeypatch,request):
     from sdk_identifiers import numeric_span_ids
     numeric_span_ids(monkeypatch)
     from fastapi.testclient import TestClient
@@ -87,8 +89,6 @@ def test_delivered_provider_comparison_freezes_inputs_and_attributes_both_bindin
         seeded_run(tmp_path,env,target)
         assert invoke(tmp_path,'prepare-cohorts',extra_env=env).returncode==0
         two_providers(env,target,monkeypatch)
-        transition = pause_provider_transition(target, monkeypatch)
-        request.addfinalizer(lambda: (transition[1].set(), transition[4].set()))
         for k,v in env.items():monkeypatch.setenv(k,v)
         monkeypatch.setenv('SYNTH_STATE_DIR',str(tmp_path/'state'))
         monkeypatch.setenv('PORTAL_LIVE_PROOF','a'*64)
@@ -105,9 +105,6 @@ def test_delivered_provider_comparison_freezes_inputs_and_attributes_both_bindin
             assert 'Provider comparison' in page.text
             prepared=browser.post('/manage/experiments/prepare',json={}).json()
             body=dict(request_id='providers-one',cohort='english',prompt_version=prepared['control']['version'],judge_model='fixture-judge',cost_acknowledged=True)
-            start=browser.post('/manage/experiments/providers/start',json=body)
-            assert start.status_code==202,start.text
-            status_during_arm_transition(browser, monkeypatch, *transition)
             def wait():
                 deadline=time.monotonic()+40
                 while time.monotonic()<deadline:
@@ -115,90 +112,126 @@ def test_delivered_provider_comparison_freezes_inputs_and_attributes_both_bindin
                     if run['status']!='running':return run
                     time.sleep(.05)
                 raise AssertionError('Provider comparison did not finish')
-            run=wait();assert run['status']=='awaiting_readback',run
-            assert run['kind']=='provider'
-            assert len(target['openai_calls'])==32 and len(target['calls'])==192
-            assert all(r['model']=='gpt-4.1-mini' for r in target['openai_calls'])
-            assert sum(p['provider']=='openai' for p in target['permits'])==32
-            refreshed=browser.post('/manage/experiments/'+run['id']+'/readback',json={})
-            assert refreshed.status_code==200,refreshed.text
-            measured=refreshed.json()
-            assert measured['gate']['status']=='passed',measured['gate']
-            assert measured['gate']['promotion_eligible'] is False
-            assert measured['scope']['prompts']['baseline']==measured['scope']['prompts']['candidate']
-            assert measured['scope']['bindings']['candidate']=={'provider':'openai','model':'gpt-4.1-mini','role':'comparison'}
-            assert measured['scope']['judge']=={'provider':'anthropic','model':'fixture-judge','role':'primary'}
-            summary=measured['measurements']
-            assert summary['candidate']['application']['usage']=={'input':480,'output':320}
-            assert abs(summary['candidate']['application']['native_cost_usd']-0.064)<1e-8
-            assert summary['candidate']['application']['requested_model']=='gpt-4.1-mini'
-            assert summary['candidate']['application']['resolved_models']==['gpt-4.1-mini-2025-04-14']
-            assert summary['candidate']['judges']['requested_model']=='fixture-judge'
-            assert summary['candidate']['judges']['resolved_models']==['fixture-judge']
-            assert summary['candidate']['judges']['generations']==80
-            assert len({r['trace_id'] for arm in measured['arms'].values() for r in arm['rows']})==32
-            assert browser.post('/manage/experiments/providers/start',json=body).json()['id']==run['id']
-            assert len(target['openai_calls'])==32
-            for mismatch in (('model','gpt-4.1-2025-04-14'),('model','gpt-4.1-mini-2099-01-01'),
-                             ('model','gpt-4.1-mini-2025-04-14-extra'),('model',None),
-                             ('application_provider','anthropic'),('application_role','primary'),
-                             ('application_model','gpt-4.1')):
-                target['readback_identity']=mismatch
-                invalid=browser.post('/manage/experiments/'+run['id']+'/readback',json={}).json()
-                assert invalid['gate']['status']=='incomplete',mismatch
-                account=invalid['measurements']['candidate']['application']
-                assert account['missing']>0 and account['usage'] is None and account['native_cost_usd'] is None,mismatch
-                assert invalid['scope']['bindings']['candidate']['model']=='gpt-4.1-mini'
-            target['readback_identity']=('model','gpt-4.1-mini')
-            exact=browser.post('/manage/experiments/'+run['id']+'/readback',json={}).json()
-            assert exact['gate']['status']=='passed'
-            assert exact['measurements']['candidate']['application']['resolved_models']==['gpt-4.1-mini']
-            target.pop('readback_identity')
-            assert len(target['openai_calls'])==32 and len(target['calls'])==192,'Readback dispatched a model'
-            for kind in ('application','judge'):
-                target['missing_generation']=kind
-                partial=browser.post('/manage/experiments/'+run['id']+'/readback',json={}).json()
-                assert partial['gate']['status']=='incomplete'
-                account='application' if kind=='application' else 'judges'
-                for arm in partial['measurements'].values():
-                    assert arm[account]['native_cost_usd'] is None, arm[account]
-                    assert arm[account]['usage'] is None and arm[account]['missing']>0
-            target.pop('missing_generation')
-            target['missing_cost']=True
-            assert browser.post('/manage/experiments/'+run['id']+'/readback',json={}).json()['gate']['status']=='incomplete'
-
-            target.pop('missing_cost')
-            target['missing_model']=True
-            assert browser.post('/manage/experiments/providers/start',json={**body,'request_id':'missing-model'}).status_code==202
-            failed=wait()
-            assert failed['status']=='runner_failed'
-            assert len(failed['arms']['baseline']['rows'])==16
-            assert failed['arms']['candidate']['rows'][0]['provider_error']=='OpenAIModelNotFoundError'
-            assert failed['arms']['candidate']['rows'][0]['model']=='gpt-4.1-mini'
-            assert len(target['openai_calls'])==33,'Unavailable model was retried or substituted'
-            failed=browser.post('/manage/experiments/'+failed['id']+'/readback',json={}).json()
-            assert failed['measurements']['candidate']['application']['native_cost_usd'] is None
-            assert failed['measurements']['candidate']['application']['usage'] is None
-            target.pop('missing_model');target['deny_openai']=True
-            assert browser.post('/manage/experiments/providers/start',json={**body,'request_id':'denied-provider'}).status_code==202
-            denied=wait()
-            assert denied['status']=='runner_failed' and len(target['openai_calls'])==33
-            assert denied['arms']['candidate']['rows'][0]['provider_error']=='SpendingDenied'
-            target.pop('deny_openai');target['missing_usage']=True
-            assert browser.post('/manage/experiments/providers/start',json={**body,'request_id':'missing-usage'}).status_code==202
-            missing=wait()
-            missing=browser.post('/manage/experiments/'+missing['id']+'/readback',json={}).json()
-            assert missing['gate']['status']=='incomplete'
-            assert all(r['usage'] is None for r in missing['arms']['candidate']['rows'])
-            assert missing['measurements']['candidate']['application']['usage'] is None
-            target.pop('missing_usage')
-            assert browser.post('/manage/experiments/providers/start',json={**body,'cohort':'disputes','request_id':'two-turn-disputes'}).status_code==202
-            disputes=wait()
-            disputes=browser.post('/manage/experiments/'+disputes['id']+'/readback',json={}).json()
-            assert disputes['gate']['status']=='passed',disputes['gate']
-            assert all(r['turns']==2 for a in disputes['arms'].values() for r in a['rows'])
-            assert disputes['measurements']['candidate']['application']['generations']==50
+            post=browser.post
+            def measured_post(path,*args,**kwargs):
+                started=time.monotonic()
+                print(f'provider fixture: POST {path} started',flush=True)
+                response=post(path,*args,**kwargs)
+                print(f'provider fixture: POST {path} status={response.status_code} elapsed={time.monotonic()-started:.3f}s',flush=True)
+                return response
+            browser.post=measured_post
+            yield browser,target,body,wait
             assert 'fixture-openai-secret' not in json.dumps(browser.get('/manage/experiments/status').json())
+
+def test_provider_delivery_and_model_identity(provider_browser,monkeypatch,request):
+    browser,target,body,wait=provider_browser
+    transition = pause_provider_transition(target, monkeypatch)
+    request.addfinalizer(lambda: (transition[1].set(), transition[4].set()))
+    start=browser.post('/manage/experiments/providers/start',json=body)
+    assert start.status_code==202,start.text
+    status_during_arm_transition(browser, monkeypatch, *transition)
+    run=wait();assert run['status']=='awaiting_readback',run
+    assert run['kind']=='provider'
+    assert len(target['openai_calls'])==32 and len(target['calls'])==192
+    assert all(r['model']=='gpt-4.1-mini' for r in target['openai_calls'])
+    assert sum(p['provider']=='openai' for p in target['permits'])==32
+    refreshed=browser.post('/manage/experiments/'+run['id']+'/readback',json={})
+    assert refreshed.status_code==200,refreshed.text
+    measured=refreshed.json()
+    assert measured['gate']['status']=='passed',measured['gate']
+    assert measured['gate']['promotion_eligible'] is False
+    assert measured['scope']['prompts']['baseline']==measured['scope']['prompts']['candidate']
+    assert measured['scope']['bindings']['candidate']=={'provider':'openai','model':'gpt-4.1-mini','role':'comparison'}
+    assert measured['scope']['judge']=={'provider':'anthropic','model':'fixture-judge','role':'primary'}
+    summary=measured['measurements']
+    assert summary['candidate']['application']['usage']=={'input':480,'output':320}
+    assert abs(summary['candidate']['application']['native_cost_usd']-0.064)<1e-8
+    assert summary['candidate']['application']['requested_model']=='gpt-4.1-mini'
+    assert summary['candidate']['application']['resolved_models']==['gpt-4.1-mini-2025-04-14']
+    assert summary['candidate']['judges']['requested_model']=='fixture-judge'
+    assert summary['candidate']['judges']['resolved_models']==['fixture-judge']
+    assert summary['candidate']['judges']['generations']==80
+    assert len({r['trace_id'] for arm in measured['arms'].values() for r in arm['rows']})==32
+    assert browser.post('/manage/experiments/providers/start',json=body).json()['id']==run['id']
+    assert len(target['openai_calls'])==32
+    for mismatch in (('model','gpt-4.1-2025-04-14'),('model','gpt-4.1-mini-2099-01-01'),
+                     ('model','gpt-4.1-mini-2025-04-14-extra'),('model',None)):
+        target['readback_identity']=mismatch
+        invalid=browser.post('/manage/experiments/'+run['id']+'/readback',json={}).json()
+        assert invalid['gate']['status']=='incomplete',mismatch
+        account=invalid['measurements']['candidate']['application']
+        assert account['missing']>0 and account['usage'] is None and account['native_cost_usd'] is None,mismatch
+        assert invalid['scope']['bindings']['candidate']['model']=='gpt-4.1-mini'
+    target['readback_identity']=('model','gpt-4.1-mini')
+    exact=browser.post('/manage/experiments/'+run['id']+'/readback',json={}).json()
+    assert exact['gate']['status']=='passed'
+    assert exact['measurements']['candidate']['application']['resolved_models']==['gpt-4.1-mini']
+    target.pop('readback_identity')
+    assert len(target['openai_calls'])==32 and len(target['calls'])==192,'Readback dispatched a model'
+
+def test_provider_binding_and_incomplete_native_accounting(provider_browser):
+    browser,target,body,wait=provider_browser
+    assert browser.post('/manage/experiments/providers/start',json=body).status_code==202
+    run=wait();assert run['status']=='awaiting_readback',run
+    for mismatch in (('application_provider','anthropic'),('application_role','primary'),
+                     ('application_model','gpt-4.1')):
+        target['readback_identity']=mismatch
+        invalid=browser.post('/manage/experiments/'+run['id']+'/readback',json={}).json()
+        assert invalid['gate']['status']=='incomplete',mismatch
+        account=invalid['measurements']['candidate']['application']
+        assert account['missing']>0 and account['usage'] is None and account['native_cost_usd'] is None,mismatch
+        assert invalid['scope']['bindings']['candidate']['model']=='gpt-4.1-mini'
+    target.pop('readback_identity')
+    for kind in ('application','judge'):
+        target['missing_generation']=kind
+        partial=browser.post('/manage/experiments/'+run['id']+'/readback',json={}).json()
+        assert partial['gate']['status']=='incomplete'
+        account='application' if kind=='application' else 'judges'
+        for arm in partial['measurements'].values():
+            assert arm[account]['native_cost_usd'] is None, arm[account]
+            assert arm[account]['usage'] is None and arm[account]['missing']>0
+    target.pop('missing_generation')
+    target['missing_cost']=True
+    assert browser.post('/manage/experiments/'+run['id']+'/readback',json={}).json()['gate']['status']=='incomplete'
+
+    assert len(target['openai_calls'])==32 and len(target['calls'])==192,'Readback dispatched a model'
+
+def test_provider_failures_and_missing_usage(provider_browser):
+    browser,target,body,wait=provider_browser
+    target['missing_model']=True
+    assert browser.post('/manage/experiments/providers/start',json={**body,'request_id':'missing-model'}).status_code==202
+    failed=wait()
+    assert failed['status']=='runner_failed'
+    assert len(failed['arms']['baseline']['rows'])==16
+    assert failed['arms']['candidate']['rows'][0]['provider_error']=='OpenAIModelNotFoundError'
+    assert failed['arms']['candidate']['rows'][0]['model']=='gpt-4.1-mini'
+    assert len(target['openai_calls'])==1,'Unavailable model was retried or substituted'
+    failed=browser.post('/manage/experiments/'+failed['id']+'/readback',json={}).json()
+    assert failed['measurements']['candidate']['application']['native_cost_usd'] is None
+    assert failed['measurements']['candidate']['application']['usage'] is None
+    target.pop('missing_model');target['deny_openai']=True
+    assert browser.post('/manage/experiments/providers/start',json={**body,'request_id':'denied-provider'}).status_code==202
+    denied=wait()
+    assert denied['status']=='runner_failed' and len(target['openai_calls'])==1
+    assert denied['arms']['candidate']['rows'][0]['provider_error']=='SpendingDenied'
+    target.pop('deny_openai');target['missing_usage']=True
+    assert browser.post('/manage/experiments/providers/start',json={**body,'request_id':'missing-usage'}).status_code==202
+    missing=wait()
+    missing=browser.post('/manage/experiments/'+missing['id']+'/readback',json={}).json()
+    assert missing['gate']['status']=='incomplete'
+    assert all(r['usage'] is None for r in missing['arms']['candidate']['rows'])
+    assert missing['measurements']['candidate']['application']['usage'] is None
+    target.pop('missing_usage')
+
+def test_provider_dispute_turn_accounting(provider_browser):
+    browser,target,body,wait=provider_browser
+    assert browser.post('/manage/experiments/providers/start',json={**body,'cohort':'disputes','request_id':'two-turn-disputes'}).status_code==202
+    disputes=wait()
+    disputes=browser.post('/manage/experiments/'+disputes['id']+'/readback',json={}).json()
+    assert disputes['gate']['status']=='passed',disputes['gate']
+    assert all(r['turns']==2 for a in disputes['arms'].values() for r in a['rows'])
+    assert disputes['measurements']['candidate']['application']['generations']==50
+    assert 'fixture-openai-secret' not in json.dumps(browser.get('/manage/experiments/status').json())
 
 
 def test_disabled_comparison_resolves_no_extra_provider_or_paid_work(tmp_path,monkeypatch):
