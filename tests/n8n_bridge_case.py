@@ -10,6 +10,10 @@ from threading import Thread
 import httpx
 from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTraceServiceRequest
 
+from pytest import MonkeyPatch
+from sdk_identifiers import numeric_span_ids
+numeric_span_ids(MonkeyPatch())
+
 exports, model_calls, permits = [], [], []
 deny_reply = '--deny-reply' in sys.argv
 native_mode = 'ok'
@@ -126,6 +130,13 @@ async def main():
             assert reply.json()['trace_id'] == 'a' * 32
             assert reply.json()['trace_url'].startswith(base + '/project/fixture-project/traces/')
             assert len(model_calls) == 2
+            roots = [item for item in exports if item.name == 'n8n-complaint-triage']
+            assert len(roots) == 1
+            root = roots[0]
+            assert root.span_id.hex().isdecimal()
+            attributes = {item.key: item.value.string_value for item in root.attributes}
+            output = json.loads(attributes['langfuse.observation.output'])
+            assert output['observation_id'] == reply.json()['observation_id'] == root.span_id.hex(), output['observation_id']
             # Failures remain visible, and OTLP partial-success is returned unchanged.
             assert (await client.post(bridge.url + '/otel', headers=headers, content=b'x' * (1024 * 1024 + 1))).status_code == 413
             span.trace_id = bytes.fromhex('a' * 32)
