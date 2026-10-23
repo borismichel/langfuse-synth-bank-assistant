@@ -71,5 +71,5 @@ def test_apm_option_is_persisted_by_delivered_generate_command_without_changing_
     result = subprocess.run([sys.executable, '-m', 'synth.cli', 'generate-spool', '--config', 'config/demo.yaml',
                              '--set', 'runtime.apm_enabled=true'], env=env, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
-    assert json.loads((tmp_path/'state/runtime-config.json').read_text()) == {'apm_enabled': True}
+    assert json.loads((tmp_path/'state/runtime-config.json').read_text()) == {'apm_enabled': True, 'n8n_enabled': False}
     assert b'apm_enabled' not in (tmp_path/'state/events.ndjson').read_bytes()

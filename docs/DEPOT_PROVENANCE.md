@@ -7,7 +7,7 @@
 - Upstream Apache-2.0 licence remains in `LICENSE`; banking source and notices are preserved.
 - Root package slug: `northwind-bank-assistant`; GHCR release identity: `ghcr.io/borismichel/langfuse-synth-bank-assistant`.
 - Core baseline and reusable publishing workflow: v5.0.0, commit `5f56e75f9a8b5d160ddf54a8fcde380d0d15a205`.
-- Runtime and authoring pin: tested integration candidate `e6f6622a630068f383f48445f957fb4eab278797`, which includes the split-generation Manifest contract, native Companion factories and protected live-route transport gate. This is an immutable integration candidate, not a stable core release. Coordinate a stable release and consumer repins before final qualification. The publishing workflow remains pinned independently to the unchanged v5.0.0 release implementation.
+- Runtime and authoring pin: tested integration candidate `6458f89991b518234a61ed001e98a46d539a725a`, which includes the split-generation Manifest contract, native Companion factories, protected live-route transport gate, validated public origin and bounded fixed-target native OTLP forwarding. This is an immutable integration candidate, not a stable core release. Coordinate a stable release and consumer repins before final qualification. The publishing workflow remains pinned independently to the unchanged v5.0.0 release implementation.
 - Python 3.12.15 and Langfuse SDK 5.0.4; full dependency resolution in `uv.lock`.
 
 ## Workflow audit
@@ -30,6 +30,11 @@ Maintained Langfuse skill entrypoint SHA256: `e8908ea1c924374ba7bc5e82b220709d10
 ## Candidate version
 
 Package version `0.4.0` combines participant sessions/reset/feedback, deterministic history, validated history controls and progress, native datasets/prompts/score definitions, historical evidence navigation, and optional private APM. It preserves the native-provider duplicate-generation repair and corrects verification for target responses with empty non-generation usage. Its scope is exact-image, live-target and deployed-URL qualification of #367–#372 and #382; it does not represent full-spec catalogue completion. Record the signed image receipt after publication rather than reusing an earlier candidate digest.
+
+The unreleased #381 change adds the opt-in private n8n complaint workflow. Its
+Node runtime and n8n 2.42.4 dependencies are pinned separately in the Dockerfile
+and npm lockfile. Local fixture/image checks are documented in `docs/N8N.md`;
+release identity and real-target admission must be recorded for the next candidate.
 
 ## Qualification status
 

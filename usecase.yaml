@@ -16,6 +16,11 @@ base_config:
 config_schema:
   type: object
   properties:
+    runtime.n8n_enabled:
+      type: boolean
+      default: false
+      title: Complaint workflow
+      description: Start private n8n with this instance. Each complaint runs two model calls. Local history resets when it stops.
     runtime.apm_enabled:
       type: boolean
       default: false
@@ -49,6 +54,7 @@ config_schema:
 setup:
   version: 1
   fields:
+    runtime.n8n_enabled: {group: scenario}
     runtime.apm_enabled: {group: scenario}
     generation.target_traces: {group: volume}
     generation.history_days: {group: volume}
@@ -121,6 +127,8 @@ live_components:
   health_path: /api/health
   protected_paths:
   - path: /apm
+    access: presenter
+  - path: /n8n
     access: presenter
   routes:
   - path: /
