@@ -191,13 +191,13 @@ def test_regression_and_control_evidence_keeps_real_tool_outcomes(tmp_path):
 
 
 def test_verify_accepts_target_empty_usage_but_rejects_wrong_nonempty_usage(tmp_path):
-    from test_pipeline import target_server
-    evidence = {'observations': [], 'scores': []}
-    with target_server(evidence=evidence) as (env, _):
-        assert invoke(tmp_path, 'setup-prompts', extra_env=env).returncode == 0
+    from asset_target import asset_target
+    with asset_target() as (env, evidence):
+        assert invoke(tmp_path, 'setup-assets', extra_env=env).returncode == 0
         assert invoke(tmp_path, 'generate-spool', extra_env=env).returncode == 0
         assert invoke(tmp_path, 'import-spool', extra_env=env).returncode == 0
         evidence.update(api_evidence(tmp_path/'state/events.bound.ndjson'))
+        assert invoke(tmp_path, 'prepare-cohorts', extra_env=env).returncode == 0
         for row in evidence['observations']:
             if row['usageDetails'] is None:
                 row['usageDetails'] = {}  # Exact target4.68 response for observations without usage.
