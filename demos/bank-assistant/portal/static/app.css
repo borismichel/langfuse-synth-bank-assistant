@@ -440,3 +440,21 @@ textarea::placeholder, input::placeholder { color: var(--muted); opacity: 1; }
   .lang-toggle svg { display: none; }
   .lang-toggle { padding-left: 3px; }
 }
+
+/* Voice controls wrap within the retained Northwind layout. */
+#view-voice [hidden] { display: none !important; }
+.upload .row { flex-wrap: wrap; }
+.voice-toolbar input { min-width: 0; }
+.voice-samples { padding: 16px; }
+.voice-samples summary { cursor: pointer; margin-bottom: 12px; }
+#voiceResult { min-height: 260px; }
+
+/* Keep the retained navigation usable as delivered presenter links accumulate. */
+@media (max-width: 1700px) {
+  .topbar { height: auto; min-height: 64px; flex-wrap: wrap; gap: 10px 20px; padding-top: 12px; }
+  .tabs { order: 3; width: 100%; min-width: 0; height: 46px; overflow-x: auto; }
+  .tabs > * { flex-shrink: 0; }
+  .topbar-right { max-width: 100%; }
+  .env-pill { max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
+  #voiceResult { position: static; }
+}

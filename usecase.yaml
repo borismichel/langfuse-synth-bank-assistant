@@ -16,6 +16,11 @@ base_config:
 config_schema:
   type: object
   properties:
+    runtime.voice_enabled:
+      type: boolean
+      default: false
+      title: Voice
+      description: Record or upload English and Spanish audio. Requires OpenAI speech roles; each call also uses the selected banking chat provider. Synthetic audio is stored in Langfuse.
     runtime.n8n_enabled:
       type: boolean
       default: false
@@ -54,6 +59,7 @@ config_schema:
 setup:
   version: 1
   fields:
+    runtime.voice_enabled: {group: scenario}
     runtime.n8n_enabled: {group: scenario}
     runtime.apm_enabled: {group: scenario}
     generation.target_traces: {group: volume}
@@ -107,19 +113,36 @@ assets:
     title: Overview
   - path: docs/PROMPT_RELEASES.md
     title: Prompt promotion and rollback
+  - path: docs/VOICE.md
+    title: Voice
 teardown:
   note: Depot removes local containers and state. Seeded Langfuse observations remain.
     Use a fresh disposable project or an explicitly authorised project reset before
     importing again.
 llm:
+  roles:
+    version: 1
+    bindings:
+      speech_to_text:
+        provider: openai
+        models: {openai: gpt-transcribe}
+        enabled_by: runtime.voice_enabled
+      text_to_speech:
+        provider: openai
+        models: {openai: gpt-realtime-2.1-mini}
+        enabled_by: runtime.voice_enabled
   providers:
   - anthropic
   - openai
 live_components:
 - name: companion
+  spending_check: {version: 1}
+  llm_roles: [speech_to_text, text_to_speech]
   description: Bilingual banking assistant with retrieval, guardrails, confirmed
-    banking actions, participant reset, answer feedback, protected policy judges, annotation queues, measured calibration, model-free conduct reconciliation and optional private APM. Voice
-    and advanced workshop capabilities remain unavailable in this candidate.
+    banking actions, participant reset, answer feedback, protected policy judges,
+    annotation queues, measured calibration, bounded application experiments, model-free conduct reconciliation,
+    optional private APM and optional bilingual voice. Advanced workshop
+    capabilities remain unavailable in this candidate.
   command: synth companion --config {config} --host 0.0.0.0 --port 8080
   port: 8080
   requires_secrets:
@@ -127,7 +150,6 @@ live_components:
   - LANGFUSE_SECRET_KEY
   - LLM_API_KEY
   health_path: /api/health
-  spending_check: {version: 1}
   protected_paths:
   - path: /manage/releases
     access: manage
