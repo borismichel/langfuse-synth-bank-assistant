@@ -34,6 +34,7 @@ class ExperimentControls:
     def __init__(self, adapter, banking, preview):
         self.adapter, self.banking, self.preview = adapter, banking, preview
         self.runs = []
+        self.state_error = False
         self.closing = False
         self.job = None
         self.cancelled = threading.Event()
@@ -41,15 +42,19 @@ class ExperimentControls:
         self.file = 'experiments-'+fingerprint([getattr(adapter,'base_url',''),os.environ.get('LANGFUSE_PUBLIC_KEY'),getattr(banking,'instance','preview')])+'.json'
         try:
             saved=json.loads(state_path(self.file).read_text())
-            if saved.get('version')==1:self.runs=saved['runs']
+            if saved.get('version')!=1 or not isinstance(saved.get('runs'),list) or len(saved['runs'])>8:
+                raise ValueError('Invalid comparison receipt')
+            self.runs=saved['runs']
             for run in self.runs:
                 if run['status']=='running':run.update(status='interrupted',error='Process stopped; inspect partial native results. A new request identity is required to rerun.')
-        except (OSError,ValueError,KeyError):pass
+        except FileNotFoundError:pass
+        except (OSError,ValueError,KeyError,TypeError):self.state_error=True
 
     def persist(self):
         save(self.file,{'version':1,'runs':self.runs})
 
     def required(self):
+        if self.state_error:raise HTTPException(503,'Comparison receipt is unreadable; inspect native evidence before replacing this deployment')
         if self.preview or self.adapter is None:
             raise HTTPException(503, 'Application experiments are unavailable in preview')
         policy = validate_protected_paths(json.loads(os.environ.get('PORTAL_LIVE_PROTECTED_PATHS', '[]')))
