@@ -213,7 +213,8 @@ class ComplaintBridge:
             system, text, name = prompt.prompt, run['text'], 'classify-complaint'
         else:
             system, text, name = DRAFT, json.dumps(run['triage']) + '\n' + run['text'], 'draft-reply'
-        model = self.adapter.native_llm()
+        native = self.adapter.native_llm()
+        model = native.chat if isinstance(native, config.BankingModels) else native
         provider = self.adapter.llm().provider
         if stage == 'classify':
             if provider == 'anthropic':
