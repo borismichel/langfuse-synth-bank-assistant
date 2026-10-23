@@ -135,4 +135,3 @@ async def call_judge_async(adapter,*,model,prompt,inputs,deadline,name='faithful
     result=judge_result(output,complete,usage,generation,started,categories,field,reason,values)
     record(result)
     return result
-
