@@ -75,6 +75,9 @@ def asset_target(*, barrier=None):
             elif path.endswith('/dataset-items'):
                 row = dict(**body,datasetId=data['datasets'][body['datasetName']]['id'],
                            createdAt=stamp,updatedAt=stamp,version=stamp,mediaReferences=[])
+                # Langfuse 4.68 returns these scalar JSON numeric labels as numbers.
+                if row.get('expectedOutput') in ('0.0','0.5','1.0'):
+                    row['expectedOutput']=float(row['expectedOutput'])
                 data['items'][row['id']] = row
             elif path.endswith('/otel/v1/traces') or path.endswith('/ingestion'):
                 return self.reply({'successes':[],'errors':[]})

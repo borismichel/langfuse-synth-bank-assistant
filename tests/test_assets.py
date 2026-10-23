@@ -162,3 +162,23 @@ def test_cohort_setup_requires_visible_current_source_before_any_dataset_write(t
         assert 'source observation' in result.stderr
         assert len(target['writes'])==before
         assert not (tmp_path/'state/asset-receipt.json').exists()
+
+
+def test_calibration_numeric_labels_round_trip_and_changed_labels_remain_conflicts(tmp_path):
+    with asset_target() as (env,target):
+        seeded_run(tmp_path,env,target)
+        prepared=invoke(tmp_path,'prepare-cohorts',extra_env=env)
+        assert prepared.returncode==0,prepared.stdout+prepared.stderr
+        items={r['metadata']['case_id']:r for r in target['items'].values() if r['metadata']['cohort']=='calibration'}
+        assert items['f01']['expectedOutput']==1.0
+        assert items['m01']['expectedOutput']==.5
+        assert items['e01']['expectedOutput']==0.0
+        sent=[b for path,b in target['writes'] if path.endswith('/dataset-items') and b['metadata']['cohort']=='calibration']
+        assert all(type(b['expectedOutput']) in (float,int) for b in sent)
+        before=len(target['writes'])
+        assert invoke(tmp_path,'prepare-cohorts',extra_env=env).returncode==0
+        assert len(target['writes'])==before
+        items['f01']['expectedOutput']=.5
+        conflict=invoke(tmp_path,'prepare-cohorts',extra_env=env)
+        assert conflict.returncode==1 and 'human work preserved' in conflict.stderr
+        assert items['f01']['expectedOutput']==.5 and len(target['writes'])==before
