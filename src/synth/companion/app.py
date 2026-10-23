@@ -150,6 +150,8 @@ def create_app(adapter, *, preview=False):
     experiment_controls = mount_experiments(app, adapter, banking, preview=preview)
     from .review_routes import mount_reviews
     review_controls = mount_reviews(app, adapter, banking, preview=preview)
+    from .governance import mount_governance
+    mount_governance(app, adapter, preview=preview)
 
     @app.middleware('http')
     async def same_origin(request, call_next):
@@ -175,6 +177,7 @@ def create_app(adapter, *, preview=False):
         prefix = paths.base_path()
         content = content.replace('"/static/', f'"{escape(prefix)}/static/').replace('href="/"', f'href="{escape(prefix)}/"')
         content = content.replace('<nav class="tabs" role="tablist">', '<nav class="tabs" role="tablist"><a class="history-link" style="padding:12px 16px;color:inherit" href="' + escape(prefix) + '/history">Historical evidence</a>')
+        content = content.replace('<nav class="tabs" role="tablist">', '<nav class="tabs" role="tablist"><a class="history-link" style="padding:12px 16px;color:inherit" href="' + escape(prefix) + '/manage/governance">Governance</a>')
         if not preview:
             content = content.replace('<nav class="tabs" role="tablist">', '<nav class="tabs" role="tablist"><a class="history-link" style="padding:12px 16px;color:inherit" href="' + escape(prefix) + '/manage/experiments">Application experiments</a>')
             content = content.replace('<nav class="tabs" role="tablist">', '<nav class="tabs" role="tablist"><a class="history-link" style="padding:12px 16px;color:inherit" href="' + escape(prefix) + '/manage/judges">Policy judges</a>')
