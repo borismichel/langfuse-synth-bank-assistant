@@ -148,6 +148,8 @@ def create_app(adapter, *, preview=False):
     mount_workflow(app, workflow)
     from .experiments import mount_experiments
     experiment_controls = mount_experiments(app, adapter, banking, preview=preview)
+    from .provider_comparison import mount_provider_comparison
+    mount_provider_comparison(app, experiment_controls)
     from .review_routes import mount_reviews
     review_controls = mount_reviews(app, adapter, banking, preview=preview)
 
@@ -606,6 +608,6 @@ def main(argv=None):
     adapter = CompanionAdapter(load_config(invocation.config), requires_secrets=REQUIRES_SECRETS,
         health_path=HEALTH_PATH, llm_model_default=config.AGENT_MODEL,
         langfuse_factory=config.langfuse_factory, native_llm_factory=config.native_llm_factory,
-        role_factories={'speech_to_text':speech_factory,'text_to_speech':speech_factory})
+        role_factories={'comparison':config.native_llm_factory,'speech_to_text':speech_factory,'text_to_speech':speech_factory})
     adapter.run(create_app, host=invocation.host, port=invocation.port)
     return 0

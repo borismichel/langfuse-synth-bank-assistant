@@ -50,7 +50,7 @@ Conduct denominators cover the 58 mandatory historical turns only. Blocked turns
 
 Available: model-free history, target validation, volume confirmation, split generation/import, exact-run verification, bilingual live retrieval and guardrails, customer-bound confirmed banking actions, private participant state and reset, verified answer feedback, managed production prompt association, masked tracing, explicitly activated P1–P5 managed judges, annotation queues, measured calibration, bounded application experiments, optional bilingual voice, optional private complaint workflow, and this target-specific runbook.
 
-Pending under Depot spec #365: prompt promotion, provider comparisons, governance and full operational qualification. This candidate is not the full-spec catalogue release.
+Pending under Depot spec #365: prompt promotion, governance and full operational qualification. This candidate is not the full-spec catalogue release.
 
 ## Deployment and recovery
 
@@ -281,3 +281,11 @@ Open **Presenter actions** in the assistant footer, then **Review and calibratio
 6. Choose **Verify native results**, then open the native experiment and per-row result links. A completed local computation is not native ingestion proof. Exact experiment identity, frozen input/output/provenance, row count and aggregate scores must read back before the page reports `confirmed`. Delayed evidence remains pending; conflicting evidence is visible. The source cohort and its existing reviews are unchanged.
 
 **Recovery:** Cancel calibration to stop new calls, then inspect emitted native evidence. Repeating Start for the same action never pays for it again. Process restart recovers local action receipts and marks unfinished work interrupted; those actions cannot be resumed. Before replacing the whole container, save its experiment links and inspect uncertain outcomes: local receipts are ephemeral while Langfuse records remain. Preparing a new action explicitly permits another paid run. At most 20 calibration actions are retained in one Companion; do not delete existing reviews to work around a limit. Stop owned managed evaluation rules separately before retiring a disposable target. Retain the qualification evidence, then remove this kit's admission projects and their dedicated keys.
+
+
+## Fixed provider comparison
+
+1. During deployment enable **OpenAI comparison** with Anthropic as primary. Open **Application experiments → Provider comparison** through Depot.
+2. Select the complete English cohort and one published control prompt version for both arms. Enter an available Anthropic judge model and acknowledge costs. The binding display identifies the exact Anthropic application model and OpenAI `gpt-4.1-mini` candidate.
+3. Start once and inspect progress. After completion, refresh native evidence. Compare raw quality counts, each provider's measured application usage/native costs, the separate Anthropic judge totals and the linked native experiment generations. Retrieval and the exact prompt are fixed, so this is a provider comparison.
+4. A missing provider, unavailable model, denied spending check or missing native accounting leaves an explicit failed/incomplete outcome, without silently changing model. The completed arm remains inspectable. This result cannot promote a prompt; use the separately required application release evidence.

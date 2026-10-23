@@ -16,6 +16,11 @@ base_config:
 config_schema:
   type: object
   properties:
+    runtime.comparison_enabled:
+      type: boolean
+      default: false
+      title: OpenAI comparison
+      description: Enable the OpenAI gpt-4.1-mini comparison binding. Application and judge calls start only from presenter controls.
     runtime.voice_enabled:
       type: boolean
       default: false
@@ -59,6 +64,7 @@ config_schema:
 setup:
   version: 1
   fields:
+    runtime.comparison_enabled: {group: scenario}
     runtime.voice_enabled: {group: scenario}
     runtime.n8n_enabled: {group: scenario}
     runtime.apm_enabled: {group: scenario}
@@ -121,6 +127,10 @@ llm:
   roles:
     version: 1
     bindings:
+      comparison:
+        provider: openai
+        models: {openai: gpt-4.1-mini}
+        enabled_by: runtime.comparison_enabled
       speech_to_text:
         provider: openai
         models: {openai: gpt-transcribe}
@@ -135,11 +145,11 @@ llm:
 live_components:
 - name: companion
   spending_check: {version: 1}
-  llm_roles: [speech_to_text, text_to_speech]
+  llm_roles: [speech_to_text, text_to_speech, comparison]
   description: Bilingual banking assistant with retrieval, guardrails, confirmed
     banking actions, participant reset, answer feedback, protected policy judges,
     annotation queues, measured calibration, bounded application experiments, model-free conduct reconciliation,
-    optional private APM and optional bilingual voice. Advanced workshop
+    optional private APM, bilingual voice and fixed provider comparisons. Advanced workshop
     capabilities remain unavailable in this candidate.
   command: synth companion --config {config} --host 0.0.0.0 --port 8080
   port: 8080
