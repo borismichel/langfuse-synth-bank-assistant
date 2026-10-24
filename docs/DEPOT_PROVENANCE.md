@@ -6,8 +6,8 @@
 - Fork identity and unused destination checked by the integration coordinator before GitHub fork creation; upstream history is retained. No existing remote was repointed.
 - Upstream Apache-2.0 licence remains in `LICENSE`; banking source and notices are preserved.
 - Root package slug: `northwind-bank-assistant`; GHCR release identity: `ghcr.io/borismichel/langfuse-synth-bank-assistant`.
-- Current package version: `0.7.3` (`pyproject.toml`).
-- Runtime, authoring and reusable publishing workflow: stable core `v5.1.0`, resolved by `uv.lock` to commit `ee87bf749b95a3a1026c655830c95dd2219ca83d`. This release includes the split-generation Manifest contract, native Companion factories, protected live-route transport gate, validated public origin, bounded fixed-target native OTLP forwarding, optional provider roles and fresh per-operation spending authorization.
+- Current package version: `0.8.0` Beta (`pyproject.toml`); planned GitHub release status: prerelease.
+- Runtime, authoring and reusable publishing workflow: stable core `v5.1.1`, resolved by `uv.lock` to commit `f4fb77e8bcd312947621621131c7b6e4f0b4a6e5`. The patch adds compatible OTLP JSON acknowledgement handling to the existing core capabilities. These include the split-generation Manifest contract, native Companion factories, protected live-route transport gate, validated public origin, bounded fixed-target native OTLP forwarding, optional provider roles and fresh per-operation spending authorization.
 - Python 3.12.15 and Langfuse SDK 5.0.4; full dependency resolution in `uv.lock`.
 
 This is the authoritative narrative release record. Installation instructions refer
@@ -33,7 +33,7 @@ Maintained Langfuse skill entrypoint SHA256: `e8908ea1c924374ba7bc5e82b220709d10
 
 ## Current candidate scope
 
-Package `0.7.3` integrates the full banking implementation: participant sessions,
+Package `0.8.0` Beta integrates the implemented banking scope: participant sessions,
 confirmation/reset/feedback, verified frozen history, native datasets and prompts,
 managed policy judges, review/calibration, matched judge and application/provider
 comparisons, prompt promotion/rollback, optional voice/n8n/APM, governance
@@ -73,13 +73,32 @@ The first application comparison was cancelled after 22 dispatches, without
 candidate-arm results or a prompt promotion. An independent source/citation
 check failure in its baseline remains a real failed result.
 
-Candidate `0.7.3` requires typed provider output for local judges, keeps experiment
-provider calls on the Companion event loop, and displays actionable review
-transport errors. Invalid judge outputs still stop new application-comparison
-work; criteria, gates, spending checks and call limits are unchanged. The review
-message correction does not resolve the separate platform rate limit. This
-candidate requires its own successful checks, signed image and target
-qualification evidence; the partial `0.7.2` rehearsal is not full-spec acceptance.
+Release `0.7.3`, source `b00838289021948c89407bafd9767798d3a40456`, published
+the signed image index
+`sha256:d0bcbd0c7894976700f58ea8666ebed376753db3c4230651fc75d70c1e9cc35d`.
+Depot verified the signature and its fresh admission passed registration, build,
+spawn, seed, verification and Companion smoke checks. The exact image also
+passed the constrained model-free volume and optional-component checks.
+Admission projects and their dedicated credentials were cleaned up afterward.
+
+That release required typed provider output for local judges, kept experiment
+provider calls on the Companion event loop, and displayed actionable review
+transport errors. Its subsequent live application rehearsal produced quality
+failures or incomplete deadline/readback results and no eligible promotion
+candidate. Corrected-source read-only accounting of the completed cross-provider
+run found four failing quality pairs; it did not rewrite the deployed incomplete
+receipt. No qualifying promotion/rollback rehearsal was completed. Successful
+publication and admission therefore did not establish full-spec qualification.
+
+The `0.8.0` Beta includes later corrections for nullable structured judge output,
+complaint classification/tracing, bounded dispute follow-up, provider model
+identity, cancellable asynchronous judges, and media/annotation readback. Its
+new signed image, admission and live qualification remain pending. Human audio
+checks, independent annotation, second-presenter acceptance and native governance
+permission checks are deferred. See [Beta release notes](BETA_RELEASE_NOTES.md).
+Strict criteria, evidence gates, spending authorization and model-call limits
+remain in force; Beta publication does not turn failures or missing evidence into
+passing results.
 
 The original shared-core baseline was v5.0.0 at
 `5f56e75f9a8b5d160ddf54a8fcde380d0d15a205`. Early banking integration used
@@ -93,4 +112,4 @@ candidate; record the actual signed release receipt after publication.
 
 ## Qualification status
 
-The immutable source revision is the release commit, emitted into image labels by CI. Record the actual release tag, signed digest, exact target, admission ID and delivered rehearsal evidence when those operations execute. Actual-provider, native-evidence, staging and second-presenter qualification remain pending until their release evidence is recorded. No full-spec or catalogue-ready status is claimed by this document.
+The immutable source revision is the release commit, emitted into image labels by CI. Record the actual release tag, signed digest, exact target, admission ID and delivered rehearsal evidence when those operations execute. The current `0.8.0` Beta is intended for guided synthetic demonstrations, with its own image, admission and live qualification pending. Earlier releases retain their recorded publication/admission outcomes and unmet live or human checks. Beta catalogue publication does not assert full-spec qualification or close those requirements.
