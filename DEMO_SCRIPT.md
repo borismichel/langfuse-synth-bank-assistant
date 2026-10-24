@@ -1,4 +1,17 @@
-# Northwind Bank Assistant — Presenter Runbook
+# Northwind Bank Assistant — Presenter Runbook — Beta
+
+## Beta release status
+
+This is a **Beta for guided demonstrations**, not a completed full-spec qualification. Use a disposable synthetic banking project, keep a presenter available, and inspect actual native evidence after each action. Start with historical evidence and one English or Spanish banking conversation; enable paid evaluation, voice or complaint workflows only for the planned exercise and acknowledge their displayed cost.
+
+The latest live rehearsal used v0.7.3. It produced no candidate eligible for prompt promotion: application comparisons retained quality failures or incomplete deadline/readback results. The cross-provider comparison completed, but a subsequent read-only audit with corrected model-alias handling found four failing quality pairs; the deployed receipt remains incomplete. No successful promotion/rollback rehearsal is claimed. Never relax the gate or repeat a paid run merely to obtain a pass.
+
+The v0.8.0 Beta includes corrections for issues found during that rehearsal, including structured classifier/judge responses, provider model identity, asynchronous judge execution, workflow tracing and media/annotation readback. Offline checks of those corrections do not qualify the new release against live providers. Its fresh live rehearsal remains pending. Human microphone and listening checks, independent annotation, second-presenter acceptance and native governance permission checks are deferred.
+
+Before using an optional path, read its chapter and record the exact image, target, selected models and observed outcome. Retain failures and unknown results. Pause owned managed judges and save local comparison/release receipts before stopping the instance; replacement discards those local receipts and participant state. Only an eligible passed current-policy comparison permits promotion.
+
+See [Beta release notes](docs/BETA_RELEASE_NOTES.md) for scope and remaining checks. The detailed walkthrough below describes intended behaviour and required evidence, not a claim that every step has passed.
+
 
 Synthetic bilingual banking history for a banking operations audience. The imported historical customers, answers, tool receipts, scores, token counts and costs are frozen demonstration fixtures. They are not actual customer data, model spend, independent human review or managed judge results. The separate Companion produces genuine live evidence using the provider selected in Depot.
 
@@ -22,7 +35,7 @@ The detailed chapters below explain the same actions, limits and evidence. Use *
 
 Record the release digest, target/project, deployment ID, selected models, enabled options and UTC time before rehearsal. For each step retain the actual native trace, experiment or prompt version link; record the measured result, not the expected narrative. A second presenter follows this document and records their own outcomes and gaps. A failed or skipped required beat leaves full qualification pending.
 
-Capture the delivered app, native evidence and option screens without secrets or unrelated project data. Catalogue screenshots must be bundled immutable image assets, with a caption identifying the target, candidate and whether evidence is fixture or live. Local screenshots and a prior candidate's run do not qualify the current release. Target-specific screenshots and the second-presenter record are release evidence; they must be added before final catalogue publication.
+Capture the delivered app, native evidence and option screens without secrets or unrelated project data. Catalogue screenshots must be bundled immutable image assets, with a caption identifying the target, candidate and whether evidence is fixture or live. Local screenshots and a prior candidate's run do not qualify the current release. Target-specific screenshots and the second-presenter record are release evidence; they remain required before full qualification; Beta catalogue publication does not assert that qualification.
 
 ## Screen references — local fixtures
 

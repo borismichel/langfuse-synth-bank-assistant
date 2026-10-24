@@ -1,6 +1,6 @@
 schema_version: 1
 slug: northwind-bank-assistant
-name: Northwind Bank Assistant
+name: Northwind Bank Assistant (Beta)
 vertical: Financial Services / Banking
 langfuse_features:
 - tracing
@@ -12,8 +12,9 @@ langfuse_features:
 - annotation-queues
 - sessions
 - multimodality
-tagline: Inspect bilingual banking actions, regressions and conduct evidence.
-story: 'Compare frozen banking actions, dispute and retrieval-cost regressions, and
+tagline: Beta banking demo with bilingual actions and evaluation evidence; full live qualification pending.
+story: 'Beta for guided demonstrations. Known quality failures and deferred human checks
+  are documented in the presenter runbook. Compare frozen banking actions, dispute and retrieval-cost regressions, and
   conduct policy cases in Langfuse, then use the bilingual live assistant,
   protected evaluation controls and prompt releases. The coding-agent workshop
   includes local implementation and rehearsal instructions.'
@@ -131,6 +132,8 @@ assets:
   - docs/screenshots/provider-comparison-fixture.jpg
   - docs/screenshots/prompt-release-fixture.jpg
   docs:
+  - path: docs/BETA_RELEASE_NOTES.md
+    title: Beta release notes
   - path: docs/DEPOT_KIT.md
     title: Overview
   - path: docs/CODING_AGENT_WORKSHOP.md
@@ -166,7 +169,8 @@ live_components:
 - name: companion
   spending_check: {version: 1}
   llm_roles: [speech_to_text, text_to_speech, comparison]
-  description: Bilingual banking assistant with retrieval, guardrails, confirmed
+  description: Beta banking assistant for guided demonstrations; full live qualification
+    remains pending. Includes bilingual retrieval, guardrails, confirmed
     banking actions, participant reset, answer feedback, protected policy judges,
     annotation queues, measured calibration, bounded application experiments, model-free conduct reconciliation,
     optional private APM and complaint workflow, bilingual voice, fixed provider comparisons,
@@ -196,4 +200,4 @@ live_components:
     access: presenter
   routes:
   - path: /
-    title: Northwind Bank
+    title: Northwind Bank (Beta)

@@ -1,4 +1,6 @@
-# Northwind banking Depot package
+# Northwind banking Depot package — Beta
+
+Beta for guided demonstrations. Full live qualification remains pending; see [Beta release notes](BETA_RELEASE_NOTES.md) for recorded failures and deferred human checks.
 
 This repository is a maintained fork of doneyli/clickhouse-llm-observability. The root `usecase.yaml` registers only the Northwind banking package. Upstream history and other demos remain available as source; the runtime image includes only banking and package dependencies.
 

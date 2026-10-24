@@ -1,6 +1,6 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Judge comparison</title>
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Judge comparison · Beta</title>
 <link rel="stylesheet" href="__PREFIX__/static/app.css">
-<body class="langfuse-theme bank-presenter"><main><nav><a href="__PREFIX__/">Customer assistant</a> · <a href="__PREFIX__/manage/experiments">Application experiments</a></nav><h1 class="lf-heading">Judge comparison</h1>
+<body class="langfuse-theme bank-presenter"><main><aside class="beta-notice lf-frame" aria-label="Release status"><strong>Beta</strong><span>Guided demo. Full live qualification pending.</span></aside><nav><a href="__PREFIX__/">Customer assistant</a> · <a href="__PREFIX__/manage/experiments">Application experiments</a></nav><h1 class="lf-heading">Judge comparison</h1>
 <p>Compare one overall judge with five policy judges on the same 22 frozen answers, approved evidence and conduct criteria. Both use the selected model on the deployment’s primary provider. Reference labels are constructed fixtures, not independent human reviews.</p>
 <form id="start" class="lf-frame corner-box-corners"><p id="provider"></p><label>Judge model <input name="judge_model" required maxlength="120" placeholder="Exact model ID on the selected provider"></label><label><input name="include_legacy" type="checkbox"> Include legacy rubric</label>
 <p>The matched comparison makes at most 132 model calls. Including the separate legacy rubric makes at most 154 calls. The legacy rubric has different instructions and omits approved context; it is excluded from matched agreement.</p>
