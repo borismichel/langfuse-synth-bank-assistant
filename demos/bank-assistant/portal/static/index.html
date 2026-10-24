@@ -3,14 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Northwind Bank Assistant</title>
+  <title>Northwind Bank Assistant · Beta</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/app.css?v=12">
+  <link rel="stylesheet" href="/static/app.css?v=14">
 </head>
-<body>
+<body class="langfuse-theme bank-customer">
+  <aside class="beta-notice lf-frame" aria-label="Release status"><strong>Beta</strong><span>Guided demo. Full live qualification pending.</span></aside>
   <!-- inline icon sprite -->
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
     <defs>
@@ -43,11 +41,11 @@
     </defs>
   </svg>
 
-  <header class="topbar">
+  <header class="topbar lf-chrome">
     <a class="brand" href="/" aria-label="Northwind Bank">
       <svg viewBox="0 0 32 32"><rect width="32" height="32" rx="9" fill="var(--neutral-800)"/><use href="#i-logo"/></svg>
       <div>
-        <div class="brand-name">Northwind Bank</div>
+        <div class="brand-name lf-card-title">Northwind Bank</div>
         <div class="brand-sub" data-i18n="brand.sub">Digital Assistant · AI Observability demo</div>
       </div>
     </a>
@@ -71,11 +69,11 @@
     <section class="view active" id="view-assistant">
       <div class="assistant-layout">
         <aside class="sidebar">
-          <div class="card">
+          <div class="card lf-frame corner-box-corners">
             <p class="section-label" data-i18n="side.customer">Signed-in customer</p>
             <div class="customer-list" id="customerList" role="radiogroup" aria-label="Customer" data-i18n-aria="side.customerGroup"></div>
           </div>
-          <div class="card">
+          <div class="card lf-frame corner-box-corners">
             <div class="field">
               <label data-i18n="side.channel">Channel</label>
               <div class="seg" id="channelSeg">
@@ -101,7 +99,7 @@
           </div>
         </aside>
 
-        <div class="card chat">
+        <div class="card chat lf-frame corner-box-corners">
           <div class="chat-head">
             <div class="bot-avatar"><svg viewBox="0 0 32 32"><use href="#i-logo"/></svg></div>
             <div>
@@ -110,13 +108,20 @@
             </div>
             <div class="spacer"></div>
             <span class="badge badge-ok" title="Every turn is traced in Langfuse" data-i18n-title="chat.tracedTitle"><svg><use href="#i-lock"/></svg><span data-i18n="chat.traced">Traced · PII-masked</span></span>
-            <button class="btn btn-sm" id="newConv"><svg><use href="#i-plus"/></svg><span data-i18n="chat.new">New conversation</span></button>
+            <button class="btn btn-sm lf-button lf-button__label lf-button--secondary" id="newConv"><svg><use href="#i-plus"/></svg><span data-i18n="chat.new">New conversation</span></button>
+            <button class="btn btn-sm lf-button lf-button__label lf-button--secondary" id="cancelReply" hidden data-i18n="chat.cancel">Cancel reply</button>
           </div>
+          <p id="sessionNotice" role="status" hidden></p>
+          <details class="session-controls">
+            <summary data-i18n="chat.state">Demo state</summary>
+            <p data-i18n="chat.resetHelp">Reset restores this participant's selected customer and cancels pending replies. Langfuse history remains. New conversation keeps banking changes.</p>
+            <button class="btn btn-sm lf-button lf-button__label lf-button--secondary" id="resetState" data-i18n="chat.reset">Reset demo state</button>
+          </details>
           <div class="transcript" id="transcript"></div>
           <div class="chips" id="chips"></div>
           <form class="composer" id="composer" autocomplete="off">
             <textarea id="input" rows="1" placeholder="Message Northwind Assistant…" aria-label="Message" data-i18n-placeholder="chat.placeholder" data-i18n-aria="chat.inputAria"></textarea>
-            <button class="btn btn-primary" id="sendBtn" type="submit"><svg><use href="#i-send"/></svg><span data-i18n="chat.send">Send</span></button>
+            <button class="btn btn-primary lf-button lf-button__label" id="sendBtn" type="submit"><svg><use href="#i-send"/></svg><span data-i18n="chat.send">Send</span></button>
           </form>
         </div>
       </div>
@@ -126,36 +131,35 @@
     <section class="view" id="view-voice">
       <div class="voice-layout">
         <div class="voice-col">
-          <div class="card voice-toolbar">
+          <div class="card voice-toolbar lf-frame corner-box-corners">
             <label for="voiceCustomer" data-i18n="voice.caller">Caller</label>
-            <select class="input" id="voiceCustomer"></select>
-            <button class="btn btn-sm btn-ghost" id="voiceRefresh" title="Reload sample calls" data-i18n-title="voice.reload" data-i18n-aria="voice.reload"><svg><use href="#i-refresh"/></svg></button>
+            <input class="input" id="voiceCustomer" readonly aria-label="Selected customer">
+            <button class="btn btn-sm btn-ghost lf-button lf-button__label lf-button--secondary" id="voiceRefresh" title="Reload sample calls" data-i18n-title="voice.reload" data-i18n-aria="voice.reload"><svg><use href="#i-refresh"/></svg></button>
           </div>
-          <div id="voiceList" class="voice-col"></div>
-          <div class="card upload" id="uploadCard">
-            <div class="call-head">
-              <div class="call-icon"><svg><use href="#i-upload"/></svg></div>
-              <div><div class="call-title" data-i18n="voice.upload">Upload a call</div><div class="call-file" data-i18n="voice.formats">.wav or .mp3</div></div>
-            </div>
+          <div class="card upload lf-frame corner-box-corners" id="uploadCard">
+            <p id="voiceNotice"></p>
+            <label for="voiceLanguage" data-i18n="voice.audioLanguage">Audio language</label>
+            <select id="voiceLanguage" class="input"><option value="en">English</option><option value="es">Español</option></select>
             <div class="row">
-              <label class="btn btn-sm file-btn"><input type="file" id="voiceFile" class="sr-only" accept=".wav,.mp3,audio/wav,audio/mpeg"><svg><use href="#i-upload"/></svg><span data-i18n="voice.choose">Choose file</span></label>
-              <span class="file-name" id="voiceFileName">No file chosen</span>
-              <button class="btn btn-sm btn-primary" id="voiceUploadBtn" disabled><svg><use href="#i-play"/></svg><span data-i18n="voice.process">Process call</span></button>
+              <button class="btn btn-sm lf-button lf-button__label lf-button--secondary" id="voiceRecord" data-i18n="voice.record">Record</button>
+              <button class="btn btn-sm lf-button lf-button__label lf-button--secondary" id="voiceStop" hidden data-i18n="voice.stop">Stop recording</button>
+              <label class="btn btn-sm file-btn lf-button lf-button__label lf-button--secondary"><input type="file" id="voiceFile" class="sr-only" accept=".wav,.mp3,.webm,.mp4,.m4a,audio/wav,audio/mpeg,audio/webm,audio/mp4"><span data-i18n="voice.chooseAudio">Choose audio</span></label>
+              <span class="file-name" id="voiceFileName">No audio selected</span>
+              <button class="btn btn-sm btn-primary lf-button lf-button__label" id="voiceUploadBtn" disabled data-i18n="voice.send">Send audio</button>
+              <button class="btn btn-sm lf-button lf-button__label lf-button--secondary" id="voiceCancel" hidden data-i18n="voice.cancel">Cancel</button>
             </div>
           </div>
+          <details class="card voice-samples lf-frame corner-box-corners"><summary data-i18n="voice.samples">Sample recordings</summary><div id="voiceList" class="voice-col"></div></details>
         </div>
-        <div class="card result" id="voiceResult">
-          <div class="empty-result" id="voiceEmpty">
-            <svg><use href="#i-phone"/></svg>
-            <p data-i18n-html="voice.empty">Pick a recorded call and press <b>Process call</b>. The caller's audio is transcribed, answered by the same assistant, and spoken back — one trace in Langfuse.</p>
-          </div>
+        <div class="card result lf-frame corner-box-corners" id="voiceResult">
+          <p>Record or upload audio. The selected customer and conversation apply to voice and text.</p>
         </div>
       </div>
     </section>
 
     <!-- ── TAB 3: Presenter console ──────────────────────── -->
     <section class="view" id="view-presenter">
-      <div class="card status-strip" id="statusStrip">
+      <div class="card status-strip lf-frame corner-box-corners" id="statusStrip">
         <div class="stat-cell"><div class="k" data-i18n="pres.env">Environment</div><div class="v" id="stEnv">—</div><div class="s" id="stRelease">&nbsp;</div></div>
         <div class="stat-cell"><div class="k" data-i18n="pres.target">Langfuse target</div><div class="v" id="stTarget">—</div><div class="s" id="stBase">&nbsp;</div></div>
         <div class="stat-cell"><div class="k" data-i18n="pres.prompt">Production prompt</div><div class="v" id="stPrompt">—</div><div class="s" id="stPromptName">&nbsp;</div></div>
@@ -165,14 +169,14 @@
       </div>
       <div class="presenter-layout">
         <div class="acts" id="acts"></div>
-        <div class="card console">
+        <div class="card console lf-frame corner-box-corners">
           <div class="console-head">
             <span class="ttl" id="conTitle">Console</span>
             <span class="run-pill" id="conPill">idle</span>
             <span class="grow"></span>
             <span class="elapsed" id="conElapsed"></span>
-            <button class="btn stop hidden" id="conStop"><svg><use href="#i-stop"/></svg><span data-i18n="con.stop">Stop</span></button>
-            <button class="btn" id="conClear" data-i18n="con.clear">Clear</button>
+            <button class="btn stop hidden lf-button lf-button__label lf-button--secondary" id="conStop"><svg><use href="#i-stop"/></svg><span data-i18n="con.stop">Stop</span></button>
+            <button class="btn lf-button lf-button__label lf-button--secondary" id="conClear" data-i18n="con.clear">Clear</button>
           </div>
           <pre class="console-body" id="conBody"><div class="console-empty">Run a demo act — its output streams here, and any Langfuse links it prints appear below as buttons.</div></pre>
           <div class="console-links hidden" id="conLinks"><div class="lbl" data-i18n="con.links">Links from output</div><div class="list" id="conLinkList"></div></div>
@@ -182,6 +186,6 @@
   </main>
 
   <div class="toast" id="toast"></div>
-  <script src="/static/app.js?v=11"></script>
+  <script src="/static/app.js?v=12"></script>
 </body>
 </html>

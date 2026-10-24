@@ -7,8 +7,8 @@
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const icon = (id) => `<svg><use href="#i-${id}"/></svg>`;
   const store = {
-    get(k, d) { try { const v = localStorage.getItem("nw." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
-    set(k, v) { try { localStorage.setItem("nw." + k, JSON.stringify(v)); } catch { /* private mode */ } },
+    get(k, d) { try { const v = localStorage.getItem("nw." + (window.NORTHWIND_BASE_PATH || "/") + "." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem("nw." + (window.NORTHWIND_BASE_PATH || "/") + "." + k, JSON.stringify(v)); } catch { /* private mode */ } },
   };
 
   /* ── i18n: ONE dictionary (en / es). Brand, metric, score, tool and file names stay as-is. ── */
@@ -26,6 +26,8 @@
       "ch.web": "Web", "ch.app": "Mobile app", "ch.whatsapp": "WhatsApp",
       "chat.title": "Northwind Assistant", "chat.signedIn": "Signed in as {name} · {ch}",
       "chat.traced": "Traced · PII-masked", "chat.tracedTitle": "Every turn is traced in Langfuse",
+      "chat.cancel": "Cancel reply", "chat.state": "Demo state", "chat.reset": "Reset demo state",
+      "chat.resetHelp": "Reset restores this participant’s selected customer and cancels pending replies. Langfuse history remains. New conversation keeps banking changes.",
       "chat.new": "New conversation", "chat.placeholder": "Message Northwind Assistant…", "chat.inputAria": "Message",
       "chat.send": "Send", "chat.morning": "Good morning", "chat.afternoon": "Good afternoon", "chat.evening": "Good evening",
       "chat.welcome": "Ask about fees, cards, transfers or your accounts. Try one of the prompts below.",
@@ -40,7 +42,7 @@
       "fb.up": "Helpful", "fb.upAria": "Thumbs up", "fb.down": "Not helpful", "fb.downAria": "Thumbs down",
       "fb.sent": "Feedback sent", "fb.placeholder": "What went wrong? (optional)", "fb.aria": "Feedback comment",
       "fb.send": "Send", "fb.cancel": "Cancel",
-      "toast.fbOk": "Thanks — recorded as user-feedback = {v} on the trace", "toast.fbFail": "Feedback failed: {e}",
+      "toast.fbOk": "Feedback verified on this answer", "toast.fbFail": "Feedback failed: {e}",
       "toast.copied": "Trace id copied",
       "voice.caller": "Caller", "voice.auto": "Auto (caller on the recording)", "voice.reload": "Reload sample calls",
       "voice.upload": "Upload a call", "voice.formats": ".wav or .mp3", "voice.choose": "Choose file",
@@ -87,6 +89,8 @@
       "ch.web": "Web", "ch.app": "App móvil", "ch.whatsapp": "WhatsApp",
       "chat.title": "Asistente Northwind", "chat.signedIn": "Sesión iniciada como {name} · {ch}",
       "chat.traced": "Trazado · PII enmascarada", "chat.tracedTitle": "Cada turno queda trazado en Langfuse",
+      "chat.cancel": "Cancelar respuesta", "chat.state": "Estado de la demo", "chat.reset": "Restablecer estado de la demo",
+      "chat.resetHelp": "Restablece el cliente seleccionado de este participante y cancela las respuestas pendientes. El historial de Langfuse se conserva. Una nueva conversación mantiene los cambios bancarios.",
       "chat.new": "Nueva conversación", "chat.placeholder": "Escriba su mensaje al Asistente Northwind…", "chat.inputAria": "Mensaje",
       "chat.send": "Enviar", "chat.morning": "Buenos días", "chat.afternoon": "Buenas tardes", "chat.evening": "Buenas noches",
       "chat.welcome": "Consulte sobre comisiones, tarjetas, transferencias o sus cuentas. Pruebe una de las sugerencias de abajo.",
@@ -102,7 +106,7 @@
       "fb.up": "Útil", "fb.upAria": "Pulgar arriba", "fb.down": "No fue útil", "fb.downAria": "Pulgar abajo",
       "fb.sent": "Valoración enviada", "fb.placeholder": "¿Qué salió mal? (opcional)", "fb.aria": "Comentario de la valoración",
       "fb.send": "Enviar", "fb.cancel": "Cancelar",
-      "toast.fbOk": "Gracias: se registró user-feedback = {v} en la traza", "toast.fbFail": "No se pudo enviar la valoración: {e}",
+      "toast.fbOk": "Valoración verificada en esta respuesta", "toast.fbFail": "No se pudo enviar la valoración: {e}",
       "toast.copied": "ID de traza copiado",
       "voice.caller": "Cliente", "voice.auto": "Auto (según la grabación)", "voice.reload": "Recargar llamadas de ejemplo",
       "voice.upload": "Subir una llamada", "voice.formats": ".wav o .mp3", "voice.choose": "Elegir archivo",
@@ -190,9 +194,8 @@
     let q = null;
     try { q = new URLSearchParams(location.search).get("lang"); } catch { /* no URL API */ }
     q = (q || "").toLowerCase();
-    if (LANGS.includes(q)) { try { localStorage.setItem("nw.lang", JSON.stringify(q)); } catch { /* private mode */ } return q; }
-    let saved = null;
-    try { saved = JSON.parse(localStorage.getItem("nw.lang")); } catch { /* private mode */ }
+    if (LANGS.includes(q)) { store.set("lang", q); return q; }
+    const saved = store.get("lang", null);
     return LANGS.includes(saved) ? saved : "en";
   })();
   // t(key, vars, fallback): active language → English → fallback (server text) → key
@@ -211,7 +214,7 @@
   }
 
   async function api(path, opts = {}) {
-    const r = await fetch(path, opts);
+    const r = await fetch((window.NORTHWIND_BASE_PATH || "") + path, opts);
     let body = null;
     try { body = await r.json(); } catch { /* non-JSON */ }
     if (!r.ok) {
@@ -300,7 +303,7 @@
     { l: "Tarjeta 4111 … ¿bloqueada?", t: "Mi número de tarjeta es 4111 1111 1111 1111, ¿está bloqueada?", k: "risk" },
     { l: "¿Protección de sobregiro?", t: "¿Cómo funciona la protección de sobregiro y cuánto cuesta?", k: "kb" },
   ];
-  const quick = () => (LANG === "es" ? QUICK_ES : QUICK_EN);
+  const quick = () => (LANG === "es" ? QUICK_ES : QUICK_EN).filter(q => q.k !== "act" || S.info?.capabilities?.banking_actions);
 
 
   /* ── Tabs ────────────────────────────────────────────────────────────── */
@@ -347,6 +350,7 @@
       const info = await api(`/api/info${refresh ? "?refresh=1" : ""}`);
       S.info = info; S.offline = false;
       renderInfo(info);
+      renderChips();
       if (!S.customers.length) { S.customers = info.customers; renderCustomers(); renderVoiceCustomers(); }
       return info;
     } catch (e) {
@@ -370,7 +374,7 @@
         </span>
       </button>`).join("");
     $$("#customerList .customer").forEach((b) => b.addEventListener("click", () => {
-      if (b.dataset.id === S.customer) return;
+      if (S.busy || S.resetting || b.dataset.id === S.customer) return;
       S.customer = b.dataset.id; store.set("customer", S.customer);
       renderCustomers(); newConversation();
     }));
@@ -399,14 +403,38 @@
   }
 
   async function newConversation() {
-    S.messages = [];
-    try { S.session = (await postJSON("/api/session")).session_id; }
-    catch { S.session = "nw-" + (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())); }
-    renderSessionId();
+    if (S.busy || S.resetting) return;
+    clearVoice(); setBusy(true); S.session = null; S.messages = [];
+    try { S.session = (await postJSON("/api/session", { customer_id: S.customer })).session_id; }
+    catch (e) { S.session = null; toast(e.message, true); }
+    setBusy(false); renderSessionId();
     persist(); renderTranscript();
     $("#input").focus();
   }
   $("#newConv").addEventListener("click", newConversation);
+  function sessionNotice(message) {
+    const notice = $("#sessionNotice"); notice.textContent = message; notice.hidden = !message;
+  }
+  $("#resetState").addEventListener("click", async () => {
+    if (!S.session || S.resetting) return;
+    clearVoice(); S.resetting = true; $("#resetState").disabled = true;
+    const request = S.resetRequest || {session_id: S.session, request_id: crypto.randomUUID()};
+    S.resetRequest = request;
+    try {
+      const reset = await postJSON("/api/reset", request);
+      S.session = reset.session_id; S.messages = []; S.resetRequest = null; S.activeRequest = null;
+      persist(); renderSessionId(); renderTranscript();
+      sessionNotice(LANG === "es" ? "Estado restablecido. El historial de Langfuse se conserva." : "Demo state reset. Langfuse history is retained.");
+    } catch(e) { sessionNotice(e.message); }
+    finally { S.resetting = false; $("#resetState").disabled = false; setBusy(false); }
+  });
+  $("#cancelReply").addEventListener("click", async () => {
+    if (!S.activeRequest) return;
+    try {
+      await postJSON("/api/cancel", S.activeRequest);
+      sessionNotice(LANG === "es" ? "Se canceló el trabajo pendiente. Las acciones completadas no se deshacen." : "Pending work cancelled. Completed actions are not undone.");
+    } catch(e) { sessionNotice(e.message); }
+  });
   function renderSessionId() {
     $("#sessionId").textContent = S.session || "—";
     $("#sessionId").title = S.session ? t("side.session", { id: S.session }) : t("side.sessionShort");
@@ -469,13 +497,13 @@
     foot.push(`<span class="grow"></span>`);
     if (r.trace_url) foot.push(`<a class="btn btn-xs btn-navy" href="${esc(r.trace_url)}" target="_blank" rel="noopener">${esc(t("foot.openLf"))}${icon("ext")}</a>`);
     if (r.apm_url) foot.push(`<a class="btn btn-xs" href="${esc(r.apm_url)}" target="_blank" rel="noopener">${icon("pulse")}${esc(t("foot.openApm"))}${icon("ext")}</a>`);
-    if (tid) {
+    if (tid && S.info?.capabilities?.feedback) {
       const fb = r.feedback;
       foot.push(`<span class="fb">
-        <button data-fb="1" title="${esc(t("fb.up"))}" aria-label="${esc(t("fb.upAria"))}" class="${fb === 1 ? "on-up" : ""}" ${fb != null ? "disabled" : ""}>${icon("up")}</button>
-        <button data-fb="0" title="${esc(t("fb.down"))}" aria-label="${esc(t("fb.downAria"))}" class="${fb === 0 ? "on-down" : ""}" ${fb != null ? "disabled" : ""}>${icon("down")}</button>
+        <button data-fb="1" title="${esc(t("fb.up"))}" aria-label="${esc(t("fb.upAria"))}" class="${fb === 1 ? "on-up" : ""}" >${icon("up")}</button>
+        <button data-fb="0" title="${esc(t("fb.down"))}" aria-label="${esc(t("fb.downAria"))}" class="${fb === 0 ? "on-down" : ""}" >${icon("down")}</button>
       </span>`);
-      if (fb != null) foot.push(`<span class="fb-note">${esc(t("fb.sent"))}</span>`);
+      if (fb != null) foot.push(`<span class="fb-note">${esc(t("fb.sent"))}${r.feedback_comment ? " · " + esc(r.feedback_comment) : ""}</span>`);
     }
 
     wrap.innerHTML = `<div class="mini-avatar"><svg viewBox="0 0 32 32"><use href="#i-logo"/></svg></div>
@@ -485,12 +513,74 @@
         <div class="msg-foot">${foot.join("")}</div>
       </div>`;
 
+    const stack = $(".stack", wrap);
+    (r.banking_actions || []).forEach((action) => {
+      const box = document.createElement("div");
+      box.className = "bubble";
+      const labels = LANG === "es"
+        ? { block_card: "Bloquear tarjeta", open_dispute: "Abrir disputa", schedule_callback: "Programar llamada" }
+        : { block_card: "Block card", open_dispute: "Open dispute", schedule_callback: "Schedule callback" };
+      const title = labels[action.tool] || (LANG === "es" ? "Resultado bancario" : "Banking result");
+      const details = document.createElement("p");
+      const args = action.arguments || {};
+      const target = args.card_last4 ? (LANG === "es" ? "Tarjeta terminada en " : "Card ending ") + args.card_last4
+        : args.transaction_id ? (LANG === "es" ? "Transacción " : "Transaction ") + args.transaction_id : args.topic || "";
+      details.textContent = title + (target ? " · " + target : "");
+      box.appendChild(details);
+      if (args.reason || args.preferred_time) {
+        const explanation = document.createElement("p");
+        explanation.textContent = args.reason || args.preferred_time;
+        box.appendChild(explanation);
+      }
+      if (action.status === "confirmation_required") {
+        const button = document.createElement("button");
+        button.className = "btn btn-sm btn-navy";
+        button.textContent = LANG === "es" ? "Confirmar acción" : "Confirm action";
+        button.addEventListener("click", async () => {
+          if (S.busy) return;
+          const confirmationSession = S.session;
+          S.activeRequest = {session_id: confirmationSession, request_id: "confirm-" + action.action_id};
+          button.disabled = true; setBusy(true);
+          action.confirmation_lang = action.confirmation_lang || LANG;
+          persist();
+          try {
+            const confirmed = await postJSON("/api/confirm", {session_id: S.session,
+              action_id: action.action_id, request_id: "confirm-" + action.action_id, lang: action.confirmation_lang});
+            if (S.resetting || S.session !== confirmationSession) return;
+            S.messages.push({role: "user", content: LANG === "es" ? "Confirmo la acción indicada." : "I confirm the displayed action."});
+            S.messages.push({role: "assistant", content: confirmed.answer, meta: confirmed});
+            action.confirmed = true;
+            persist(); renderTranscript();
+            if (V.last?.observation_id === r.observation_id) {
+              V.job=null; V.last={...confirmed,speech_status:'not_requested',media_status:'unavailable'};
+              V.index=S.messages.length-1;renderVoiceResult();
+            }
+          } catch (e) { toast(e.message); button.disabled = false; }
+          finally { S.activeRequest = null; setBusy(false); }
+        });
+        button.disabled = !!action.confirmed;
+        box.appendChild(button);
+      } else {
+        const receipt = document.createElement("p");
+        receipt.textContent = (LANG === "es" ? "Estado: " : "Status: ") + (action.status || action.error || "unknown") +
+          " · " + (action.confirmation || action.case_id || action.callback_id || "");
+        box.appendChild(receipt);
+      }
+      stack.appendChild(box);
+    });
+    if (r.retry_request) {
+      const retry = document.createElement("button");
+      retry.className = "btn btn-sm";
+      retry.textContent = LANG === "es" ? "Reintentar solicitud" : "Retry request";
+      retry.addEventListener("click", () => send(r.retry_request.text, r.retry_request.id, r.retry_request.lang));
+      stack.appendChild(retry);
+    }
+
     const copyEl = $(".trace-id", wrap);
     if (copyEl) copyEl.addEventListener("click", () => {
       navigator.clipboard?.writeText(copyEl.dataset.copy).then(() => toast(t("toast.copied")), () => toast(copyEl.dataset.copy));
     });
     $$(".fb button", wrap).forEach((b) => b.addEventListener("click", () => {
-      if (r.feedback != null) return;
       const v = +b.dataset.fb;
       if (v === 1) return sendFeedback(idx, 1, null);
       openFeedbackBox(wrap, idx);
@@ -507,7 +597,7 @@
       <button class="btn btn-sm btn-ghost">${esc(t("fb.cancel"))}</button>`;
     $(".stack", wrap).appendChild(box);
     box.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    const ta = $("textarea", box); ta.focus({ preventScroll: true });
+    const ta = $("textarea", box); ta.value = S.messages[idx]?.meta?.feedback_comment || ""; ta.focus({ preventScroll: true });
     const [sendB, cancelB] = $$("button", box);
     sendB.addEventListener("click", () => sendFeedback(idx, 0, ta.value.trim() || null));
     cancelB.addEventListener("click", () => box.remove());
@@ -517,9 +607,14 @@
   async function sendFeedback(idx, value, comment) {
     const m = S.messages[idx]; if (!m || !m.meta) return;
     try {
-      await postJSON("/api/feedback", { trace_id: m.meta.trace_id, value, comment });
-      m.meta.feedback = value; persist();
-      replaceMessage(idx);
+      let result = await postJSON("/api/feedback", { session_id: m.meta.session_id, trace_id: m.meta.trace_id, observation_id: m.meta.observation_id, value, comment: comment || "" });
+      for (let attempt = 0; result.status === "pending" && attempt < 5; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        result = await api("/api/feedback?" + new URLSearchParams({session_id: m.meta.session_id, trace_id: m.meta.trace_id, observation_id: m.meta.observation_id}));
+      }
+      if (result.status !== "saved") { toast(LANG === "es" ? "Valoración enviada; verificación pendiente. Puede volver a intentarlo." : "Feedback submitted; verification pending. You can retry."); return; }
+      m.meta.feedback = result.value; m.meta.feedback_comment = result.comment; persist();
+      if (S.messages[idx] === m) replaceMessage(idx);
       toast(t("toast.fbOk", { v: value }));
     } catch (e) { toast(t("toast.fbFail", { e: e.message }), true); }
   }
@@ -527,18 +622,22 @@
   function replaceMessage(idx) {
     const el = $("#transcript").children[idx];
     if (el) el.replaceWith(renderMessage(S.messages[idx], idx));
+    if (V.index === idx) renderVoiceResult();
   }
 
   function setBusy(b) {
     S.busy = b;
     $("#sendBtn").disabled = b;
+    $("#newConv").disabled = b;
+    $("#cancelReply").hidden = !b || !S.activeRequest;
     $$("#chips .chip").forEach((c) => (c.disabled = b));
   }
 
-  async function send(text) {
+  async function send(text, retryId = null, retryLang = null) {
     text = (text ?? $("#input").value).trim();
     if (!text || S.busy) return;
     if (!S.session) await newConversation();
+    if (!S.session) return;
     $("#input").value = ""; autosize();
     if (!S.messages.length) $("#transcript").innerHTML = "";
     S.messages.push({ role: "user", content: text });
@@ -553,11 +652,21 @@
     const tick = setInterval(() => { $(".tt", typing).textContent = t("chat.thinking", { s: ((performance.now() - t0) / 1000).toFixed(1) }); }, 100);
     setBusy(true);
     let res;
+    const requestId = retryId || crypto.randomUUID();
+    const requestSession = S.session;
+    S.activeRequest = {session_id: requestSession, request_id: requestId}; setBusy(true);
     try {
-      res = await postJSON("/api/chat", { message: text, customer_id: S.customer, channel: S.channel, session_id: S.session, prompt_label: S.label || null, lang: LANG });
+      res = await postJSON("/api/chat", { message: text, customer_id: S.customer, channel: S.channel, session_id: S.session, prompt_label: S.label || null, lang: retryLang || LANG, request_id: requestId });
     } catch (e) {
-      res = { answer: t("chat.unreachable"), error: e.message };
+      if (e.status === 409 && e.message.startsWith("Conversation expired")) {
+        S.session = null; S.messages = []; persist(); renderTranscript(); renderSessionId(); sessionNotice(e.message);
+      }
+      res = e.status === 409 && e.message.includes("cancelled")
+        ? {answer: LANG === "es" ? "Solicitud cancelada." : "Request cancelled.", cancelled: true}
+        : { answer: t("chat.unreachable"), error: e.message, retry_request: { text, id: requestId, lang: retryLang || LANG } };
     } finally { clearInterval(tick); typing.remove(); S.typing = null; setBusy(false); }
+    S.activeRequest = null; $("#cancelReply").hidden = true;
+    if (S.resetting || requestSession !== S.session) return;
     if (res.session_id) S.session = res.session_id;
     const meta = { ...res }; delete meta.answer;
     S.messages.push({ role: "assistant", content: res.answer || t("chat.noAnswer"), meta });
@@ -573,143 +682,178 @@
   input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } });
   $("#composer").addEventListener("submit", (e) => { e.preventDefault(); send(); });
 
-  /* ── Voice ───────────────────────────────────────────────────────────── */
-  let voiceBusy = false;
-  const V = { data: null, last: null };  // last /api/voice payload; last rendered result (re-rendered on language switch)
+  Object.assign(I18N.en, {'voice.record':'Record','voice.stop':'Stop recording','voice.chooseAudio':'Choose audio','voice.send':'Send audio','voice.cancel':'Cancel','voice.audioLanguage':'Audio language','voice.samples':'Sample recordings'});
+  Object.assign(I18N.es, {'voice.record':'Grabar','voice.stop':'Detener grabación','voice.chooseAudio':'Elegir audio','voice.send':'Enviar audio','voice.cancel':'Cancelar','voice.audioLanguage':'Idioma del audio','voice.samples':'Grabaciones de ejemplo'});
+
+  /* ── Voice: same owned conversation as text ───────────────────────────── */
+  const V = {data:null,last:null,file:null,job:null,recorder:null,stream:null,timer:null,epoch:0,index:null};
+  const vt = (en, es) => LANG === 'es' ? es : en;
   function renderVoiceCustomers() {
-    const sel = $("#voiceCustomer");
-    const cur = store.get("voiceCustomer", "auto");
-    sel.innerHTML = `<option value="auto" ${cur === "auto" ? "selected" : ""}>${esc(t("voice.auto"))}</option>` + S.customers.map((c) => `<option value="${esc(c.id)}" ${c.id === cur ? "selected" : ""}>${esc(c.name)} · ${esc(c.segment)} (${esc(c.id)})</option>`).join("");
+    $('#voiceCustomer').value = `${cust(S.customer).name} · ${S.customer}`;
   }
-  $("#voiceCustomer").addEventListener("change", (e) => store.set("voiceCustomer", e.target.value));
-  $("#voiceRefresh").addEventListener("click", () => loadVoice());
-
-  async function loadVoice() {
-    let v;
-    try { v = await api("/api/voice"); } catch (e) { v = { available: false, error: e.message, samples: [] }; }
-    V.data = v;
-    renderVoiceList();
+  function stopRecording(discard = false) {
+    if (V.recorder) { V.recorder.discard = discard; if (V.recorder.state !== 'inactive') V.recorder.stop(); }
+    V.stream?.getTracks().forEach(track => track.stop()); V.stream = null;
+    clearTimeout(V.timer); V.timer = null;
   }
-
-  function callCard(s) {
-    const title = LANG === "es" ? (s.title_es || s.title) : s.title;
-    const lang = s.lang ? `<span class="lang-badge lang-${esc(s.lang)}" title="${esc(t("voice.langTitle." + s.lang))}">${esc(s.lang.toUpperCase())}</span>` : "";
-    return `
-      <div class="card call${S.selectedCall === s.name ? " selected" : ""}" data-name="${esc(s.name)}">
-        <div class="call-head">
-          <div class="call-icon">${icon("phone")}</div>
-          <div style="min-width:0;flex:1"><div class="call-title">${esc(title)}</div><div class="call-file">${esc(s.name)} · ${esc(s.size_kb)} KB${s.customer_name ? ` · ${esc(t("voice.callerName", { name: s.customer_name }))}` : ""}</div></div>
-          ${lang}
-        </div>
-        ${s.script ? `<details class="call-note"><summary>${esc(t("voice.says"))}</summary>${esc(s.script)}</details>` : ""}
-        <div class="call-actions">
-          <audio controls preload="none" src="${esc(s.url)}"></audio>
-          <button class="btn btn-sm btn-primary" data-process="${esc(s.name)}" ${voiceBusy ? "disabled" : ""}>${icon("play")}${esc(t("voice.process"))}</button>
-        </div>
-      </div>`;
+  function clearVoice() {
+    V.epoch++; stopRecording(true); V.file = null; V.job = null; V.last = null; V.index = null;
+    $('#voiceFile').value = ''; $('#voiceResult').textContent = vt('Record or upload audio.', 'Grabe o suba audio.');
+    renderFileName();
   }
-
-  function renderVoiceList() {
-    const v = V.data; if (!v) return;
-    const list = $("#voiceList");
-    if (!v.available) {
-      list.innerHTML = `<div class="card placeholder">
-        <div class="ph-icon">${icon("mic")}</div>
-        <h3>${esc(t("voice.warmTitle"))}</h3>
-        <p>${esc(t("voice.warmBody"))}</p>
-        <p style="margin-top:10px;font-size:12px">${esc(v.error || "")}</p></div>`;
-      $("#uploadCard").classList.add("hidden");
-      return;
-    }
-    $("#uploadCard").classList.remove("hidden");
-    if (!v.samples.length) {
-      list.innerHTML = `<div class="card placeholder"><div class="ph-icon">${icon("phone")}</div><h3>${esc(t("voice.noneTitle"))}</h3><p>${t("voice.noneBody")}</p></div>`;
-      return;
-    }
-    // Calls in the active UI language first; a header per language when there is more than one.
-    const order = [LANG, ...LANGS.filter((l) => l !== LANG), "other"];
-    const groups = order.map((l) => ({ l, items: v.samples.filter((s) => (LANGS.includes(s.lang) ? s.lang : "other") === l) })).filter((g) => g.items.length);
-    const headed = groups.length > 1;
-    list.innerHTML = groups.map((g) => `${headed ? `<div class="voice-group-h"><span class="lang-badge lang-${g.l}">${g.l === "other" ? "··" : g.l.toUpperCase()}</span>${esc(t("voice.group." + g.l))}<span class="n">${g.items.length}</span></div>` : ""}${g.items.map(callCard).join("")}`).join("");
-    $$("[data-process]", list).forEach((b) => b.addEventListener("click", () => processVoice({ sample: b.dataset.process })));
-  }
-
   function renderFileName() {
-    const f = $("#voiceFile").files[0];
-    const el = $("#voiceFileName");
-    el.textContent = f ? f.name : t("voice.noFile");
-    el.classList.toggle("has-file", !!f);
+    $('#voiceFileName').textContent = V.file?.name || vt('No audio selected', 'Ningún audio seleccionado');
+    $('#voiceUploadBtn').disabled = !V.file || S.busy || !V.data?.available;
+    $('#voiceRecord').disabled = S.busy || !V.data?.available;
+    $('#voiceStop').hidden = !V.recorder || V.recorder.state === 'inactive';
   }
-  $("#voiceFile").addEventListener("change", (e) => { $("#voiceUploadBtn").disabled = !e.target.files.length || voiceBusy; renderFileName(); });
-  $("#voiceUploadBtn").addEventListener("click", () => {
-    const f = $("#voiceFile").files[0]; if (f) processVoice({ file: f });
-  });
-
-  // state: "run" (in flight), "done" (with real timings), "fail"
-  function voiceSteps(state, res = {}) {
-    const steps = [[t("voice.stt"), "stt_ms"], [t("voice.agent"), "agent_ms"], [t("voice.tts"), "tts_ms"]];
-    return `<div class="steps">${steps.map(([n, k], i) => {
-      const cls = state === "done" ? "done" : state === "run" ? "active" : "";
-      const tm = state === "done" && res[k] != null ? ` · ${fmtMs(res[k])}` : "";
-      return `<span class="step ${cls}"><span class="n">${i + 1}</span>${esc(n)}${tm}</span>`;
-    }).join("")}</div>`;
+  $('#voiceRefresh').addEventListener('click', loadVoice);
+  async function loadVoice() {
+    try { V.data = await api('/api/voice'); }
+    catch(e) { V.data = {available:false,error:e.message,samples:[]}; }
+    renderVoiceCustomers(); renderVoiceList(); renderFileName();
   }
-
-  async function processVoice({ sample, file }) {
-    if (voiceBusy) return;
-    voiceBusy = true;
-    S.selectedCall = sample || null;
-    $$(".call").forEach((c) => c.classList.toggle("selected", c.dataset.name === sample));
-    $$("[data-process], #voiceUploadBtn").forEach((b) => (b.disabled = true));
-    const out = $("#voiceResult");
-    const label = sample || (file && file.name);
-    const t0 = performance.now();
-    V.last = null;
-    const draw = () => {
-      out.innerHTML = `${voiceSteps("run")}
-        <div class="turn"><div class="who caller">${icon("user")}</div><div><div class="lbl">${esc(t("voice.processing"))}</div><div class="txt">${esc(label)} <span class="dots" style="margin-left:8px"><i></i><i></i><i></i></span> <span class="tt" style="color:var(--muted);font-size:12.5px">${((performance.now() - t0) / 1000).toFixed(1)} s</span></div></div></div>`;
-    };
-    draw();
-    const tick = setInterval(draw, 200);
-    const fd = new FormData();
-    fd.append("customer_id", $("#voiceCustomer").value || "auto");
-    if (sample) fd.append("sample", sample);
-    if (file) fd.append("file", file, file.name);
-    let res;
-    try { res = await api("/api/voice/process", { method: "POST", body: fd }); }
-    catch (e) { res = { error: e.message }; }
-    finally { clearInterval(tick); voiceBusy = false; $$("[data-process]").forEach((b) => (b.disabled = false)); $("#voiceUploadBtn").disabled = !$("#voiceFile").files.length; }
-
-    V.last = res;
-    renderVoiceResult();
-  }
-
-  function renderVoiceResult() {
-    const res = V.last; if (!res) return;
-    const out = $("#voiceResult");
-    if (res.error && !res.answer) {
-      out.innerHTML = `${voiceSteps("fail")}<div class="turn"><div class="who caller">${icon("alert")}</div><div><div class="lbl">${esc(t("voice.failed"))}</div><div class="txt" style="border-color:var(--coral-100);background:var(--coral-50)">${esc(res.error)}</div></div></div>`;
-      return;
+  function renderVoiceList() {
+    if (!V.data) return;
+    $('#voiceNotice').textContent = V.data.available
+      ? vt('AI-generated voice. Use synthetic audio. Record up to 60 seconds or upload WAV, MP3, WebM or MP4 up to 10 MiB. Audio is stored in Langfuse.', 'Voz generada por IA. Use audio sintético. Grabe hasta 60 segundos o suba WAV, MP3, WebM o MP4 de hasta 10 MiB. El audio se almacena en Langfuse.')
+      : V.data.error;
+    const list = $('#voiceList'); list.replaceChildren();
+    for (const sample of V.data.samples.filter(sample => sample.customer_id === S.customer)) {
+      const card = document.createElement('div'); card.className = 'card call lf-frame corner-box-corners';
+      card.innerHTML = `<div class="call-title">${esc(LANG === 'es' ? sample.title_es : sample.title)}</div><p>${esc(sample.lang.toUpperCase())} · ${esc(vt('Synthetic upstream recording', 'Grabación sintética original'))}</p><audio controls preload="none" src="${esc(sample.url)}"></audio><button class="btn btn-sm" ${S.busy || !V.data.available ? 'disabled' : ''}>${esc(vt('Use recording', 'Usar grabación'))}</button>`;
+      $('button',card).onclick = async () => {
+        if (S.busy) return;
+        try {
+          const response = await fetch(sample.url); if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          V.file = new File([await response.blob()],sample.name,{type:'audio/mpeg'}); V.job = null;
+          $('#voiceLanguage').value = sample.lang; renderFileName();
+        } catch(e) { toast(e.message,true); }
+      };
+      list.appendChild(card);
     }
-    const vb = [];
-    if (res.blocked) vb.push(`<span class="badge badge-blocked">${icon("shield")}${esc(t("badge.blocked"))}</span>`);
-    (res.risks || []).forEach((k) => vb.push(`<span class="badge badge-risk">${icon("alert")}${esc(k.replace(/_/g, " "))}</span>`));
-    [...new Set(res.tools_used || [])].forEach((tn) => vb.push(`<span class="badge badge-tool">${icon("tool")}${esc(tn)}</span>`));
-    // Autoplay only the first time a reply is shown — not when the language toggle re-renders it.
-    const auto = res._played ? "" : "autoplay"; res._played = true;
-    const audio = res.reply_audio_b64 ? `<audio controls ${auto} src="data:${esc(res.reply_mime || "audio/mpeg")};base64,${res.reply_audio_b64}"></audio>` : `<div class="call-note">${esc(t("voice.noAudio"))}</div>`;
-    const langPill = (l) => `<span class="lang-badge lang-${esc(l)}">${esc(String(l).toUpperCase())}</span>`;
-    out.innerHTML = `${voiceSteps("done", res)}
-      <div class="turn"><div class="who caller">${icon("user")}</div><div><div class="lbl">${esc(t("voice.transcript"))}${res.call_language ? ` <span title="${esc(t("voice.hint"))}">${langPill(res.call_language)}</span>` : ""}</div><div class="txt">${esc(res.transcript || t("voice.emptyTranscript"))}</div></div></div>
-      <div class="turn"><div class="who bot"><svg viewBox="0 0 32 32"><use href="#i-logo"/></svg></div><div><div class="lbl">${esc(t("voice.reply"))}${res.reply_language ? ` <span title="${esc(t("voice.replyLang"))}">${langPill(res.reply_language)}</span>` : ""}</div><div class="txt bubble">${md(res.answer || "")}</div><div style="margin-top:10px">${audio}</div>${vb.length ? `<div class="badges" style="margin-top:10px">${vb.join("")}</div>` : ""}</div></div>
-      <div class="msg-foot">
-        <span class="stat" title="${esc(t("voice.e2e"))}">${icon("clock")}${fmtMs(res.latency_ms)}</span>
-        ${res.customer_id ? `<span class="sep"></span><span class="stat">${icon("user")}${esc(cust(res.customer_id).name)}</span>` : ""}
-        ${res.trace_id ? `<span class="sep"></span><span class="trace-id" title="${esc(res.trace_id)}">${esc(res.trace_id.slice(0, 8))}…</span>` : ""}
-        <span class="grow"></span>
-        ${res.trace_url ? `<a class="btn btn-xs btn-navy" href="${esc(res.trace_url)}" target="_blank" rel="noopener">${esc(t("foot.openLf"))}${icon("ext")}</a>` : ""}
-        ${res.apm_url ? `<a class="btn btn-xs" href="${esc(res.apm_url)}" target="_blank" rel="noopener">${icon("pulse")}${esc(t("foot.openApm"))}${icon("ext")}</a>` : ""}
-      </div>`;
+  }
+  $('#voiceFile').addEventListener('change', e => {
+    if (S.busy) return;
+    V.file = e.target.files[0] || null; V.job = null; renderFileName();
+  });
+  $('#voiceRecord').addEventListener('click', async () => {
+    if (S.busy) return;
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+      toast(vt('Recording requires a supported browser on HTTPS. Upload audio instead.', 'La grabación requiere un navegador compatible con HTTPS. Suba audio.'),true); return;
+    }
+    const mime = ['audio/webm;codecs=opus','audio/mp4'].find(type => MediaRecorder.isTypeSupported(type));
+    if (!mime) { toast(vt('Recording format unavailable. Upload audio.', 'Formato de grabación no disponible. Suba audio.'),true); return; }
+    setBusy(true); const epoch = V.epoch;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+      if (epoch !== V.epoch) { stream.getTracks().forEach(track => track.stop()); return; }
+      V.stream = stream;
+      const recorder = new MediaRecorder(stream,{mimeType:mime}); V.recorder = recorder;
+      const chunks = []; let bytes = 0;
+      recorder.ondataavailable = event => {
+        bytes += event.data.size;
+        if (bytes > 10*1024*1024) { stopRecording(true); toast(vt('Recording exceeded 10 MiB.', 'La grabación superó 10 MiB.'),true); }
+        else if (event.data.size) chunks.push(event.data);
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach(track => track.stop()); clearTimeout(V.timer);
+        if (!recorder.discard && epoch === V.epoch) {
+          V.file = new File(chunks,mime.includes('mp4')?'recording.mp4':'recording.webm',{type:mime}); V.job = null;
+        }
+        if (V.recorder === recorder) V.recorder = null;
+        setBusy(false); renderFileName();
+      };
+      recorder.onerror = () => { stopRecording(true); toast(vt('Recording failed. Upload audio.', 'La grabación falló. Suba audio.'),true); };
+      recorder.start(250); V.timer = setTimeout(() => stopRecording(),60000); renderFileName();
+    } catch(e) { stopRecording(true); setBusy(false); toast(vt('Microphone unavailable: ', 'Micrófono no disponible: ')+e.name,true); }
+  });
+  $('#voiceStop').onclick = () => stopRecording();
+  window.addEventListener('pagehide', () => stopRecording(true));
+  $('#voiceUploadBtn').onclick = () => processVoice();
+  $('#voiceCancel').onclick = async () => {
+    if (!S.activeRequest) return;
+    try { await postJSON('/api/cancel',S.activeRequest); }
+    catch(e) { toast(e.message,true); }
+  };
+  async function processVoice() {
+    if (S.busy || !V.file || !V.data?.available) return;
+    if (V.file.size > 10*1024*1024) { toast(vt('Audio exceeds 10 MiB.', 'El audio supera 10 MiB.'),true); return; }
+    const selectedFile=V.file, selectedLanguage=$('#voiceLanguage').value;
+    if (!S.session) await newConversation();
+    if (!S.session) return;
+    V.file=selectedFile;
+    const job = V.job || {id:crypto.randomUUID(),session:S.session,language:selectedLanguage,file:selectedFile};
+    V.job = job; const epoch = V.epoch;
+    S.activeRequest = {session_id:job.session,request_id:job.id}; setBusy(true);
+    $('#voiceCancel').hidden = false; renderFileName(); renderVoiceList();
+    $('#voiceResult').textContent = vt('Processing audio…', 'Procesando audio…');
+    const form = new FormData(); form.append('session_id',job.session); form.append('request_id',job.id);
+    form.append('lang',job.language); form.append('file',job.file,job.file.name);
+    try {
+      let result = await api('/api/voice/process',{method:'POST',body:form});
+      const end = Date.now()+185000;
+      while (result.status === 'running') {
+        if (Date.now()>end) throw new Error(vt('Response pending. Retry this request to check its result.', 'Respuesta pendiente. Reintente esta solicitud para consultar el resultado.'));
+        await new Promise(resolve => setTimeout(resolve,500));
+        if (epoch!==V.epoch || job.session!==S.session) return;
+        result = await api('/api/voice/status/'+encodeURIComponent(job.id));
+      }
+      if (epoch!==V.epoch || job.session!==S.session) return;
+      if (result.answer && !S.messages.some(message => message.meta?.observation_id===result.observation_id)) {
+        S.messages.push({role:'user',content:result.transcript});
+        S.messages.push({role:'assistant',content:result.answer,meta:{...result}});
+        persist(); renderTranscript();
+      }
+      V.index = S.messages.findIndex(message => message.meta?.observation_id===result.observation_id);
+      V.last = result; renderVoiceResult();
+      if (result.answer) void pollVoiceMedia(job,result,epoch);
+    } catch(e) {
+      if (epoch!==V.epoch) return;
+      V.last={error:e.message}; renderVoiceResult();
+    } finally {
+      if (epoch===V.epoch) { S.activeRequest=null; setBusy(false); $('#voiceCancel').hidden=true; renderFileName(); renderVoiceList(); }
+    }
+  }
+  async function pollVoiceMedia(job,result,epoch) {
+    // Delivery reads are independent of the completed banking response.
+    for (let n=0;n<30 && result.media_status==='pending';n++) {
+      await new Promise(resolve => setTimeout(resolve,2000));
+      if (epoch!==V.epoch || V.job!==job || job.session!==S.session) return;
+      try { result=await api('/api/voice/status/'+encodeURIComponent(job.id)); }
+      catch { return; }
+      V.last=result;
+      const label=$('#voiceMediaStatus'); if(label) label.textContent=mediaLabel(result);
+    }
+  }
+  function mediaLabel(result) {
+    if (result.media_status==='failed') return vt(
+      'Langfuse media upload failed. The banking answer and local playback remain available.',
+      'Error al subir el audio a Langfuse. La respuesta bancaria y la reproducción local siguen disponibles.');
+    return result.media_status==='uploaded'
+      ? vt('Langfuse media uploaded. Open the trace to check native playback.', 'Audio subido a Langfuse. Abra la traza para comprobar la reproducción nativa.')
+      : vt('Langfuse media upload pending. Local playback is independent.', 'Carga de audio en Langfuse pendiente. La reproducción local es independiente.');
+  }
+  function renderVoiceResult() {
+    const result=V.last; if(!result) return;
+    const out=$('#voiceResult');out.replaceChildren();
+    if (result.answer && V.index>=0 && S.messages[V.index]) {
+      const transcript=document.createElement('p');transcript.textContent=result.transcript;out.appendChild(transcript);
+      out.appendChild(renderMessage(S.messages[V.index],V.index));
+      if(result.reply_audio_url) {
+        const audio=document.createElement('audio');audio.controls=true;audio.preload='metadata';audio.src=result.reply_audio_url;out.appendChild(audio);
+      } else {
+        const note=document.createElement('p');note.textContent=result.speech_status==='not_requested'
+          ? vt('Confirmation uses text. No speech was requested.', 'La confirmación usa texto. No se solicitó voz.')
+          : result.speech_status==='cancelled'
+            ? vt('Audio cancelled. The banking answer remains available.', 'Audio cancelado. La respuesta bancaria sigue disponible.')
+            : vt('Audio unavailable. The banking answer remains available.', 'Audio no disponible. La respuesta bancaria sigue disponible.');out.appendChild(note);
+      }
+      if (result.voice_observation_id) { const media=document.createElement('p');media.id='voiceMediaStatus';media.textContent=mediaLabel(result);out.appendChild(media); }
+    } else {
+      const note=document.createElement('p');note.textContent=result.error || vt('Request cancelled.', 'Solicitud cancelada.');out.appendChild(note);
+      if(result.error) { const retry=document.createElement('button');retry.className='btn';retry.textContent=vt('Retry same request', 'Reintentar la misma solicitud');retry.onclick=processVoice;out.appendChild(retry); }
+    }
   }
 
   /* ── Presenter console ───────────────────────────────────────────────── */
@@ -721,7 +865,7 @@
 
   async function loadActs() {
     let d;
-    try { d = await api("/api/acts"); } catch (e) { $("#acts").innerHTML = `<div class="card placeholder">${esc(t("con.loadFail", { e: e.message }))}</div>`; return; }
+    try { d = await api("/api/acts"); } catch (e) { $("#acts").innerHTML = `<div class="card placeholder lf-frame corner-box-corners">${esc(t("con.loadFail", { e: e.message }))}</div>`; return; }
     C.data = d;
     renderActs();
     if (d.job && (!C.job || C.job.job_id !== d.job.job_id)) attachJob(d.job, true);
@@ -731,6 +875,24 @@
   function renderActs() {
     const d = C.data; if (!d) return;
     C.acts = d.acts;
+    const linkedControls = Array.isArray(d.links);
+    $(".presenter-layout").classList.toggle("controls-only", linkedControls);
+    $(".console").classList.toggle("hidden", linkedControls);
+    if (linkedControls) {
+      const root = $("#acts"); root.replaceChildren();
+      for (const item of d.links) {
+        const card = document.createElement('section'); card.className = 'card act lf-frame corner-box-corners';
+        const title = document.createElement('h2'); title.className = 'act-title'; title.textContent = item.title;
+        const status = document.createElement('p'); status.className = 'act-blurb'; status.textContent = item.status;
+        card.append(title, status);
+        if (item.available && item.url) {
+          const link = document.createElement('a'); link.className = 'btn btn-primary';
+          link.href = item.url; link.textContent = item.title; card.append(link);
+        }
+        root.append(card);
+      }
+      return;
+    }
     const groups = [];
     d.acts.forEach((a) => { let g = groups.find((x) => x.id === a.group); if (!g) groups.push((g = { id: a.group, acts: [] })); g.acts.push(a); });
     $("#acts").innerHTML = groups.map((g) => {
@@ -743,7 +905,7 @@
       const show = multi ? t(`group.${g.id}.show`, null, gm.show || a0.show) : actText(a0.id, "show", a0.show);
       const es = !multi && a0.lang === "es" ? `<span class="lang-badge lang-es" title="${esc(t("con.langTitle"))}">ES</span>` : "";
       const btn = (a) => esc(t(`btn.${a.button}`, null, a.button));
-      return `<div class="card act ${anyAvail ? "" : "unavailable"}" data-group="${esc(g.id)}">
+      return `<div class="card act lf-frame corner-box-corners ${anyAvail ? "" : "unavailable"}" data-group="${esc(g.id)}">
         <div class="act-head"><span class="act-num">${esc(g.id)}</span><span class="act-title">${esc(title)}</span>${es}</div>
         <div class="act-blurb">${esc(blurb)}</div>
         <div class="act-show"><b>${esc(t("con.show"))}</b> ${esc(show)}</div>
@@ -851,7 +1013,7 @@
     const started = Date.now() - (job.elapsed_s || 0) * 1000;
     C.timer = setInterval(() => { if (C.job && C.job.running) $("#conElapsed").textContent = `${((Date.now() - started) / 1000).toFixed(0)} s`; }, 500);
     $("#conElapsed").textContent = "";
-    const es = new EventSource(`/api/run-stream/${job.job_id}?offset=0`);
+    const es = new EventSource(`${window.NORTHWIND_BASE_PATH || ""}/api/run-stream/${job.job_id}?offset=0`);
     C.es = es;
     let pending = []; let raf = 0;
     const flush = () => {
@@ -929,9 +1091,20 @@
     }
     const saved = store.get("conv", null);
     if (saved && saved.customer === S.customer && saved.session && Array.isArray(saved.messages)) {
-      S.session = saved.session; S.messages = saved.messages;
-      renderSessionId();
-      renderTranscript();
+      try {
+        await api("/api/session?" + new URLSearchParams({session_id: saved.session}));
+        S.session = saved.session; S.messages = saved.messages;
+        renderSessionId(); renderTranscript();
+      } catch(e) {
+        if (e.status !== 409) {
+          sessionNotice(LANG === "es" ? "No se puede verificar la conversación. Actualice la página cuando se restablezca la conexión." : "The conversation could not be verified. Reload the page when the connection returns.");
+          setBusy(true);
+          return;
+        }
+        S.session = null; S.messages = []; persist();
+        sessionNotice(LANG === "es" ? "La conversación anterior caducó o se restableció. El estado bancario no se conserva después de reiniciar el servicio." : "The previous conversation expired or was reset. Banking state is not retained after a service restart.");
+        await newConversation();
+      }
     } else {
       await newConversation();
     }

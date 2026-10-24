@@ -34,6 +34,7 @@ Known limits — say them out loud:
 from __future__ import annotations
 
 import os
+import json
 import re
 from typing import Optional
 
@@ -154,6 +155,90 @@ def scrub(text: str) -> "tuple[str, set[str]]":
     return text, found
 
 
+# These markers are set by the named application callsites, never copied from
+# customer/model data. The export hook also checks SDK scope and span context.
+CONDUCT_EVIDENCE_SCHEMA = "northwind-conduct-evidence-v1"
+APPLICATION_EVIDENCE_SCHEMA = "northwind-application-evidence-v1"
+CALIBRATION_EVIDENCE_SCHEMA = "northwind-calibration-evidence-v1"
+COMPLAINT_EVIDENCE_SCHEMA = "northwind-complaint-evidence-v1"
+VOICE_EVIDENCE_SCHEMA = "northwind-voice-evidence-v1"
+_EVIDENCE_ATTRIBUTE = "langfuse.observation.metadata.northwind_evidence_schema"
+_ROOT_ATTRIBUTE = "langfuse.experiment.item.root_observation_id"
+_EXPERIMENT_METADATA = "langfuse.experiment.metadata"
+_OUTPUT_ID_PATHS = {
+    CONDUCT_EVIDENCE_SCHEMA: {
+        ("trace_id",):32, ("observation_id",):16,
+        ("source_trace_id",):32, ("source_observation_id",):16,
+        ("calls", "*", "generation_id"):16, ("calls", "*", "generation_trace_id"):32,
+    },
+    APPLICATION_EVIDENCE_SCHEMA: {("trace_id",):32, ("observation_id",):16},
+    CALIBRATION_EVIDENCE_SCHEMA: {
+        ("source_trace_id",):32, ("source_observation_id",):16,
+        ("generation_id",):16, ("generation_trace_id",):32,
+    },
+    COMPLAINT_EVIDENCE_SCHEMA: {("trace_id",):32, ("observation_id",):16},
+}
+_CALIBRATION_ITEM_PATHS = {("source_trace_id",):32, ("source_observation_id",):16}
+
+
+def _owned_schema(span):
+    """Only an app marker on the expected SDK span grants output exemptions."""
+    if span.instrumentation_scope_name != "langfuse-sdk":
+        return None
+    schemas = {json.dumps(schema):schema for schema in (*_OUTPUT_ID_PATHS, VOICE_EVIDENCE_SCHEMA)}
+    schema = schemas.get(span.attributes.get(_EVIDENCE_ATTRIBUTE))
+    if schema in (CONDUCT_EVIDENCE_SCHEMA, APPLICATION_EVIDENCE_SCHEMA, CALIBRATION_EVIDENCE_SCHEMA):
+        return schema if span.attributes.get(_ROOT_ATTRIBUTE) == span.span_id else None
+    names = {COMPLAINT_EVIDENCE_SCHEMA:"n8n-complaint-triage", VOICE_EVIDENCE_SCHEMA:"northwind-voice-call"}
+    return schema if schema in names and span.name == names[schema] else None
+
+
+def _evidence_output(text: str, paths: dict) -> "tuple[str, set[str]]":
+    """Mask payload leaves while retaining the owned schema's exact linkage IDs."""
+    try:
+        output = json.loads(text)
+    except (ValueError, TypeError):
+        return scrub(text)
+    if not isinstance(output, dict):
+        return scrub(text)
+    hits, links = set(), {}
+    # Shield only validated schema paths. A collision-free sentinel lets the
+    # normal whole-document scrub retain keyword context (e.g. {"PIN": 1234}).
+    prefix = "NORTHWINDEVIDENCELINK"
+    rendered = json.dumps(output, ensure_ascii=False)
+    while prefix in rendered:
+        prefix += "X"
+
+    def visit(value, path=()):
+        if isinstance(value, str):
+            lookup = ("calls", "*", path[2]) if len(path) == 3 and path[0] == "calls" else path
+            length = paths.get(lookup)
+            if length and re.fullmatch(r"[0-9a-f]{%d}" % length, value):
+                token = prefix + str(len(links))
+                links[token] = value
+                return token
+            return value
+        if isinstance(value, dict):
+            return {key: visit(item, (*path, key)) for key, item in value.items()}
+        if isinstance(value, list):
+            return [visit(item, (*path, index)) for index, item in enumerate(value)]
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            # Keep a redacted numeric payload valid JSON; ordinary metrics retain
+            # their numeric type. Include its field label for PIN/account rules.
+            label = str(path[-1]) + ": " if path else ""
+            masked, found = scrub(label + str(value))
+            hits.update(found)
+            return masked[len(label):] if found else value
+        return value
+
+    masked, found = scrub(json.dumps(visit(output), ensure_ascii=False))
+    hits.update(found)
+    for token, value in links.items():
+        masked = masked.replace(json.dumps(token), json.dumps(value))
+    return (masked, hits) if hits else (text, hits)
+
+
+
 def mask_otel_spans(*, params) -> Optional[object]:
     """Export-stage hook: return sparse patches for spans whose strings changed.
 
@@ -167,9 +252,28 @@ def mask_otel_spans(*, params) -> Optional[object]:
         try:
             replacements: dict = {}
             hits: "set[str]" = set()
+            sdk_span = span.instrumentation_scope_name == "langfuse-sdk"
+            schema = _owned_schema(span)
+            # Calibration owns its experiment metadata. The SDK propagates that
+            # reserved attribute with item metadata across independent batches.
+            experiment_metadata = span.attributes.get(_EXPERIMENT_METADATA, "{}")
+            try:
+                calibration = sdk_span and json.loads(experiment_metadata).get("northwind_evidence_schema") == CALIBRATION_EVIDENCE_SCHEMA
+            except (ValueError, TypeError, AttributeError):
+                calibration = False
             for key, value in span.attributes.items():
                 if isinstance(value, str):
-                    masked, found = scrub(value)
+                    # The SDK propagates this reserved attribute to task, wrapper
+                    # and child spans, which may export in different batches.
+                    # Payload keys and other instrumentation never get this exemption.
+                    if sdk_span and key == _ROOT_ATTRIBUTE and re.fullmatch(r"[0-9a-f]{16}", value):
+                        continue
+                    if (schema == VOICE_EVIDENCE_SCHEMA and key == "langfuse.observation.metadata.assistant_observation_id"
+                            and re.fullmatch(r'"[0-9a-f]{16}"', value)):
+                        continue
+                    paths = (_OUTPUT_ID_PATHS.get(schema) if key == "langfuse.observation.output" else
+                        _CALIBRATION_ITEM_PATHS if calibration and key == "langfuse.experiment.item.metadata" else None)
+                    masked, found = _evidence_output(value, paths) if paths else scrub(value)
                     if found:
                         replacements[key] = masked
                         hits |= found
@@ -184,11 +288,11 @@ def mask_otel_spans(*, params) -> Optional[object]:
                     if changed:
                         replacements[key] = masked_items
             if replacements:
-                replacements[MARKER_ATTRIBUTE] = ",".join(sorted(hits))
+                replacements[MARKER_ATTRIBUTE] = json.dumps(",".join(sorted(hits)))
                 patches[identifier] = OtelSpanPatch(set_attributes=replacements)
         except Exception as exc:  # noqa: BLE001 — must not break the batch
             patches[identifier] = OtelSpanPatch(
                 delete_attributes=_PAYLOAD_ATTRIBUTES,
-                set_attributes={MARKER_ATTRIBUTE: f"error: {type(exc).__name__}"},
+                set_attributes={MARKER_ATTRIBUTE: json.dumps(f"error: {type(exc).__name__}")},
             )
     return MaskOtelSpansResult(span_patches=patches) if patches else None

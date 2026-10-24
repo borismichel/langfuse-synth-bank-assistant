@@ -1,5 +1,5 @@
 """
-Core-banking MCP server (OBS-04) — run: `python -m northwind.mcp_server`
+Core-banking MCP server (OBS-04), owned by the delivered Companion lifecycle.
 
 A separate process exposing banking operations as MCP tools over streamable
 HTTP, the way a bank's integration team would front its core systems. Synthetic,
@@ -10,7 +10,7 @@ Cross-process tracing: the agent puts W3C trace context (`traceparent`) and W3C
 spans as children, so ONE trace in Langfuse (and in the APM) shows agent → MCP
 client → MCP server → core-banking call, across two services — and, because the
 baggage carries the turn's session/user/trace name/version/environment, the
-server's observations filter and aggregate with the rest of the trace (Langfuse v4).
+server's observations filter and aggregate with the rest of the trace (Langfuse SDK v5).
 
 Authorization lives here, not in the model: every tool takes the customer id the
 *session* authenticated, and the server refuses anything else.
@@ -20,21 +20,32 @@ from __future__ import annotations
 
 import random
 import uuid
+import copy
+import hashlib
+import json
+import secrets
+import threading
+from contextvars import ContextVar
 from datetime import date, timedelta
 
 from opentelemetry import context as otel_context
 
 from northwind import config
+from northwind.binding import verify
 
 from mcp.server.fastmcp import Context, FastMCP
 
 langfuse = config.get_langfuse(service_name="core-banking-mcp")
 import os  # noqa: E402
 
-# One MCP server per Langfuse target: its spans export with the same profile's keys,
-# so the cross-process trace lands complete in that Langfuse (8765 cloud, 8766 self-hosted).
+# One MCP server per deployment, bound to the same explicit Adapter target as the app.
 PORT = int(os.environ.get("NORTHWIND_MCP_PORT", "8765"))
 mcp = FastMCP("northwind-core-banking", host="127.0.0.1", port=PORT)
+_binding = ContextVar('banking_binding')
+_scenarios = {}
+_actions = {}
+_revisions = {}
+_state_lock = threading.RLock()
 
 _today = date.today()
 
@@ -117,24 +128,105 @@ def _traced(ctx: Context | None, name: str, payload: dict):
 
 
 def _run(ctx, name, payload, fn):
+    try:
+        meta = ctx.request_context.meta
+        fields = getattr(meta, 'model_extra', None) or {}
+        auth = verify(fields.get('northwind_binding', ''), os.environ['NORTHWIND_BINDING_SECRET'])
+        if (auth.get('instance') != os.environ['PORTAL_LIVE_INSTANCE_ID']
+                or auth.get('epoch') != os.environ['NORTHWIND_PROCESS_EPOCH']
+                or auth.get('customer_id') != payload.get('customer_id')
+                or not auth.get('scenario_id') or not auth.get('session_id')):
+            raise ValueError('Invalid binding')
+    except Exception:
+        return {'error': 'ACCESS_DENIED'}
+    if name == 'reset_scenario':
+        with _state_lock:
+            return _action(auth, name, payload, fn)
+    binding_token = _binding.set(auth)
     token, cm = _traced(ctx, name, payload)
     try:
         with cm as span:
             with langfuse.start_as_current_observation(
                     as_type="span", name=f"core-banking.{name}",
                     metadata={"system": "core-banking", "latency_profile": "mainframe"}):
-                result = fn()
+                with _state_lock:
+                    result = _action(auth, name, payload, fn)
             span.update(output=result)
             return result
     finally:
         if token is not None:
             otel_context.detach(token)
+        _binding.reset(binding_token)
+
+
+def _action(auth, name, payload, fn):
+    scope = auth['scenario_id']
+    revision = _revisions.get(scope, 0)
+    if auth.get('revision', 0) != revision:
+        return {'error': 'STALE_SCENARIO'}
+    if name == 'reset_scenario':
+        if auth.get('operation') != 'reset':
+            return {'error': 'ACCESS_DENIED'}
+        _scenarios.pop((scope, auth['customer_id']), None)
+        _actions.pop(scope, None)
+        _revisions[scope] = revision + 1
+        return {'status': 'reset', 'revision': revision + 1}
+    if name not in ('block_card', 'open_dispute', 'schedule_callback'):
+        return fn()
+    customer = _customer(payload['customer_id'])
+    if name == 'block_card' and payload['card_last4'] not in {c['last4'] for c in customer['cards']}:
+        return {'error': 'CARD_NOT_FOUND'}
+    if name == 'open_dispute' and payload['transaction_id'] not in {
+            t['id'] for a in customer['accounts'] for t in TRANSACTIONS.get(a['id'], [])}:
+        return {'error': 'TRANSACTION_NOT_FOUND'}
+    scope = auth['scenario_id']
+    journal = _actions.get(scope)
+    if journal is None or journal['session_id'] != auth['session_id']:
+        # New conversation retires old pending capabilities, preserving banking state.
+        journal = {'session_id': auth['session_id'], 'actions': {}}
+        _actions[scope] = journal
+    actions = journal['actions']
+    arguments = {k: v for k, v in payload.items() if k != 'customer_id'}
+    fingerprint = hashlib.sha256(json.dumps([name, arguments], sort_keys=True).encode()).hexdigest()
+    confirmation = auth.get('confirmation_id')
+    if confirmation:
+        action = actions.get(confirmation)
+        if not action or action['fingerprint'] != fingerprint:
+            return {'error': 'CONFIRMATION_MISMATCH'}
+        if 'receipt' not in action:
+            # State and receipt commit under the same lock, before transport/model response.
+            action['receipt'] = {**fn(), 'action_id': confirmation, 'tool': name,
+                                 'arguments': arguments}
+        return copy.deepcopy(action['receipt'])
+    for action in actions.values():
+        if action['request_id'] == auth.get('request_id') and action['fingerprint'] == fingerprint:
+            return copy.deepcopy(action['pending'])
+    if len(actions) >= 128:
+        return {'error': 'ACTION_CAPACITY_REACHED'}
+    action_id = secrets.token_urlsafe(24)
+    pending = {'status': 'confirmation_required', 'action_id': action_id,
+               'tool': name, 'arguments': arguments}
+    actions[action_id] = {'fingerprint': fingerprint, 'request_id': auth.get('request_id'),
+                          'pending': pending}
+    return copy.deepcopy(pending)
 
 
 def _customer(customer_id: str) -> dict:
     if customer_id not in CUSTOMERS:
         raise ValueError(f"customer {customer_id} not found")
-    return CUSTOMERS[customer_id]
+    auth = _binding.get()
+    key = (auth['scenario_id'], customer_id)
+    if key not in _scenarios:
+        if len(_scenarios) >= 512:
+            raise ValueError('Banking scenario capacity reached')
+        _scenarios[key] = copy.deepcopy(CUSTOMERS[customer_id])
+    return _scenarios[key]
+
+
+@mcp.tool()
+def reset_scenario(customer_id: str, ctx: Context = None) -> dict:
+    """Private lifecycle operation; requires a server-issued reset capability."""
+    return _run(ctx, 'reset_scenario', {'customer_id': customer_id}, lambda: None)
 
 
 @mcp.tool()

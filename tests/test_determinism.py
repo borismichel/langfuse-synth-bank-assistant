@@ -1,0 +1,108 @@
+"""Determinism golden gate — same (seed, target_traces, params) => byte-identical Spool.
+
+A fresh full-payload materialization is compared byte-for-byte against the blessed golden,
+run offline in a subprocess under PYTHONHASHSEED=0 and the deny-LLM egress block. This
+checks content drift and model-free-at-seed-runtime. A separate repeatability check varies
+process hash seeds to detect unordered Recipe output. `synth-authoring new`
+blessed the initial golden, so this is green from the first commit.
+
+The oracle is pinned at a small `GOLDEN_TARGET_TRACES` floor: determinism is
+scale-independent, so a tiny committed golden proves the law while staying reviewable.
+Re-bless a deliberate pool change (never a hand-edit) with:
+
+    synth-authoring freeze golden_seed:seed \\
+        --golden tests/golden/northwind_bank_assistant_spool.ndjson \\
+        --target-traces 58 --search-path tests --search-path src
+"""
+import importlib.util
+from pathlib import Path
+
+import pytest
+
+pytestmark = pytest.mark.skipif(
+    importlib.util.find_spec("jsonschema") is None,
+    reason="golden gate ships in langfuse-synth-core[authoring]; install the [dev] extra to run it",
+)
+
+GOLDEN_TARGET_TRACES = 58
+GOLDEN_PATH = Path(__file__).resolve().parent / "golden" / "northwind_bank_assistant_spool.ndjson"
+TESTS_DIR = str(Path(__file__).resolve().parent)
+SRC_DIR = str(Path(__file__).resolve().parent.parent / "src")
+
+
+def _spec():
+    from langfuse_synth_core.authoring.golden import GoldenSpec
+
+    return GoldenSpec(
+        seed_ref="golden_seed:seed",
+        target_traces=GOLDEN_TARGET_TRACES,
+        golden_path=GOLDEN_PATH,
+        params={},
+        search_paths=(TESTS_DIR, SRC_DIR),
+    )
+
+
+def test_full_payload_golden_is_byte_identical():
+    """A fresh full-Spool materialization is byte-identical to the blessed oracle."""
+    from langfuse_synth_core.authoring.golden import assert_golden
+
+    assert_golden(_spec())
+
+
+def test_recipe_is_repeatable_across_process_hash_seeds(tmp_path):
+    """Identical logical inputs stay byte-identical under different process ordering."""
+    import json
+    import os
+    import subprocess
+    import sys
+
+    from langfuse_synth_core.authoring import golden
+    from langfuse_synth_core.authoring.egress import egress_block_env
+
+    spec = _spec()
+    if hasattr(golden, "assert_repeatable"):
+        golden.assert_repeatable(spec)
+        return
+
+    # Compatibility with the scaffold's default v4.1.1 pin. Use its public egress
+    # guard and the kit-owned seed directly; that release's materialize_spool
+    # always pins hash seed 0. Remove this fallback after upgrading the core pin.
+    script = """
+import json, sys
+from pathlib import Path
+from langfuse_synth_core.authoring.egress import install_guard
+install_guard()
+sys.path[:0] = json.loads(sys.argv[1])
+from golden_seed import seed
+Path(sys.argv[4]).write_bytes(seed(int(sys.argv[2]), json.loads(sys.argv[3])))
+"""
+    baseline = None
+    for hash_seed in (0, 1, 2):
+        out = tmp_path / f"spool-{hash_seed}.bin"
+        env = egress_block_env(os.environ)
+        env["PYTHONHASHSEED"] = str(hash_seed)
+        subprocess.run(
+            [sys.executable, "-c", script, json.dumps(spec.search_paths),
+             str(spec.target_traces), json.dumps(dict(spec.params)), str(out)],
+            env=env, check=True, capture_output=True, text=True,
+        )
+        fresh = out.read_bytes()
+        if baseline is None:
+            baseline = fresh
+        assert fresh == baseline, (
+            f"Process-dependent Spool: PYTHONHASHSEED=0 differs from {hash_seed}. "
+            "Sort unordered collections before generating or serializing records; "
+            "re-blessing a golden cannot fix repeatability."
+        )
+
+
+def test_golden_is_full_payload_not_ids_and_summary():
+    """The blessed oracle is the whole Spool — trace roots, generations, and scores, on the
+    OTLP wire this kit writes (core `docs/WRITE_PATHS.md`). v4 has no trace entity, so a
+    trace is its root observation and every observation is an OTLP span; scores keep the
+    ingestion envelope, the one envelope type that survives the v4 cutover."""
+    blob = GOLDEN_PATH.read_bytes()
+    assert b'"spanId"' in blob                                   # observations are spans
+    assert b'"langfuse.trace.name"' in blob                      # the trace shell, on its root
+    assert b'"langfuse.observation.usage_details"' in blob       # the generation
+    assert b'"type":"score-create"' in blob                      # scores stay envelopes

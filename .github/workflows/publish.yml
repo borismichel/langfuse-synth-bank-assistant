@@ -1,0 +1,30 @@
+# Builds, GHCR-pushes, and cosign-signs this kit's image on every semver tag push. The
+# actual build/sign logic lives once in langfuse-synth-core so every kit inherits a fix
+# or policy change on its next pin bump — see
+# https://github.com/borismichel/langfuse-synth-core/blob/main/docs/CI_SIGNING.md
+#
+# Cut a release: bump `version` in pyproject.toml to `X.Y.Z` on main, then tag that
+# commit `vX.Y.Z` and push the tag. The shared workflow fails fast if the tag and the
+# pyproject version disagree — the tag IS the version the published image reports.
+
+name: Publish
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+  publish:
+    needs: checks
+    uses: borismichel/langfuse-synth-core/.github/workflows/kit-publish.yml@v5.1.1
+    permissions:
+      contents: read
+      packages: write
+      id-token: write

@@ -35,8 +35,7 @@ if str(DEMO_DIR) not in sys.path:
     sys.path.insert(0, str(DEMO_DIR))
 
 # Shell-exported Langfuse keys must never leak in (config.py ignores them too).
-for _k in ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST", "LANGFUSE_BASE_URL"):
-    os.environ.pop(_k, None)
+# Depot credentials are preserved; the shipped server is synth.companion.app.
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile  # noqa: E402
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse  # noqa: E402

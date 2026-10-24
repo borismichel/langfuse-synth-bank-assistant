@@ -1,0 +1,82 @@
+name: CI
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_call:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.15"
+      - run: pip install uv==0.13.5
+      - name: Install locked runtime and authoring dependencies
+        run: uv sync --frozen --extra dev
+      - name: Offline package checks
+        # Release 39974766580 needed 574 seconds for the prior 92-test suite;
+        # the expanded suite exceeded 600 seconds in hosted run 40024654105.
+        # Allow fifteen minutes total; individual fixture and live deadlines stay unchanged.
+        run: .venv/bin/synth-authoring check . --python .venv/bin/python --timeout 900 --json
+      - name: Install browser for voice rehearsal
+        run: .venv/bin/python -m playwright install --with-deps chromium
+      - name: Verify review controls handle proxy errors
+        timeout-minutes: 1
+        env:
+          PYTHONPATH: src:demos/bank-assistant
+        run: .venv/bin/python tests/browser_review_transport_case.py
+      - name: Rehearse recording, upload, confirmation and playback
+        timeout-minutes: 3
+        env:
+          VOICE_BROWSER: '1'
+          VOICE_EVIDENCE_DIR: ${{ runner.temp }}/voice-browser
+          PYTHONPATH: src:demos/bank-assistant
+        run: .venv/bin/python tests/sdk_voice_case.py
+      - name: Upload voice browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voice-browser
+          path: ${{ runner.temp }}/voice-browser
+          if-no-files-found: ignore
+      - name: Build isolated banking runtime
+        run: docker build -t northwind-bank:ci .
+      - name: Check non-root banking image
+        run: |
+          docker run --rm northwind-bank:ci sh -c 'test "$(id -u)" = 10001 && test ! -e /app/demos/insurance-claims && synth plan --config config/demo.yaml'
+      - name: Check optional APM storage and lifecycle
+        run: |
+          docker run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,size=128m \
+            --cap-drop ALL --security-opt no-new-privileges --memory 2g --cpus 2 --pids-limit 512 \
+            -v "$PWD/tests:/tests:ro" northwind-bank:ci python /tests/apm_service_case.py
+      - name: Check delivered private APM route
+        run: |
+          docker run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,size=128m \
+            --cap-drop ALL --security-opt no-new-privileges --memory 2g --cpus 2 --pids-limit 512 \
+            -v "$PWD/tests:/tests:ro" northwind-bank:ci python /tests/apm_companion_case.py
+      - name: Check optional complaint workflow and private editor
+        run: |
+          for proof in n8n_service_case.py n8n_companion_case.py; do
+            docker run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,size=256m \
+              --cap-drop ALL --security-opt no-new-privileges --memory 2g --cpus 2 --pids-limit 512 \
+              -v "$PWD/tests:/tests:ro" northwind-bank:ci python "/tests/$proof"
+          done
+      - name: Check declared history volume bounds
+        timeout-minutes: 2
+        run: |
+          docker run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,size=256m \
+            --cap-drop ALL --security-opt no-new-privileges --memory 2g --cpus 2 --pids-limit 512 \
+            -v "$PWD/tests:/tests:ro" northwind-bank:ci python /tests/volume_image_case.py
+      - name: Check all sixteen optional configurations
+        timeout-minutes: 10
+        run: |
+          docker run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,size=256m \
+            --cap-drop ALL --security-opt no-new-privileges --memory 2g --cpus 2 --pids-limit 512 \
+            -v "$PWD/tests:/tests:ro" northwind-bank:ci python /tests/optional_matrix_case.py

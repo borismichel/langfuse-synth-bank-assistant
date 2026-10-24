@@ -1,0 +1,203 @@
+schema_version: 1
+slug: northwind-bank-assistant
+name: Northwind Bank Assistant (Beta)
+vertical: Financial Services / Banking
+langfuse_features:
+- tracing
+- prompt-management
+- datasets
+- experiments
+- evaluators
+- scores
+- annotation-queues
+- sessions
+- multimodality
+tagline: Beta banking demo with bilingual actions and evaluation evidence; full live qualification pending.
+story: 'Beta for guided demonstrations. Known quality failures and deferred human checks
+  are documented in the presenter runbook. Compare frozen banking actions, dispute and retrieval-cost regressions, and
+  conduct policy cases in Langfuse, then use the bilingual live assistant,
+  protected evaluation controls and prompt releases. The coding-agent workshop
+  includes local implementation and rehearsal instructions.'
+target:
+  project_hint: demo
+  supports:
+  - cloud_eu
+  - cloud_us
+  - self_hosted
+base_config:
+  default: config/demo.yaml
+config_schema:
+  type: object
+  properties:
+    runtime.comparison_enabled:
+      type: boolean
+      default: false
+      title: OpenAI comparison
+      description: Enable the OpenAI gpt-4.1-mini comparison binding. Application and judge calls start only from presenter controls.
+    runtime.voice_enabled:
+      type: boolean
+      default: false
+      title: Voice
+      description: Record or upload English and Spanish audio. Requires OpenAI speech roles; each call also uses the selected banking chat provider. Synthetic audio is stored in Langfuse.
+    runtime.n8n_enabled:
+      type: boolean
+      default: false
+      title: Complaint workflow
+      description: Start private n8n with this instance. Each complaint runs two model calls. Local history resets when it stops.
+    runtime.apm_enabled:
+      type: boolean
+      default: false
+      title: APM
+      description: Start a private Jaeger view with this live instance. Trace data resets when it stops.
+    generation.seed:
+      type: integer
+      default: 42
+      minimum: 0
+      maximum: 2147483647
+      title: Generation seed
+      description: Deterministic RNG seed for the whole dataset. Vary it to mint a
+        distinct trace/id set per deployment; the same seed always materializes the
+        same Spool, but re-seeding a project that already holds it appends a second
+        copy (the v4 write path has no upsert).
+    generation.target_traces:
+      type: integer
+      minimum: 58
+      maximum: 256
+      default: 64
+      title: Turn traces
+      description: Includes 58 mandatory banking turns. Additional traces add background
+        conversations without removing required cases.
+    generation.history_days:
+      type: integer
+      enum: [1, 2, 7, 30, 90]
+      default: 7
+      title: History window (days)
+      description: Inclusive UTC history window ending on the selected run date.
+  required: []
+setup:
+  version: 1
+  fields:
+    runtime.comparison_enabled: {group: scenario}
+    runtime.voice_enabled: {group: scenario}
+    runtime.n8n_enabled: {group: scenario}
+    runtime.apm_enabled: {group: scenario}
+    generation.target_traces: {group: volume}
+    generation.history_days: {group: volume}
+    generation.seed: {group: advanced}
+  schedule:
+    timezone: UTC
+    end: inclusive
+    history: {field: generation.history_days}
+  presets:
+    quick_rehearsal:
+      label: Quick rehearsal
+      values:
+        generation.target_traces: 58
+  host_defaults:
+    cloud_eu: {generation.target_traces: 64}
+    cloud_us: {generation.target_traces: 64}
+    self_hosted: {generation.target_traces: 64}
+pipeline:
+- id: probe
+  run: synth probe --config {config}
+  fatal: true
+- id: plan
+  run: synth plan --config {config}
+  gate: confirm
+  parse:
+    plan_counts: regex:PLAN_COUNTS=(\{[^\n]+\})
+- id: prompts
+  run: synth setup-assets --config {config}
+  fatal: true
+  timeout_minutes: 5
+- id: seed
+  run: synth seed --config {config}
+  generate: synth generate-spool --config {config}
+  resumable: synth import-spool --config {config}
+  timeout_minutes: 10
+- id: cohorts
+  run: synth prepare-cohorts --config {config}
+  fatal: true
+  timeout_minutes: 10
+- id: verify
+  run: synth verify --config {config}
+  fatal: true
+artifacts:
+- path: DEMO_SCRIPT.md
+  render: markdown
+  title: Presenter Runbook
+assets:
+  screenshots:
+  - docs/screenshots/spanish-voice-fixture.png
+  - docs/screenshots/provider-comparison-fixture.jpg
+  - docs/screenshots/prompt-release-fixture.jpg
+  docs:
+  - path: docs/BETA_RELEASE_NOTES.md
+    title: Beta release notes
+  - path: docs/DEPOT_KIT.md
+    title: Overview
+  - path: docs/CODING_AGENT_WORKSHOP.md
+    title: Coding-agent workshop
+  - path: docs/PROMPT_RELEASES.md
+    title: Prompt promotion and rollback
+  - path: docs/VOICE.md
+    title: Voice
+teardown:
+  note: Depot removes local containers and state. Seeded Langfuse observations remain.
+    Use a fresh disposable project or an explicitly authorised project reset before
+    importing again.
+llm:
+  roles:
+    version: 1
+    bindings:
+      comparison:
+        provider: openai
+        models: {openai: gpt-4.1-mini}
+        enabled_by: runtime.comparison_enabled
+      speech_to_text:
+        provider: openai
+        models: {openai: gpt-transcribe}
+        enabled_by: runtime.voice_enabled
+      text_to_speech:
+        provider: openai
+        models: {openai: gpt-realtime-2.1-mini}
+        enabled_by: runtime.voice_enabled
+  providers:
+  - anthropic
+  - openai
+live_components:
+- name: companion
+  spending_check: {version: 1}
+  llm_roles: [speech_to_text, text_to_speech, comparison]
+  description: Beta banking assistant for guided demonstrations; full live qualification
+    remains pending. Includes bilingual retrieval, guardrails, confirmed
+    banking actions, participant reset, answer feedback, protected policy judges,
+    annotation queues, measured calibration, bounded application experiments, model-free conduct reconciliation,
+    optional private APM and complaint workflow, bilingual voice, fixed provider comparisons,
+    and prompt promotion and rollback. Provider-backed qualification and staging
+    rehearsal are recorded separately from delivered capabilities.
+  command: synth companion --config {config} --host 0.0.0.0 --port 8080
+  port: 8080
+  requires_secrets:
+  - LANGFUSE_PUBLIC_KEY
+  - LANGFUSE_SECRET_KEY
+  - LLM_API_KEY
+  health_path: /api/health
+  protected_paths:
+  - path: /manage/governance
+    access: manage
+  - path: /manage/releases
+    access: manage
+  - path: /manage/experiments
+    access: manage
+  - path: /manage/judges
+    access: manage
+  - path: /manage/reviews
+    access: manage
+  - path: /apm
+    access: presenter
+  - path: /n8n
+    access: presenter
+  routes:
+  - path: /
+    title: Northwind Bank (Beta)

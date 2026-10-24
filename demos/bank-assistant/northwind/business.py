@@ -118,7 +118,8 @@ LOOKUPS = {"list_accounts", "get_recent_transactions"}
 
 
 def tool_succeeded(result) -> bool:
-    return isinstance(result, dict) and not result.get("error")
+    return (isinstance(result, dict) and not result.get("error")
+            and result.get("status") != "confirmation_required")
 
 
 def classify(*, used: list[str], actions_ok: list[str], blocked: bool, risks: list[str],
