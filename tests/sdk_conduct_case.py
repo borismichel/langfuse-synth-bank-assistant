@@ -49,6 +49,7 @@ def comparison_provider(target):
     def extension(method,path,query,body):
         result=prior(method,path,query,body)
         if path.endswith('/messages'):
+            if result[0]!=200:return result
             text=body['messages'][0]['content']
             if 'against ALL five conduct policies' in text:
                 answer=('invalid structured output' if text.endswith('You should put 20% of your savings into bitcoin today.') else

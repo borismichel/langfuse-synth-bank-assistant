@@ -213,7 +213,12 @@ def provider_fixture(env,data,monkeypatch):
                                            'verdict':data.get('judge_response','pass')})
                     else:
                         assert set(schema['required'])=={'reason','score'}
-                        assert schema['properties']['score']['enum'] in ([0,0.5,1],[0,0.5,1,None])
+                        score_schema=schema['properties']['score']
+                        if score_schema.get('type')==['number','null']:
+                            return 400,{'type':'error','error':{'type':'invalid_request_error',
+                                'message':"output_config.format.schema: Invalid schema: Enum value 0 does not match declared type '['number', 'null']'"}}
+                        assert score_schema in ({'type':'number','enum':[0,0.5,1]},
+                            {'anyOf':[{'type':'number','enum':[0,0.5,1]},{'type':'null'}]})
                         answer=json.dumps({'reason':'The supplied evidence supports this score.','score':1})
                 else:
                     answer='**Evidence:** The answer cites the approved policy.\n\n**Verdict: pass**'
@@ -224,7 +229,7 @@ def provider_fixture(env,data,monkeypatch):
                 case=next((c for c in cases if c['input']['question']==question),None)
                 last=body['messages'][-1]['content'];answered=isinstance(last,list) and any(b.get('type')=='tool_result' for b in last)
                 if case and case['metadata'].get('expected_transaction'):
-                    content=dispute_reply(body,case)
+                    content=dispute_reply(body,case,conversational=data.get("dispute_conversation",False),mode=data.get("dispute_mode"))
                 else:
                     if not answered:
                         content=[{'type':'tool_use','id':'search','name':'search_knowledge_base','input':{'query':question}}]
@@ -236,6 +241,9 @@ def provider_fixture(env,data,monkeypatch):
                             text+=' Consider upgrading to the Premier account.'
                         if case:text+=' '+ ' '.join('['+s+']' for s in case['metadata'].get('expected_sources',[]))
                         content=[{'type':'text','text':text}]
+            if data.get('dispute_mode') in ('deny','deadline') and content == [{'type':'text','text':'Encontré ELECTROMART, TX-55300, $749.00. ¿Confirma que desea disputar este cargo?'}]:
+                if data['dispute_mode']=='deny':data['deny_after']=len(data['calls'])
+                else:data['clock_advance']=601
             return 200,dict(id='fixture-'+str(len(data['calls'])),type='message',role='assistant',model=body['model'],
                 content=content,stop_reason='tool_use' if content[0]['type']=='tool_use' else 'end_turn',stop_sequence=None,
                 usage={'input_tokens':30+len(json.dumps(body['messages']))//4,'output_tokens':12})
@@ -245,7 +253,7 @@ def provider_fixture(env,data,monkeypatch):
     data['extension']=extension
 
 
-def dispute_reply(body,case):
+def dispute_reply(body,case,*,conversational=False,mode=None):
     def call(name,args):return [{'type':'tool_use','id':'tool-'+name,'name':name,'input':args}]
     system=body.get('system','')
     if isinstance(system,list):system=''.join(x.get('text','') for x in system)
@@ -254,6 +262,9 @@ def dispute_reply(body,case):
         receipt=json.loads(system.split(marker,1)[1])
         text=("Su disputa se ha abierto para la transacción " if case['metadata']['language']=='es' else 'Your dispute was opened for transaction ')
         return [{'type':'text','text':text+case['metadata']['expected_transaction']+'; '+receipt['case_id']}]
+    if mode == 'case-limit' and any(m['role']=='assistant' and isinstance(m['content'],str) and
+            'ELECTROMART' in m['content'] for m in body['messages']):
+        return call('list_accounts',{})
     results={}
     for msg in body['messages']:
         if isinstance(msg['content'],list):
@@ -265,7 +276,21 @@ def dispute_reply(body,case):
     if 'tool-list_accounts' not in results:return call('list_accounts',{})
     if 'tool-get_recent_transactions' not in results:
         return call('get_recent_transactions',{'account_id':results['tool-list_accounts']['accounts'][0]['id']})
+    if 'proposal-one' in results:return [{'type':'text','text':'Revise las dos propuestas.'}]
     tx=case['metadata']['expected_transaction']
     found=any(t['id']==tx for t in results['tool-get_recent_transactions']['transactions'])
-    if found and 'tool-open_dispute' not in results:return call('open_dispute',{'transaction_id':tx,'reason':'Fixture requested dispute'})
+    if found and 'tool-open_dispute' not in results:
+        if tx == 'TX-55300' and case['metadata']['language']=='es':
+            if mode == 'wrong':return call('open_dispute',{'transaction_id':'TX-55440','reason':'Wrong proposed charge'})
+            if mode == 'foreign':return call('open_dispute',{'transaction_id':'TX-87950','reason':'Foreign proposed charge'})
+            if mode == 'ambiguous':return [
+                {'type':'tool_use','id':'proposal-one','name':'open_dispute','input':{'transaction_id':'TX-55300','reason':'One'}},
+                {'type':'tool_use','id':'proposal-two','name':'open_dispute','input':{'transaction_id':'TX-55440','reason':'Two'}}]
+            if mode == 'no-proposal':return [{'type':'text','text':'Necesito más información para continuar.'}]
+        # Captured d08 behaviour: the first answer asks conversationally; no action yet.
+        if conversational and tx == 'TX-55300' and case['metadata']['language']=='es' and not any(
+                m['role']=='assistant' and isinstance(m['content'],str) and
+                'ELECTROMART' in m['content'] for m in body['messages']):
+            return [{'type':'text','text':'Encontré ELECTROMART, TX-55300, $749.00. ¿Confirma que desea disputar este cargo?'}]
+        return call('open_dispute',{'transaction_id':tx,'reason':'Fixture requested dispute'})
     return [{'type':'text','text':'No se encontró el cargo.' if case['metadata']['language']=='es' else 'The charge was not found.'}]

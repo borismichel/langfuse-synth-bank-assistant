@@ -17,6 +17,14 @@ def test_invalid_judge_response_preserves_evidence_and_stops_further_dispatch(tm
         assert invoke(tmp_path,'prepare-cohorts',extra_env=env).returncode==0
         provider_fixture(env,target,monkeypatch)
         target['judge_response']='not-an-allowed-verdict'
+        from threading import Barrier
+        both=Barrier(2)
+        original=target['extension']
+        def external(method,path,query,body):
+            result=original(method,path,query,body)
+            if path.endswith('/messages') and body['model']=='fixture-judge':both.wait(timeout=5)
+            return result
+        target['extension']=external
         for key,value in env.items():monkeypatch.setenv(key,value)
         monkeypatch.setenv('SYNTH_STATE_DIR',str(tmp_path/'state'))
         monkeypatch.setenv('PORTAL_LIVE_PROOF','a'*64)
@@ -35,12 +43,13 @@ def test_invalid_judge_response_preserves_evidence_and_stops_further_dispatch(tm
                 if run['status']!='running':break
                 time.sleep(.02)
             assert run['status']=='runner_failed' and run['gate']['status']=='runner_failed',run
-            assert run['dispatches']==len(target['calls'])==len(target['permits'])==3
+            assert run['dispatches']==len(target['calls'])==len(target['permits'])==4
             row=run['arms']['baseline']['rows'][0]
             assert row['error']=='judge_output_invalid' and not run['arms']['candidate']['rows']
-            judged=row['judge_results']['P1']
+            assert set(row['judge_results'])=={'P1','P2'}
+            judged=next(j for j in row['judge_results'].values() if 'text' in j)
             assert judged['output_valid'] is False and judged['verdict'] is None
             assert judged['usage']['output']==12 and 'not-an-allowed-verdict' in judged['text']
             assert judged['generation_id'] and judged['generation_trace_id']
             assert browser.post('/manage/experiments/start',json=body).json()['id']==run['id']
-            assert len(target['calls'])==3
+            assert len(target['calls'])==4

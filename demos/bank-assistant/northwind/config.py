@@ -66,14 +66,39 @@ def get_adapter():
     return _adapter
 
 
+_native_clients = []
+
+
+class BankingModels:
+    """Ready chat framework and owned async judge transport; no credential accessors."""
+    def __init__(self, *, model, chat, judge):
+        self.model, self.chat, self.judge = model, chat, judge
+
+
 def native_llm_factory(*, provider, model, api_key):
     if provider == "openai":
         from langchain_openai import ChatOpenAI
-        return ChatOpenAI(model=model, api_key=api_key, temperature=0.2, max_tokens=1024, max_retries=0, timeout=30)
-    if provider == "anthropic":
+        from openai import AsyncOpenAI
+        chat = ChatOpenAI(model=model, api_key=api_key, temperature=0.2, max_tokens=1024, max_retries=0, timeout=30)
+        judge = AsyncOpenAI(api_key=api_key, max_retries=0, timeout=30)
+    elif provider == "anthropic":
         from langchain_anthropic import ChatAnthropic
-        return ChatAnthropic(model=model, api_key=api_key, temperature=0.2, max_tokens=1024, max_retries=0, timeout=30)
-    raise ValueError("Unsupported banking model provider")
+        from anthropic import AsyncAnthropic
+        chat = ChatAnthropic(model=model, api_key=api_key, temperature=0.2, max_tokens=1024, max_retries=0, timeout=30)
+        judge = AsyncAnthropic(api_key=api_key, max_retries=0, timeout=30, open_telemetry=False)
+    else:
+        raise ValueError("Unsupported banking model provider")
+    ready = BankingModels(model=model, chat=chat, judge=judge)
+    _native_clients.append(ready)
+    return ready
+
+
+async def close_native_clients():
+    """Called after application jobs drain, on the clients' owning Companion loop."""
+    while _native_clients:
+        await _native_clients[-1].judge.close()
+        _native_clients.pop()
+
 
 def configure_apm(endpoint: str, trace_path: str = ''):
     """Only a supervised child on this process's loopback may receive spans."""

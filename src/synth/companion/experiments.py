@@ -123,7 +123,7 @@ class ExperimentControls:
             run=dict(id=uuid4().hex,kind=kind,request_id=body.request_id,request=payload,status='running',
                 created_at=datetime.now(timezone.utc).isoformat(),dispatches=0,
                 limits={'cases_per_arm':16,'arms':2,'application_dispatches_per_case':10,'judge_calls_per_case':5,
-                        'total_dispatches':480,'deadline_seconds':600,'concurrency':1},
+                        'total_dispatches':480,'deadline_seconds':600,'concurrency':1,'judge_concurrency':2,'scheduler':'serial-application-two-judges-v1'},
                 arms={arm:dict(id=uuid4().hex,rows=[]) for arm in ('baseline','candidate')},
                 gate={'status':'incomplete','expected':0,'scored':0,'missing':0,'errors':0,'failed':0})
             if strategy:

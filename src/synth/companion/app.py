@@ -125,6 +125,7 @@ def create_app(adapter, *, preview=False):
             await experiment_controls.stop()
             await review_controls.stop()
             await judge_controls.stop()
+            await config.close_native_clients()
             await workflow.stop()
             await speech.close()
             if banking:
