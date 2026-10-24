@@ -570,3 +570,8 @@ body.langfuse-theme { background:var(--surface-1); color:var(--text-primary); fo
   .langfuse-theme .stat-cell :is(.v,.s) { white-space:normal; overflow:visible; overflow-wrap:anywhere; }
   .langfuse-theme .stat-cell .v { flex-wrap:wrap; }
 }
+
+/* Release maturity uses the existing neutral Langfuse frame and UI type. */
+.langfuse-theme .beta-notice { display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 12px; padding:10px 16px; font:430 13px/1.5 var(--font-sans); color:var(--text-secondary); flex-shrink:0; }
+.langfuse-theme .beta-notice strong { font-weight:600; color:var(--text-primary); }
+.bank-presenter .beta-notice { margin-bottom:20px; }

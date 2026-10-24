@@ -9,8 +9,8 @@ def judge_page(provider,prefix):
 
 
 PAGE='''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Policy judges</title><link rel="stylesheet" href="__PREFIX__/static/app.css">
-</head><body class="langfuse-theme bank-presenter"><main>
+<title>Policy judges · Beta</title><link rel="stylesheet" href="__PREFIX__/static/app.css">
+</head><body class="langfuse-theme bank-presenter"><main><aside class="beta-notice lf-frame" aria-label="Release status"><strong>Beta</strong><span>Guided demo. Full live qualification pending.</span></aside>
 <nav><a href="__PREFIX__/">Customer assistant</a> · <a href="__PREFIX__/history">Historical evidence</a></nav>
 <h1 class="lf-heading">Policy judges</h1><p>Managed checks for investment advice, credentials, selling, promises and deposit insurance. These fictional banking policies are demonstration criteria.</p>
 <p id="notice" class="notice" role="status">Reading native judge status…</p>

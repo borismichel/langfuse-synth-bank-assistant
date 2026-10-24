@@ -65,6 +65,8 @@ def test_fixed_cohorts_keep_expected_outputs_and_exact_current_source_links(tmp_
         assert 'Coding-agent workshop' in runbook
         assert '## Governance qualification' in runbook
         assert 'Saved dataset items and audit logs' in runbook
+        assert '### Known qualification gaps' in runbook
+        assert 'Beta publication does not close unmet qualification requirements.' in runbook
 
 
 def test_conflicting_human_item_is_preserved_and_missing_current_asset_fails_verify(tmp_path):
